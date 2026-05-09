@@ -133,6 +133,8 @@ class ObsidianRESTClient:
         *,
         params: dict | None = None,
         json_body: dict | None = None,
+        content: str | None = None,
+        content_type: str | None = None,
         accept: str = "application/json",
         extra_headers: dict[str, str] | None = None,
     ) -> dict:
@@ -153,13 +155,18 @@ class ObsidianRESTClient:
             }
 
         headers = self._headers(accept)
+        if content_type:
+            headers["Content-Type"] = content_type
         if extra_headers:
             headers.update(extra_headers)
 
         try:
-            resp = self._client.request(
-                method, path, params=params, json=json_body, headers=headers
-            )
+            kwargs: dict = {"params": params, "headers": headers}
+            if json_body is not None:
+                kwargs["json"] = json_body
+            elif content is not None:
+                kwargs["content"] = content.encode("utf-8")
+            resp = self._client.request(method, path, **kwargs)
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             self._mark_unreachable(str(exc))
             return {"ok": False, "error": "rest_unreachable", "detail": str(exc)}
@@ -177,6 +184,8 @@ class ObsidianRESTClient:
         if resp.status_code >= 500:
             return {"ok": False, "error": "rest_obsidian_error", "detail": resp.text[:500]}
 
+        if not resp.content:
+            return {"ok": True, "data": None}
         content_type = resp.headers.get("content-type", "")
         if "json" in content_type:
             return {"ok": True, "data": resp.json()}
@@ -197,6 +206,13 @@ class ObsidianRESTClient:
         *,
         params: dict | None = None,
         json_body: dict | None = None,
+        content: str | None = None,
+        content_type: str | None = None,
         accept: str = "application/json",
     ) -> dict:
-        return self._request("POST", path, params=params, json_body=json_body, accept=accept)
+        return self._request(
+            "POST", path,
+            params=params, json_body=json_body,
+            content=content, content_type=content_type,
+            accept=accept,
+        )

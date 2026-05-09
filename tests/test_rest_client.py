@@ -165,6 +165,77 @@ class TestBackoff:
         assert client._probe_ttl == 30.0
 
 
+class TestContentTypes:
+    """Phase 7: raw content body + content-type support."""
+
+    def test_post_with_dql_content_type(self):
+        client = ObsidianRESTClient(key_path=None)
+        client._api_key = "test-key"
+        client._reachable = True
+        client._last_probed = time.time()
+        client._client = MagicMock()
+        client._client.request.return_value = _mock_response(
+            200, [{"filename": "foo.md", "result": {"status": "Active"}}]
+        )
+        result = client.post(
+            "/search/",
+            content='TABLE status FROM "System"',
+            content_type="application/vnd.olrapi.dataview.dql+txt",
+        )
+        assert result["ok"] is True
+        assert len(result["data"]) == 1
+        call_kwargs = client._client.request.call_args
+        assert call_kwargs[1]["headers"]["Content-Type"] == "application/vnd.olrapi.dataview.dql+txt"
+
+    def test_post_with_jsonlogic_content_type(self):
+        client = ObsidianRESTClient(key_path=None)
+        client._api_key = "test-key"
+        client._reachable = True
+        client._last_probed = time.time()
+        client._client = MagicMock()
+        client._client.request.return_value = _mock_response(
+            200, [{"filename": "bar.md", "result": True}]
+        )
+        result = client.post(
+            "/search/",
+            json_body={"glob": ["*.md", {"var": "path"}]},
+            content_type="application/vnd.olrapi.jsonlogic+json",
+        )
+        assert result["ok"] is True
+        assert result["data"][0]["filename"] == "bar.md"
+
+    def test_empty_body_returns_none(self):
+        client = ObsidianRESTClient(key_path=None)
+        client._api_key = "test-key"
+        client._reachable = True
+        client._last_probed = time.time()
+        client._client = MagicMock()
+        resp = _mock_response(200)
+        resp.content = b""
+        client._client.request.return_value = resp
+        result = client.post("/open/foo.md")
+        assert result["ok"] is True
+        assert result["data"] is None
+
+    def test_document_map_accept_header(self):
+        client = ObsidianRESTClient(key_path=None)
+        client._api_key = "test-key"
+        client._reachable = True
+        client._last_probed = time.time()
+        client._client = MagicMock()
+        client._client.request.return_value = _mock_response(
+            200, {"headings": ["H1"], "blocks": [], "frontmatterFields": ["title"]}
+        )
+        result = client.get(
+            "/active/",
+            accept="application/vnd.olrapi.document-map+json",
+        )
+        assert result["ok"] is True
+        assert result["data"]["headings"] == ["H1"]
+        call_kwargs = client._client.request.call_args
+        assert call_kwargs[1]["headers"]["Accept"] == "application/vnd.olrapi.document-map+json"
+
+
 class TestKeyLoading:
     def test_loads_key_from_file(self, tmp_path):
         key_file = tmp_path / "key.txt"

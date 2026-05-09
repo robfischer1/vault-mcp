@@ -458,6 +458,168 @@ if not REST_DISABLE:
         return {"executed": command_id}
 
 
+    # -------------------------------------------------------------------
+    # Phase 7 — Advanced query tools
+    # -------------------------------------------------------------------
+
+    @mcp.tool()
+    def dataview_query(dql: str) -> dict[str, Any]:
+        """[REST-backed] Run a Dataview DQL TABLE query against the vault.
+
+        Passes the query to the Dataview plugin via the REST API. Only TABLE
+        queries are supported (LIST and TASK are rejected by the API). Full
+        DQL syntax: WHERE, SORT, GROUP BY, FLATTEN, functions.
+
+        Requires the Dataview plugin to be active in Obsidian.
+
+        Args:
+            dql: Dataview TABLE query string.
+                 Example: 'TABLE status FROM "System/Handoffs" WHERE note_type = "handoff" SORT file.mtime DESC LIMIT 5'
+
+        Returns:
+            {"count": int, "results": [{filename, result: {field: value}}]} on success.
+        """
+        client = _get_rest_client()
+        result = client.post(
+            "/search/",
+            content=dql,
+            content_type="application/vnd.olrapi.dataview.dql+txt",
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        data = result["data"]
+        if isinstance(data, list):
+            return {"count": len(data), "results": data}
+        return {"count": 0, "results": [], "raw": data}
+
+    @mcp.tool()
+    def jsonlogic_search(query: dict) -> dict[str, Any]:
+        """[REST-backed] Search vault files using a JsonLogic query.
+
+        Evaluates the query against every file in the vault. Files are
+        represented as NoteJson objects with path, frontmatter, tags, stat,
+        and content fields.
+
+        Extended operators beyond standard JsonLogic:
+        - glob: {"glob": ["pattern", {"var": "path"}]}
+        - regexp: {"regexp": ["pattern", {"var": "path"}]}
+
+        Returns only non-falsy results.
+
+        Args:
+            query: JsonLogic query object.
+                   Example: {"glob": ["Entities/People/*", {"var": "path"}]}
+
+        Returns:
+            {"count": int, "results": [...]} on success.
+        """
+        client = _get_rest_client()
+        result = client.post(
+            "/search/",
+            json_body=query,
+            content_type="application/vnd.olrapi.jsonlogic+json",
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        data = result["data"]
+        if isinstance(data, list):
+            return {"count": len(data), "results": data}
+        return {"count": 0, "results": [], "raw": data}
+
+    @mcp.tool()
+    def vault_tags() -> dict[str, Any]:
+        """[REST-backed] Get all tags in the vault with counts from Obsidian's live index.
+
+        Returns tags from both inline #tag and frontmatter syntax. Hierarchical
+        tags (e.g. interest/cooking) also contribute counts to parent prefixes
+        (e.g. interest), mirroring Obsidian's sidebar.
+
+        Complements the FS-based tag_glossary_check() which only reports
+        violations — this tool gives the full picture.
+
+        Returns:
+            {"count": int, "tags": [{"name": str, "count": int}]}
+        """
+        client = _get_rest_client()
+        result = client.get("/tags/")
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        data = result["data"]
+        tags = data.get("tags", []) if isinstance(data, dict) else []
+        return {"count": len(tags), "tags": tags}
+
+    @mcp.tool()
+    def list_directory(path: str = "") -> dict[str, Any]:
+        """[REST-backed] List files in a vault directory via Obsidian's file index.
+
+        Returns filenames and subdirectory names. Directories end with '/'.
+
+        Args:
+            path: Vault-relative directory path. Empty string for vault root.
+                  Example: "System/Governance/"
+
+        Returns:
+            {"files": [str]} — filenames and subdirectory names.
+        """
+        client = _get_rest_client()
+        endpoint = f"/vault/{path}" if path else "/vault/"
+        if not endpoint.endswith("/"):
+            endpoint += "/"
+        result = client.get(endpoint)
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return result["data"]
+
+    @mcp.tool()
+    def open_in_obsidian(path: str, new_leaf: bool = False) -> dict[str, Any]:
+        """[REST-backed] Open a file in Obsidian's editor UI.
+
+        WARNING: If the file does not exist, Obsidian will create an empty
+        file at the specified path. Verify the path exists before calling
+        if file creation is not intended.
+
+        Not a data mutation — same class as execute_command() (UI action).
+        Code-only.
+
+        Args:
+            path: Vault-relative file path. Example: "System/Governance/AGENTS.md"
+            new_leaf: If True, open in a new split pane. Default False.
+
+        Returns:
+            {"opened": str} on success.
+        """
+        client = _get_rest_client()
+        params = {"newLeaf": "true"} if new_leaf else None
+        result = client.post(f"/open/{path}", params=params)
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return {"opened": path}
+
+    @mcp.tool()
+    def document_map(path: str | None = None) -> dict[str, Any]:
+        """[REST-backed] Get the structural map of a note (headings, blocks, frontmatter fields).
+
+        Returns PATCH-targetable sections: heading paths, block reference IDs,
+        and frontmatter field names. Useful for understanding document shape.
+
+        Args:
+            path: Vault-relative file path. If None, returns the map for the
+                  currently active note. Example: "System/Governance/AGENTS.md"
+
+        Returns:
+            {"headings": [str], "blocks": [str], "frontmatterFields": [str]}
+        """
+        client = _get_rest_client()
+        endpoint = f"/vault/{path}" if path else "/active/"
+        result = client.get(
+            endpoint,
+            accept="application/vnd.olrapi.document-map+json",
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return result["data"]
+
+
 def main() -> None:
     watch_status = "watch=on" if WATCH_ENABLED else "watch=off"
     rest_status = "rest=off" if REST_DISABLE else f"rest={REST_URL}"

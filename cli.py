@@ -34,7 +34,7 @@ TOOLS: dict[str, object] = {
     "vault_stats": _srv.vault_stats,
 }
 
-# REST tools (Phase 6) — only present when REST is enabled
+# REST tools (Phases 6-7) — only present when REST is enabled
 if not _srv.REST_DISABLE:
     TOOLS.update({
         "rest_health": _srv.rest_health,
@@ -43,6 +43,12 @@ if not _srv.REST_DISABLE:
         "unsaved_buffer": _srv.unsaved_buffer,
         "obsidian_search": _srv.obsidian_search,
         "execute_command": _srv.execute_command,
+        "dataview_query": _srv.dataview_query,
+        "jsonlogic_search": _srv.jsonlogic_search,
+        "vault_tags": _srv.vault_tags,
+        "list_directory": _srv.list_directory,
+        "open_in_obsidian": _srv.open_in_obsidian,
+        "document_map": _srv.document_map,
     })
 
 
