@@ -163,3 +163,37 @@ def build_content_index(
             content.append((p_file, fm, rel_str))
 
     return content, by_name
+
+
+def load_ignores(
+    vault: Path,
+    ignores_rel: str = "System/Tools/Skills/vault-propagation/audit-ignores.md",
+) -> tuple[set[str], set[str]]:
+    """Parse audit-ignores.md for hash suppressions and folder exemptions.
+
+    Returns:
+        (hash_ignores, folder_exempts) — both sets of strings.
+    """
+    path = vault / ignores_rel
+    if not path.exists():
+        return set(), set()
+    text = path.read_text(encoding='utf-8')
+    hashes: set[str] = set()
+    for m in re.finditer(r'^\|\s*([a-f0-9]{8})\s*\|', text, re.MULTILINE):
+        hashes.add(m.group(1))
+    folder_exempts: set[str] = set()
+    section_match = re.search(
+        r'###\s+Folder[^\n]*exempt[^\n]*\n([\s\S]*?)(?=\n###\s|\Z)',
+        text, re.IGNORECASE,
+    )
+    if section_match:
+        body = section_match.group(1)
+        for line in body.split('\n'):
+            m = re.match(r'^\|\s*`?([A-Za-z][^|`]*?)`?\s*\|', line)
+            if not m:
+                continue
+            prefix = m.group(1).strip()
+            if prefix.lower() in ('path prefix', 'path-prefix') or set(prefix) <= set(' :-'):
+                continue
+            folder_exempts.add(prefix)
+    return hashes, folder_exempts
