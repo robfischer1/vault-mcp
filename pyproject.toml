@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vault-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "FastMCP server exposing an Obsidian vault as read-only query tools over MCP."
 requires-python = ">=3.11"
 license = "MIT"
@@ -12,6 +12,7 @@ authors = [{ name = "Rob Fischer" }]
 dependencies = [
     "mcp[cli]>=1.0",
     "watchdog>=4.0",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

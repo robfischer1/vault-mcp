@@ -51,6 +51,14 @@ VAULT_PATH = _resolve_vault_path()
 TTL_SECONDS = int(os.environ.get("VAULT_MCP_TTL_SECONDS", "300"))
 WATCH_ENABLED = os.environ.get("VAULT_MCP_WATCH", "1") != "0"
 
+# REST API config (Phase 6)
+REST_DISABLE = os.environ.get("VAULT_MCP_REST_DISABLE", "0") == "1"
+REST_URL = os.environ.get("VAULT_MCP_REST_URL", "http://127.0.0.1:27123")
+REST_KEY_PATH = os.environ.get(
+    "VAULT_MCP_REST_KEY_PATH",
+    str(Path.home() / "Obsidian" / ".local" / "rest-api-key.txt"),
+)
+
 # ---------------------------------------------------------------------------
 # Shared state
 # ---------------------------------------------------------------------------
@@ -67,6 +75,19 @@ def _get_index() -> VaultIndex:
             _index.enable_watcher()
             _observer = start_watcher(_index)
     return _index
+
+
+# REST client (Phase 6)
+_rest_client = None
+
+
+def _get_rest_client():
+    global _rest_client
+    if _rest_client is None:
+        from vault_mcp.rest_client import ObsidianRESTClient
+        _rest_client = ObsidianRESTClient(base_url=REST_URL, key_path=REST_KEY_PATH)
+        _rest_client.probe()
+    return _rest_client
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +294,177 @@ def vault_stats() -> dict[str, Any]:
     return stats
 
 
+# ---------------------------------------------------------------------------
+# Phase 6 — REST-backed tools
+# ---------------------------------------------------------------------------
+
+if not REST_DISABLE:
+
+    @mcp.tool()
+    def rest_health() -> dict[str, Any]:
+        """[REST-backed] Check Obsidian Local REST API reachability.
+
+        Probes the API at http://127.0.0.1:27123 and returns connection
+        status, plugin version, and last error (if any). Cheap probe;
+        no vault data returned.
+
+        Returns:
+            {"reachable": bool, "version": str|None,
+             "last_probed": float, "last_error": str|None}
+        """
+        return _get_rest_client().probe()
+
+    @mcp.tool()
+    def active_note() -> dict[str, Any]:
+        """[REST-backed] Get the currently active note in Obsidian's editor.
+
+        Returns the note open in the active pane, including its parsed
+        frontmatter, content, file stats, and vault-relative path.
+        Reflects the live editor buffer (may include unsaved changes).
+
+        Code-only — returns {"error": "rest_unreachable"} from environments
+        where Obsidian is not running.
+
+        Returns:
+            {"path": str, "frontmatter": dict, "content": str, "stat": dict,
+             "as_of": "rest"} on success.
+        """
+        client = _get_rest_client()
+        result = client.get(
+            "/active/", accept="application/vnd.olrapi.note+json"
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        data = result["data"]
+        data["as_of"] = "rest"
+        return data
+
+    @mcp.tool()
+    def periodic_note(
+        level: str,
+        date: str | None = None,
+    ) -> dict[str, Any]:
+        """[REST-backed] Get a periodic note (daily, weekly, monthly, quarterly, yearly).
+
+        Args:
+            level: One of "daily", "weekly", "monthly", "quarterly", "yearly".
+            date: Optional date string (e.g. "2026-05-09"). Defaults to today.
+
+        Returns:
+            {"path": str, "frontmatter": dict, "content": str, "stat": dict,
+             "as_of": "rest"} on success.
+        """
+        valid = {"daily", "weekly", "monthly", "quarterly", "yearly"}
+        if level not in valid:
+            return {"error": "rest_invalid_request", "detail": f"level must be one of {valid}"}
+        path = f"/periodic/{level}/"
+        if date:
+            path = f"/periodic/{level}/{date}"
+        client = _get_rest_client()
+        result = client.get(
+            path,
+            accept="application/vnd.olrapi.note+json",
+            extra_headers={"Target-Type": "note"},
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        data = result["data"]
+        data["as_of"] = "rest"
+        return data
+
+    @mcp.tool()
+    def unsaved_buffer(path: str) -> dict[str, Any]:
+        """[REST-backed] Read a note's current editor buffer from Obsidian.
+
+        Distinct from read_note: reflects unsaved edits, requires Obsidian
+        running, Code-only. Use read_note for disk-state reads that work
+        everywhere.
+
+        Args:
+            path: Vault-relative path, e.g. "System/Governance/AGENTS.md"
+
+        Returns:
+            {"path": str, "frontmatter": dict, "content": str, "stat": dict,
+             "as_of": "rest"} on success.
+        """
+        client = _get_rest_client()
+        result = client.get(
+            f"/vault/{path}",
+            accept="application/vnd.olrapi.note+json",
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        data = result["data"]
+        data["as_of"] = "rest"
+        return data
+
+    @mcp.tool()
+    def obsidian_search(query: str) -> dict[str, Any]:
+        """[REST-backed] Search the vault using Obsidian's built-in search engine.
+
+        Passes the query verbatim to Obsidian — supports all Obsidian search
+        operators (tag:, path:, file:, section:, etc.). Returns results ranked
+        by Obsidian's relevance scoring.
+
+        Args:
+            query: Obsidian search query string. Example: "tag:#brainsoup"
+
+        Returns:
+            {"count": int, "results": [{filename, score, matches}]}
+        """
+        client = _get_rest_client()
+        result = client.post(
+            "/search/simple/",
+            params={"query": query},
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        data = result["data"]
+        if isinstance(data, list):
+            return {"count": len(data), "results": data}
+        return {"count": 0, "results": [], "raw": data}
+
+    REST_COMMAND_ALLOWLIST = {
+        "workspace:open-in-new-leaf",
+        "app:reveal-active-file",
+        "editor:focus",
+        "app:open-settings",
+    }
+
+    @mcp.tool()
+    def execute_command(command_id: str) -> dict[str, Any]:
+        """[REST-backed] Execute an Obsidian command by ID (allowlisted only).
+
+        Only non-mutating navigation/focus commands are permitted. Current
+        allowlist: workspace:open-in-new-leaf, app:reveal-active-file,
+        editor:focus, app:open-settings.
+
+        Args:
+            command_id: Obsidian command ID. Example: "editor:focus"
+
+        Returns:
+            {"executed": str} on success, {"error": ...} on rejection.
+        """
+        if command_id not in REST_COMMAND_ALLOWLIST:
+            return {
+                "error": "rest_invalid_request",
+                "detail": f"command not in allowlist: {command_id}. "
+                          f"Allowed: {sorted(REST_COMMAND_ALLOWLIST)}",
+            }
+        client = _get_rest_client()
+        result = client.post(f"/commands/{command_id}/")
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return {"executed": command_id}
+
+
 def main() -> None:
     watch_status = "watch=on" if WATCH_ENABLED else "watch=off"
-    print(f"vault-mcp: vault={VAULT_PATH}, ttl={TTL_SECONDS}s, {watch_status}", file=sys.stderr)
+    rest_status = "rest=off" if REST_DISABLE else f"rest={REST_URL}"
+    print(
+        f"vault-mcp: vault={VAULT_PATH}, ttl={TTL_SECONDS}s, {watch_status}, {rest_status}",
+        file=sys.stderr,
+    )
     mcp.run()
 
 

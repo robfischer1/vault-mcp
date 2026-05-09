@@ -19,31 +19,31 @@ _src = Path(__file__).resolve().parent / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from server import (  # noqa: E402
-    backlinks_to,
-    find_by_filename,
-    find_notes_by_frontmatter,
-    find_orphans,
-    outbound_links,
-    read_note,
-    recent_edits,
-    reindex,
-    tag_glossary_check,
-    vault_stats,
-)
+import server as _srv  # noqa: E402
 
-TOOLS = {
-    "find_notes_by_frontmatter": find_notes_by_frontmatter,
-    "find_by_filename": find_by_filename,
-    "recent_edits": recent_edits,
-    "read_note": read_note,
-    "reindex": reindex,
-    "backlinks_to": backlinks_to,
-    "outbound_links": outbound_links,
-    "find_orphans": find_orphans,
-    "tag_glossary_check": tag_glossary_check,
-    "vault_stats": vault_stats,
+TOOLS: dict[str, object] = {
+    "find_notes_by_frontmatter": _srv.find_notes_by_frontmatter,
+    "find_by_filename": _srv.find_by_filename,
+    "recent_edits": _srv.recent_edits,
+    "read_note": _srv.read_note,
+    "reindex": _srv.reindex,
+    "backlinks_to": _srv.backlinks_to,
+    "outbound_links": _srv.outbound_links,
+    "find_orphans": _srv.find_orphans,
+    "tag_glossary_check": _srv.tag_glossary_check,
+    "vault_stats": _srv.vault_stats,
 }
+
+# REST tools (Phase 6) — only present when REST is enabled
+if not _srv.REST_DISABLE:
+    TOOLS.update({
+        "rest_health": _srv.rest_health,
+        "active_note": _srv.active_note,
+        "periodic_note": _srv.periodic_note,
+        "unsaved_buffer": _srv.unsaved_buffer,
+        "obsidian_search": _srv.obsidian_search,
+        "execute_command": _srv.execute_command,
+    })
 
 
 def main() -> None:
