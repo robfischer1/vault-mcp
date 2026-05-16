@@ -105,5 +105,5 @@ based on intent — check them off based on observed output.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-[specs/003-bases-summaries/plan.md](specs/003-bases-summaries/plan.md)
+[specs/004-bases-embed-resolution/plan.md](specs/004-bases-embed-resolution/plan.md)
 <!-- SPECKIT END -->

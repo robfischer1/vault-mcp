@@ -1,0 +1,7 @@
+filters:
+  note["note_type"] == "plan"
+views:
+  - name: CardView
+    type: cards
+    filters:
+      note["status"] == "active"

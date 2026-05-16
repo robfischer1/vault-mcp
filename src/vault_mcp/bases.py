@@ -351,23 +351,38 @@ def parse_file(file_path: Path) -> ParsedFile:
     bases: list[Base] = []
     errors: list[dict[str, Any]] = []
 
-    for yaml_text, line_number in blocks:
+    if file_path.suffix == ".base" and not blocks:
         try:
-            raw = yaml.safe_load(yaml_text)
+            raw = yaml.safe_load(text)
+            if not isinstance(raw, dict):
+                errors.append(
+                    {
+                        "line_number": 1,
+                        "message": "Base YAML must be a mapping",
+                    }
+                )
+            else:
+                bases.append(parse_base_yaml(raw, text, 1))
         except yaml.YAMLError as e:
-            errors.append({"line_number": line_number, "message": str(e)})
-            continue
+            errors.append({"line_number": 1, "message": str(e)})
+    else:
+        for yaml_text, line_number in blocks:
+            try:
+                raw = yaml.safe_load(yaml_text)
+            except yaml.YAMLError as e:
+                errors.append({"line_number": line_number, "message": str(e)})
+                continue
 
-        if not isinstance(raw, dict):
-            errors.append(
-                {
-                    "line_number": line_number,
-                    "message": "Base YAML must be a mapping",
-                }
-            )
-            continue
+            if not isinstance(raw, dict):
+                errors.append(
+                    {
+                        "line_number": line_number,
+                        "message": "Base YAML must be a mapping",
+                    }
+                )
+                continue
 
-        bases.append(parse_base_yaml(raw, yaml_text, line_number))
+            bases.append(parse_base_yaml(raw, yaml_text, line_number))
 
     return ParsedFile(path=rel_path, bases=bases, errors=errors)
 
