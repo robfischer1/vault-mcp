@@ -46,7 +46,7 @@ The output is a JSON string representing the `QueryResult`.
 ```
 
 ### Constraints & Invariants
-- **Compatibility**: If `view_name` is not provided, the first view in the base is executed.
+- **Compatibility**: If `view_name` is not provided, the base-level filters and formulas are executed without view-specific overrides.
 - **Degradation**: If a formula cannot be evaluated (Tier 3+ or error), the value is `null` and a warning is added to the `warnings` list.
 - **Safety**: Regex evaluations are terminated after 100ms.
 - **Depth**: Recursive or deeply nested `if()` expressions are terminated after 10 levels.
