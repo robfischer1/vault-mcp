@@ -32,6 +32,13 @@ class Formula:
 
 
 @dataclass
+class Summary:
+    name: str
+    function: str
+    property: str | None
+
+
+@dataclass
 class SortDirective:
     property: str
     direction: str
@@ -44,6 +51,7 @@ class ViewConfig:
     filters: FilterNode | None = None
     order: list[str] = field(default_factory=list)
     sort: list[SortDirective] = field(default_factory=list)
+    summaries: list[Summary] = field(default_factory=list)
     markers: str | None = None
     column_sizes: dict[str, int] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -54,8 +62,9 @@ class Base:
     filters: FilterNode | None
     formulas: dict[str, Formula]
     views: list[ViewConfig]
-    raw_yaml: str
-    line_number: int
+    summaries: list[Summary] = field(default_factory=list)
+    raw_yaml: str = ""
+    line_number: int = 0
 
 
 @dataclass
@@ -71,6 +80,7 @@ class QueryResult:
     warnings: list[dict[str, str]]
     view_name: str | None
     view_properties: dict[str, Any] = field(default_factory=dict)
+    summaries: dict[str, Any] = field(default_factory=dict)
     total: int = 0
 
 
@@ -92,6 +102,9 @@ _REGEX_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 _NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
 _LINKS_FILTER_RE = re.compile(r"^file\.(links|backlinks)\.filter\(.*\)\.length$")
+
+_SUMMARY_RE = re.compile(r"^(\w+)(?:\((.+)\))?$")
+
 
 _TIER2_PATTERNS = ("html(", "if(", ".map(", ".join(", ".replace(", ".toString(")
 
@@ -121,6 +134,16 @@ def _classify_formula_tier(expression: str) -> int:
         return 1
 
     return 2
+
+
+def _parse_summary(name: str, expression: str) -> Summary:
+    """Parse summary expression into Summary dataclass."""
+    m = _SUMMARY_RE.match(expression.strip())
+    if not m:
+        return Summary(name=name, function="count", property=None)
+    func = m.group(1)
+    prop = m.group(2)
+    return Summary(name=name, function=func, property=prop)
 
 
 def extract_base_blocks(text: str) -> list[tuple[str, int]]:
@@ -239,6 +262,12 @@ def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Ba
             tier = _classify_formula_tier(expr_str)
             formulas[name] = Formula(name=name, expression=expr_str, tier=tier)
 
+    base_summaries: list[Summary] = []
+    raw_summaries = raw.get("summaries", {})
+    if isinstance(raw_summaries, dict):
+        for name, expr in raw_summaries.items():
+            base_summaries.append(_parse_summary(name, str(expr)))
+
     views: list[ViewConfig] = []
     raw_views = raw.get("views", [])
     if isinstance(raw_views, list):
@@ -255,12 +284,19 @@ def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Ba
                         )
                     )
 
+            view_summaries: list[Summary] = []
+            raw_v_summaries = v.get("summaries", {})
+            if isinstance(raw_v_summaries, dict):
+                for name, expr in raw_v_summaries.items():
+                    view_summaries.append(_parse_summary(name, str(expr)))
+
             known_keys = {
                 "name",
                 "type",
                 "filters",
                 "order",
                 "sort",
+                "summaries",
                 "markers",
                 "columnSizes",
                 "column_sizes",
@@ -278,6 +314,7 @@ def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Ba
                     filters=_build_filter_tree(v.get("filters")),
                     order=v.get("order", []) or [],
                     sort=sort_list,
+                    summaries=view_summaries,
                     markers=v.get("markers"),
                     column_sizes=col_sizes,
                     extra=extra,
@@ -288,6 +325,7 @@ def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Ba
         filters=filters,
         formulas=formulas,
         views=views,
+        summaries=base_summaries,
         raw_yaml=yaml_text,
         line_number=line_number,
     )
@@ -742,6 +780,25 @@ def execute_base(
     elif selected_view and selected_view.filters:
         merged_filter = selected_view.filters
 
+    # Prepare summaries
+    summaries_to_run: dict[str, Summary] = {}
+    for s in base.summaries:
+        summaries_to_run[s.name] = s
+    if selected_view:
+        for s in selected_view.summaries:
+            summaries_to_run[s.name] = s
+
+    # Initialize accumulators
+    # count: int, sum: float, min: float, max: float, count_with_val: int
+    accums: dict[str, dict[str, Any]] = {}
+    for name, _s in summaries_to_run.items():
+        accums[name] = {
+            "sum": 0.0,
+            "min": float("inf"),
+            "max": float("-inf"),
+            "count_with_val": 0,
+        }
+
     notes: list[dict[str, Any]] = []
     warnings: list[dict[str, str]] = []
     warned_formulas: set[str] = set()
@@ -778,6 +835,54 @@ def execute_base(
             }
         )
 
+        # Update summaries
+        for name, s in summaries_to_run.items():
+            if s.function == "count":
+                accums[name]["count_with_val"] += 1
+                continue
+
+            # Extract property value
+            val = None
+            if s.property:
+                if s.property.startswith("formula."):
+                    fname = s.property[8:]
+                    val = formula_values.get(fname)
+                else:
+                    val = fm.get(s.property)
+
+            # Numeric update
+            if val is not None:
+                try:
+                    num = float(val)
+                    accums[name]["sum"] += num
+                    accums[name]["count_with_val"] += 1
+                    if num < accums[name]["min"]:
+                        accums[name]["min"] = num
+                    if num > accums[name]["max"]:
+                        accums[name]["max"] = num
+                except (ValueError, TypeError):
+                    pass
+
+    # Finalize summaries
+    results: dict[str, Any] = {}
+    for name, s in summaries_to_run.items():
+        a = accums[name]
+        if s.function == "count":
+            results[name] = a["count_with_val"]
+        elif a["count_with_val"] == 0:
+            results[name] = 0 if s.function == "sum" else None
+        else:
+            if s.function == "sum":
+                results[name] = a["sum"]
+            elif s.function == "average":
+                results[name] = a["sum"] / a["count_with_val"]
+            elif s.function == "min":
+                results[name] = a["min"]
+            elif s.function == "max":
+                results[name] = a["max"]
+            elif s.function == "range":
+                results[name] = a["max"] - a["min"]
+
     if selected_view and selected_view.sort:
         for sd in reversed(selected_view.sort):
             reverse = sd.direction == "DESC"
@@ -809,6 +914,7 @@ def execute_base(
         warnings=warnings,
         view_name=view_name,
         view_properties=view_props,
+        summaries=results,
         total=len(notes),
     )
 
@@ -836,6 +942,10 @@ def _serialize_base(base: Base) -> dict[str, Any]:
         "formulas": {
             name: {"expression": f.expression, "tier": f.tier} for name, f in base.formulas.items()
         },
+        "summaries": {
+            s.name: f"{s.function}({s.property})" if s.property else s.function
+            for s in base.summaries
+        },
         "views": [
             {
                 "name": v.name,
@@ -843,6 +953,10 @@ def _serialize_base(base: Base) -> dict[str, Any]:
                 "filters": _serialize_filter_node(v.filters) if v.filters else None,
                 "order": v.order,
                 "sort": [{"property": s.property, "direction": s.direction} for s in v.sort],
+                "summaries": {
+                    s.name: f"{s.function}({s.property})" if s.property else s.function
+                    for s in v.summaries
+                },
                 **({"markers": v.markers} if v.markers else {}),
                 **({"column_sizes": v.column_sizes} if v.column_sizes else {}),
                 **({k: val for k, val in v.extra.items() if v.type == "cards" and k in ("cardSize", "image", "imageAspectRatio", "indentProperties")}),

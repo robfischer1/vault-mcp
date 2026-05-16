@@ -13,7 +13,7 @@ from vault_mcp.bases import (  # noqa: E402
     Base,
     FilterNode,
     Formula,
-    QueryResult,
+    Summary,
     ViewConfig,
     _classify_formula_tier,
     _parse_filter_predicate,
@@ -730,3 +730,66 @@ class TestPerformance:
             execute_base(base, idx)
         elapsed_per_call = (time.perf_counter() - start) / 50
         assert elapsed_per_call < 0.2, f"execute_base took {elapsed_per_call*1000:.1f}ms"
+
+
+# ===================================================================
+# Phase 8: Summaries tests (003)
+# ===================================================================
+
+
+class TestSummaries:
+    def _summaries_idx(self) -> VaultIndex:
+        v_path = ROOT / "tests" / "fixtures" / "summaries-vault"
+        idx = VaultIndex(v_path, ttl_seconds=9999)
+        idx.reindex()
+        return idx
+
+    def test_count_summary(self):
+        idx = self._summaries_idx()
+        pf = parse_file(FIXTURES / "summaries-base.md")
+        base = pf.bases[0]
+
+        # Base-level count
+        result = execute_base(base, idx)
+        assert result.summaries["Total"] == 3
+
+        # View-level count
+        result = execute_base(base, idx, view_name="Active")
+        assert result.summaries["Active Count"] == 2
+        assert result.summaries["Average Phase"] == 1.5
+
+    def test_numeric_summaries(self):
+        idx = self._summaries_idx()
+        pf = parse_file(FIXTURES / "summaries-numeric.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx)
+
+        # Alpha: 10, Beta: 20, Gamma: 30
+        # sum = 60, avg = 20, min = 10, max = 30, range = 20
+        assert result.summaries["Total Amount"] == 60
+        assert result.summaries["Average Amount"] == 20
+        assert result.summaries["Min Amount"] == 10
+        assert result.summaries["Max Amount"] == 30
+        assert result.summaries["Range Amount"] == 20
+
+    def test_boundary_summaries(self):
+        idx = self._summaries_idx()
+        # Empty result set
+        base = Base(
+            filters=FilterNode(op="eq", field="file.name", value="Nonexistent"),
+            formulas={},
+            views=[],
+            summaries=[Summary(name="Zero", function="count", property=None)],
+        )
+        result = execute_base(base, idx)
+        assert result.summaries["Zero"] == 0
+
+        # Numeric summary on empty set
+        base.summaries = [Summary(name="NullSum", function="sum", property="amount")]
+        result = execute_base(base, idx)
+        assert result.summaries["NullSum"] == 0
+
+        base.summaries = [Summary(name="NullAvg", function="average", property="amount")]
+        result = execute_base(base, idx)
+        assert result.summaries["NullAvg"] is None
+

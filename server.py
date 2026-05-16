@@ -393,6 +393,7 @@ def execute_base(
         "view": result.view_name,
         "notes": result.notes,
         "warnings": result.warnings,
+        "summaries": result.summaries,
     }
 
 
