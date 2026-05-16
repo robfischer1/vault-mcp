@@ -13,6 +13,8 @@ from vault_mcp.bases import (  # noqa: E402
     Base,
     FilterNode,
     Formula,
+    Summary,
+    ViewConfig,
     _classify_formula_tier,
     _parse_filter_predicate,
     _serialize_base,
@@ -178,11 +180,10 @@ class TestViewConfigParsing:
     def test_cards_view_parsed(self):
         pf = parse_file(FIXTURES / "cards-view.md")
         base = pf.bases[0]
-        assert len(base.views) == 2
-        cards = [v for v in base.views if v.type == "cards"]
-        assert len(cards) == 1
-        assert cards[0].name == "Cards"
-        assert "cardSize" in cards[0].extra
+        assert len(base.views) == 1
+        assert base.views[0].type == "cards"
+        assert base.views[0].name == "Project Cards"
+        assert "cardSize" in base.views[0].extra
 
     def test_no_views(self):
         pf = parse_file(FIXTURES / "no-views.md")
@@ -282,14 +283,103 @@ class TestFormulaEvaluation:
         for note in result.notes:
             assert note["formulas"]["Name"] == Path(note["path"]).stem
 
-    def test_tier2_returns_null_with_warning(self):
+    def test_tier2_evaluation_success(self):
         idx = _vault_idx()
-        pf = parse_file(FIXTURES / "tier2-formula.md")
+        pf = parse_file(FIXTURES / "tier2-formulas.md")
+        # Base 1: Conditionals
         base = pf.bases[0]
         result = execute_base(base, idx)
-        assert len(result.warnings) > 0
-        for w in result.warnings:
-            assert "Tier 2" in w["reason"] or "not supported" in w["reason"]
+        assert len(result.warnings) == 0
+        for note in result.notes:
+            # Check labels based on status
+            status = note["frontmatter"].get("status")
+            if status == "active":
+                assert note["formulas"]["label"] == "ACTIVE"
+            else:
+                assert note["formulas"]["label"] == "INACTIVE"
+
+    def test_cards_view_execution(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "cards-view.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="Project Cards")
+        assert result.view_properties["type"] == "cards"
+        assert result.view_properties["cardSize"] == "medium"
+        assert result.view_properties["image"] == "cover"
+        assert result.view_properties["imageAspectRatio"] == "16/9"
+        assert result.view_properties["indentProperties"] is True
+
+    def test_list_shaping(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "tier2-formulas.md")
+        # Base 2: List Shaping
+        base = pf.bases[1]
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 0
+        for note in result.notes:
+            tags = note["frontmatter"].get("tags", [])
+            if tags:
+                # tags_str: 'tags.map(t => "#" + t).join(", ")'
+                expected = ", ".join(f"#{t}" for t in tags)
+                assert note["formulas"]["tags_str"] == expected
+
+    def test_concatenation(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "tier2-formulas.md")
+        # Base 3: Concatenation and Coercion
+        base = pf.bases[2]
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 0
+        for note in result.notes:
+            # full_path: 'file.folder + "/" + file.name + "." + file.ext'
+            expected = note["path"]
+            assert note["formulas"]["full_path"] == expected
+
+    def test_unknown_function_warning(self):
+        idx = _vault_idx()
+        base = Base(
+            filters=None,
+            formulas={"bad": Formula("bad", "futureFunc(1, 2)", 2)},
+            views=[],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 1
+        assert "Unsupported function" in result.warnings[0]["reason"]
+
+    def test_nesting_depth_exceeded(self):
+        idx = _vault_idx()
+        # Create a 11-level nested if
+        expr = "if(1, " * 11 + "1" + ", 0)" * 11
+        base = Base(
+            filters=None,
+            formulas={"deep": Formula("deep", expr, 2)},
+            views=[],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 1
+        assert "Max nesting depth" in result.warnings[0]["reason"]
+
+    def test_regex_timeout(self):
+        idx = _vault_idx()
+        # A potentially slow regex (backtracking)
+        # Note: we use a string that takes some time to process but not forever
+        long_str = "a" * 25
+        # This regex is specifically designed to be slow on non-matching strings
+        expr = f'"{long_str}".replace(/(a+)+b/, "c")'
+        base = Base(
+            filters=None,
+            formulas={"slow": Formula("slow", expr, 2)},
+            views=[],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 1
+        assert "timed out" in result.warnings[0]["reason"]
 
 
 class TestLinkCountFormula:
@@ -369,13 +459,18 @@ class TestViewSelection:
         assert result.total == 0
         assert result.notes == []
 
-    def test_cards_view_unsupported(self):
+    def test_invalid_view_type_unsupported(self):
         idx = _vault_idx()
-        pf = parse_file(FIXTURES / "cards-view.md")
-        base = pf.bases[0]
-        result = execute_base(base, idx, view_name="Cards")
+        base = Base(
+            filters=None,
+            formulas={},
+            views=[ViewConfig(name="Gallery", type="gallery")],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx, view_name="Gallery")
         assert result.total == 0
-        assert len(result.warnings) > 0
+        assert any("not supported" in w["reason"] for w in result.warnings)
 
     def test_no_views_execution(self):
         idx = _vault_idx()
@@ -635,3 +730,66 @@ class TestPerformance:
             execute_base(base, idx)
         elapsed_per_call = (time.perf_counter() - start) / 50
         assert elapsed_per_call < 0.2, f"execute_base took {elapsed_per_call*1000:.1f}ms"
+
+
+# ===================================================================
+# Phase 8: Summaries tests (003)
+# ===================================================================
+
+
+class TestSummaries:
+    def _summaries_idx(self) -> VaultIndex:
+        v_path = ROOT / "tests" / "fixtures" / "summaries-vault"
+        idx = VaultIndex(v_path, ttl_seconds=9999)
+        idx.reindex()
+        return idx
+
+    def test_count_summary(self):
+        idx = self._summaries_idx()
+        pf = parse_file(FIXTURES / "summaries-base.md")
+        base = pf.bases[0]
+
+        # Base-level count
+        result = execute_base(base, idx)
+        assert result.summaries["Total"] == 3
+
+        # View-level count
+        result = execute_base(base, idx, view_name="Active")
+        assert result.summaries["Active Count"] == 2
+        assert result.summaries["Average Phase"] == 1.5
+
+    def test_numeric_summaries(self):
+        idx = self._summaries_idx()
+        pf = parse_file(FIXTURES / "summaries-numeric.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx)
+
+        # Alpha: 10, Beta: 20, Gamma: 30
+        # sum = 60, avg = 20, min = 10, max = 30, range = 20
+        assert result.summaries["Total Amount"] == 60
+        assert result.summaries["Average Amount"] == 20
+        assert result.summaries["Min Amount"] == 10
+        assert result.summaries["Max Amount"] == 30
+        assert result.summaries["Range Amount"] == 20
+
+    def test_boundary_summaries(self):
+        idx = self._summaries_idx()
+        # Empty result set
+        base = Base(
+            filters=FilterNode(op="eq", field="file.name", value="Nonexistent"),
+            formulas={},
+            views=[],
+            summaries=[Summary(name="Zero", function="count", property=None)],
+        )
+        result = execute_base(base, idx)
+        assert result.summaries["Zero"] == 0
+
+        # Numeric summary on empty set
+        base.summaries = [Summary(name="NullSum", function="sum", property="amount")]
+        result = execute_base(base, idx)
+        assert result.summaries["NullSum"] == 0
+
+        base.summaries = [Summary(name="NullAvg", function="average", property="amount")]
+        result = execute_base(base, idx)
+        assert result.summaries["NullAvg"] is None
+
