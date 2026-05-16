@@ -309,6 +309,78 @@ class TestFormulaEvaluation:
         assert result.view_properties["imageAspectRatio"] == "16/9"
         assert result.view_properties["indentProperties"] is True
 
+    def test_list_shaping(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "tier2-formulas.md")
+        # Base 2: List Shaping
+        base = pf.bases[1]
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 0
+        for note in result.notes:
+            tags = note["frontmatter"].get("tags", [])
+            if tags:
+                # tags_str: 'tags.map(t => "#" + t).join(", ")'
+                expected = ", ".join(f"#{t}" for t in tags)
+                assert note["formulas"]["tags_str"] == expected
+
+    def test_concatenation(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "tier2-formulas.md")
+        # Base 3: Concatenation and Coercion
+        base = pf.bases[2]
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 0
+        for note in result.notes:
+            # full_path: 'file.folder + "/" + file.name + "." + file.ext'
+            expected = note["path"]
+            assert note["formulas"]["full_path"] == expected
+
+    def test_unknown_function_warning(self):
+        idx = _vault_idx()
+        base = Base(
+            filters=None,
+            formulas={"bad": Formula("bad", "futureFunc(1, 2)", 2)},
+            views=[],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 1
+        assert "Unsupported function" in result.warnings[0]["reason"]
+
+    def test_nesting_depth_exceeded(self):
+        idx = _vault_idx()
+        # Create a 11-level nested if
+        expr = "if(1, " * 11 + "1" + ", 0)" * 11
+        base = Base(
+            filters=None,
+            formulas={"deep": Formula("deep", expr, 2)},
+            views=[],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 1
+        assert "Max nesting depth" in result.warnings[0]["reason"]
+
+    def test_regex_timeout(self):
+        idx = _vault_idx()
+        # A potentially slow regex (backtracking)
+        # Note: we use a string that takes some time to process but not forever
+        long_str = "a" * 25
+        # This regex is specifically designed to be slow on non-matching strings
+        expr = f'"{long_str}".replace(/(a+)+b/, "c")'
+        base = Base(
+            filters=None,
+            formulas={"slow": Formula("slow", expr, 2)},
+            views=[],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx)
+        assert len(result.warnings) == 1
+        assert "timed out" in result.warnings[0]["reason"]
+
 
 class TestLinkCountFormula:
     def test_outbound_link_count(self):

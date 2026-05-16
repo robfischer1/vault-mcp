@@ -4,7 +4,7 @@
 
 **Created**: 2026-05-16
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Add Tier 2 formula expression evaluation and `cards` view execution to vault-mcp's Bases support. Tier 1 (shipped in 001) covers property access, file metadata, and link-counting chains. Tier 2 covers the expression patterns one file in the vault currently uses (Core Concepts.md) and that future bases are likely to reach for: conditionals via `if()`, HTML rendering via `html()`, list-shaping via `.map()` / `.join()` / `.replace()` (including regex), `.toString()` coercion, and string concatenation with `+`. The `cards` view type also lands in this brief because the one cards-using file in the vault depends on Tier 2 expressions, making the two a practical bundle."
 

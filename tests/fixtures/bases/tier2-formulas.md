@@ -36,7 +36,7 @@ views:
 
 ```base
 formulas:
-  full_path: 'file.folder + "/" + file.name + "." + file.ext'
+  full_path: 'if(file.folder, file.folder + "/", "") + file.name + "." + file.ext'
   count_str: 'count.toString() + " items"'
 views:
   - name: "Path View"

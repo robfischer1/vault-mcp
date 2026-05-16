@@ -82,10 +82,45 @@ class ValidationResult:
 
 
 # ---------------------------------------------------------------------------
-# Parser — extraction (T008)
+# Globals & Constants (T011)
 # ---------------------------------------------------------------------------
 
 _BASE_BLOCK_RE = re.compile(r"^```base\s*\n(.*?)^```", re.DOTALL | re.MULTILINE)
+
+# Shared executor for regex timeouts (FR-010)
+_REGEX_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+_NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
+_LINKS_FILTER_RE = re.compile(r"^file\.(links|backlinks)\.filter\(.*\)\.length$")
+
+_TIER2_PATTERNS = ("html(", "if(", ".map(", ".join(", ".replace(", ".toString(")
+
+
+def _classify_formula_tier(expression: str) -> int:
+    """Classify formula into Tier 1 (simple) or Tier 2 (complex)."""
+    # Simple Tier 1 matches
+    if _NOTE_KEY_RE.match(expression):
+        return 1
+    if expression.startswith("file."):
+        if _LINKS_FILTER_RE.match(expression):
+            return 1
+        if expression in ("file.name", "file.folder", "file.path", "file.ext", "file.mtime"):
+            return 1
+
+    # Check for Tier 2 markers
+    for pat in _TIER2_PATTERNS:
+        if pat in expression:
+            return 2
+
+    # Any operators or parentheses likely require Tier 2 evaluator
+    if any(op in expression for op in ("+", "==", "!=", "(", "=>")):
+        return 2
+
+    # Fallback: simple word matches (property access) stay in Tier 1
+    if re.match(r"^[a-zA-Z_]\w*$", expression):
+        return 1
+
+    return 2
 
 
 def extract_base_blocks(text: str) -> list[tuple[str, int]]:
@@ -186,20 +221,6 @@ def _build_filter_tree(raw: Any) -> FilterNode | None:
             return FilterNode(op="and", children=remaining_children)
 
     return None
-
-
-# ---------------------------------------------------------------------------
-# Parser — formula tier classification (T011)
-# ---------------------------------------------------------------------------
-
-_TIER2_PATTERNS = ("html(", "if(", ".map(", ".join(", ".replace(", ".toString(", "+")
-
-
-def _classify_formula_tier(expression: str) -> int:
-    for pat in _TIER2_PATTERNS:
-        if pat in expression:
-            return 2
-    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -347,16 +368,26 @@ class FormulaEvaluator:
         self._current_depth = 0
 
     def evaluate(self, expression: str) -> Any:
-        # Pre-process simple JS arrow functions: (t) => ... or t => ...
-        # into a format we can handle. Since we're restricted, we'll
-        # just extract the body and assume the parameter name.
-        cleaned = expression
-        if "=>" in expression:
-            parts = expression.split("=>", 1)
-            cleaned = parts[1].strip()
+        # Pre-process JS syntax: if( -> _if_( , x => -> lambda x: , and /regex/ -> "/regex/"
+        # We protect string literals from being corrupted.
+        # Group 1: strings
+        # Group 2: regexes
+        # Group 3: if(
+        # Group 4: var =>
+        pattern = r'("[^"\\]*(?:\\.[^"\\]*)*"|\'[^\'\\]*(?:\\.[^\'\\]*)*\')|(/[^/\\\n]*(?:\\.[^/\\\n]*)*\/)|\b(if)\s*\(|(\b\w+)\s*=>'
 
-        # Python's 'if' is a keyword. We'll rename it to '_if_' for parsing.
-        cleaned = re.sub(r'\bif\(', '_if_(', cleaned)
+        def replacer(m: re.Match[str]) -> str:
+            if m.group(1):  # string literal
+                return m.group(1)
+            elif m.group(2):  # regex literal
+                return f'"{m.group(2)}"'
+            elif m.group(3):  # if(
+                return "_if_("
+            elif m.group(4):  # var =>
+                return f"lambda {m.group(4)}:"
+            return m.group(0)
+
+        cleaned = re.sub(pattern, replacer, expression)
 
         try:
             tree = ast.parse(cleaned, mode="eval")
@@ -367,42 +398,57 @@ class FormulaEvaluator:
             raise FormulaError(f"Evaluation failed: {e}") from e
 
     def _visit(self, node: ast.AST) -> Any:
-        self._current_depth += 1
-        if self._current_depth > self.max_depth:
-            raise FormulaDepthError(f"Max nesting depth of {self.max_depth} exceeded")
-
         try:
             if isinstance(node, ast.Constant):
                 return node.value
 
             if isinstance(node, ast.Name):
-                if node.id == "if":
-                    return "if"  # Marker for Call
                 return self.context.get(node.id)
 
+            if isinstance(node, ast.Lambda):
+                return node
+
             if isinstance(node, ast.Attribute):
+                if isinstance(node.value, ast.Name) and node.value.id == "file":
+                    return self.context.get(f"file.{node.attr}")
                 value = self._visit(node.value)
                 if value is None:
                     return None
-
-                # Handle file.* properties
-                if isinstance(node.value, ast.Name) and node.value.id == "file":
-                    return self.context.get(f"file.{node.attr}")
-
-                # Handle frontmatter properties
                 if isinstance(value, dict):
                     return value.get(node.attr)
-
                 return getattr(value, node.attr, None)
+
+            if isinstance(node, ast.Subscript):
+                value = self._visit(node.value)
+                if value is None:
+                    return None
+                if isinstance(node.slice, ast.Constant):
+                    key = node.slice.value
+                    if isinstance(value, dict):
+                        return value.get(key)
+                return None
 
             if isinstance(node, ast.Call):
                 func_name = self._get_func_name(node.func)
-                args = [self._visit(arg) for arg in node.args]
 
                 if func_name == "_if_":
-                    if len(args) != 3:
-                        raise FormulaError("if() requires 3 arguments")
-                    return args[1] if args[0] else args[2]
+                    self._current_depth += 1
+                    if self._current_depth > self.max_depth:
+                        raise FormulaDepthError(f"Max nesting depth of {self.max_depth} exceeded")
+                    try:
+                        if len(node.args) != 3:
+                            raise FormulaError("if() requires 3 arguments")
+                        condition = self._visit(node.args[0])
+                        # Eager evaluation of the chosen branch
+                        if condition:
+                            return self._visit(node.args[1])
+                        else:
+                            return self._visit(node.args[2])
+                    finally:
+                        self._current_depth -= 1
+
+                # Evaluate arguments for other functions
+                args = [self._visit(arg) for arg in node.args]
 
                 if func_name == "html":
                     return args[0] if args else ""
@@ -411,11 +457,15 @@ class FormulaEvaluator:
                     target = self._visit(node.func.value)
                     method = node.func.attr
 
+                    # Graceful null handling for method targets
+                    if target is None:
+                        return None
+
                     if method == "map" and isinstance(target, list):
-                        # Simple map support for US1: tags.map(t => "#" + t)
-                        # We'll need to parse the lambda/arrow func if we want true JS parity.
-                        # For now, we'll skip complex lambdas and handle basic ones.
-                        return [self._eval_lambda(node.args[0], item) for item in target]
+                        lambda_node = self._visit(node.args[0])
+                        if not isinstance(lambda_node, ast.Lambda):
+                            raise FormulaError("map() requires an arrow function")
+                        return [self._eval_lambda(lambda_node, item) for item in target]
 
                     if method == "join" and isinstance(target, list):
                         sep = args[0] if args else ", "
@@ -435,14 +485,14 @@ class FormulaEvaluator:
                 left = self._visit(node.left)
                 right = self._visit(node.right)
                 if isinstance(node.op, ast.Add):
-                    # Handle string concatenation or addition
-                    if isinstance(left, str) or isinstance(right, str):
-                        return str(left) + str(right)
-                    return left + right
+                    if isinstance(left, (str, list)) or isinstance(right, (str, list)):
+                        if isinstance(left, list) and isinstance(right, list):
+                            return left + right
+                        return str(left if left is not None else "") + str(right if right is not None else "")
+                    return (left or 0) + (right or 0)
 
             if isinstance(node, ast.Compare):
                 left = self._visit(node.left)
-                # For US1, we handle single comparisons
                 if len(node.ops) == 1:
                     op = node.ops[0]
                     right = self._visit(node.comparators[0])
@@ -452,8 +502,10 @@ class FormulaEvaluator:
                         return left != right
 
             raise FormulaError(f"Unsupported expression construct: {type(node).__name__}")
-        finally:
-            self._current_depth -= 1
+        except FormulaError:
+            raise
+        except Exception as e:
+            raise FormulaError(f"Visitor error: {e}") from e
 
     def _get_func_name(self, node: ast.AST) -> str | None:
         if isinstance(node, ast.Name):
@@ -463,18 +515,15 @@ class FormulaEvaluator:
         return None
 
     def _safe_replace(self, target: Any, pattern: Any, replacement: Any) -> str:
-        target_str = str(target)
+        target_str = str(target if target is not None else "")
         pattern_str = str(pattern)
-
-        # Check if pattern is a JS-style regex /pattern/
         is_regex = pattern_str.startswith("/") and pattern_str.endswith("/")
 
         if is_regex:
             regex_str = pattern_str[1:-1]
             try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(re.sub, regex_str, str(replacement), target_str)
-                    return future.result(timeout=self.regex_timeout)
+                future = _REGEX_EXECUTOR.submit(re.sub, regex_str, str(replacement), target_str)
+                return future.result(timeout=self.regex_timeout)
             except concurrent.futures.TimeoutError:
                 raise FormulaTimeoutError(f"Regex evaluation timed out after {self.regex_timeout}s") from None
             except Exception as e:
@@ -482,31 +531,15 @@ class FormulaEvaluator:
         else:
             return target_str.replace(pattern_str, str(replacement))
 
-    def _eval_lambda(self, node: ast.AST, item: Any) -> Any:
-        # node is the lambda body (which we already parsed in evaluate if it was the top level)
-        # But for list-shaping like tags.map(t => "#" + t), the .map() arg is a string
-        # that needs its own evaluation context.
-
-        # Extract the lambda string from the node if it's a string constant
-        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
-            # If it's not a string, we might have a different AST structure.
-            # For US1, we assume the JS-style formulas are strings in the YAML.
-            return str(item)
-
-        expr_str = node.value
+    def _eval_lambda(self, node: ast.Lambda, item: Any) -> Any:
+        if not node.args.args:
+            raise FormulaError("Lambda requires at least one argument")
+        var_name = node.args.args[0].arg
         sub_context = self.context.copy()
-
-        # Basic arrow function parsing for the sub-expression
-        lambda_var = "t"
-        body_expr = expr_str
-        if "=>" in expr_str:
-            parts = expr_str.split("=>", 1)
-            lambda_var = parts[0].strip().strip("()").strip()
-            body_expr = parts[1].strip()
-
-        sub_context[lambda_var] = item
+        sub_context[var_name] = item
         evaluator = FormulaEvaluator(sub_context, self.max_depth, self.regex_timeout)
-        return evaluator.evaluate(body_expr)
+        evaluator._current_depth = self._current_depth
+        return evaluator._visit(node.body)
 
 
 # ---------------------------------------------------------------------------
@@ -587,10 +620,13 @@ def evaluate_formula(
     expr = formula.expression
 
     if formula.tier == 2:
+        folder = str(Path(rel_path).parent).replace("\\", "/")
+        if folder == ".":
+            folder = ""
         context = frontmatter.copy()
         context.update({
             "file.name": path.stem,
-            "file.folder": str(Path(rel_path).parent).replace("\\", "/"),
+            "file.folder": folder,
             "file.path": rel_path,
             "file.ext": path.suffix.lstrip("."),
             "file.links": list(outbound_links),
