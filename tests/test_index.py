@@ -147,6 +147,64 @@ class TestReadNote:
         assert unresolved[0]["resolution"] == "unresolved"
 
 
+BASES_VAULT = ROOT / "tests" / "fixtures" / "bases-vault"
+
+
+def _idx_bases() -> VaultIndex:
+    idx = VaultIndex(BASES_VAULT, ttl_seconds=9999)
+    idx.reindex()
+    return idx
+
+
+class TestReadNoteEmbeds:
+    def test_read_note_standalone_embed(self):
+        idx = _idx_bases()
+        result = idx.read_note("Projects.md")
+        assert "resolved_embeds" in result
+        embeds = result["resolved_embeds"]
+        assert len(embeds) == 2
+
+        # ![[ActiveProjects.base#CardView]]
+        card_view = [e for e in embeds if "#CardView" in e["token"]][0]
+        assert card_view["path"] == "ActiveProjects.base"
+        assert "results" in card_view
+        assert card_view["results"]["view_name"] == "CardView"
+        # In our fixture, only Alpha has note_type: plan and status: active
+        assert card_view["results"]["total"] >= 1
+
+        # ![[ActiveProjects.base]]
+        default_view = [e for e in embeds if "#" not in e["token"]][0]
+        assert default_view["path"] == "ActiveProjects.base"
+        assert "results" in default_view
+        assert default_view["results"]["total"] >= 1
+
+    def test_read_note_inline_embed(self):
+        idx = _idx_bases()
+        result = idx.read_note("Report.md")
+        assert "resolved_embeds" in result
+        embeds = result["resolved_embeds"]
+        assert len(embeds) == 1
+
+        inv = embeds[0]
+        assert inv["path"] == "Database.md"
+        assert inv["results"]["view_name"] == "Inventory"
+        assert inv["results"]["total"] >= 3  # Alpha, Beta, Gamma
+
+    def test_read_note_missing_embed_targets(self):
+        idx = _idx_bases()
+        result = idx.read_note("MissingTarget.md")
+        assert "resolved_embeds" in result
+        embeds = result["resolved_embeds"]
+        assert len(embeds) == 2
+
+        missing_file = [e for e in embeds if "Missing.base" in e["token"]][0]
+        assert missing_file["error"]["type"] == "not_found"
+
+        missing_view = [e for e in embeds if "#MissingView" in e["token"]][0]
+        assert missing_view["error"]["type"] == "view_not_found"
+
+
+
 # ------------------------------------------------------------------
 # Phase 2 — Graph tools
 # ------------------------------------------------------------------

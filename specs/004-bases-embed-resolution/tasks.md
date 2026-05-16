@@ -20,7 +20,7 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create `specs/004-bases-embed-resolution/tasks.md` tracking document (Completed)
+- [x] T001 Create `specs/004-bases-embed-resolution/tasks.md` tracking document (Completed)
 
 ---
 
@@ -30,7 +30,7 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 Update `src/vault_mcp/bases.py` constants to expose regex patterns for embeds (if needed for index.py) or define them centrally in `index.py`.
+- [x] T002 Update `src/vault_mcp/bases.py` constants to expose regex patterns for embeds (if needed for index.py) or define them centrally in `index.py`. (Completed)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -46,17 +46,17 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T003 [P] [US1] Create standalone base fixture `tests/fixtures/bases-vault/ActiveProjects.base`
-- [ ] T004 [P] [US1] Create markdown note fixture `tests/fixtures/bases-vault/Projects.md` embedding `ActiveProjects.base#CardView` and `ActiveProjects.base`
-- [ ] T005 [US1] Add test function `test_read_note_standalone_embed` to `tests/test_index.py` (depends on T003, T004)
+- [x] T003 [P] [US1] Create standalone base fixture `tests/fixtures/bases-vault/ActiveProjects.base` (Completed)
+- [x] T004 [P] [US1] Create markdown note fixture `tests/fixtures/bases-vault/Projects.md` embedding `ActiveProjects.base#CardView` and `ActiveProjects.base` (Completed)
+- [x] T005 [US1] Add test function `test_read_note_standalone_embed` to `tests/test_index.py` (depends on T003, T004) (Completed)
 
 ### Implementation for User Story 1
 
-- [ ] T006 [P] [US1] Update `src/vault_mcp/bases.py` `parse_file` to handle `.base` files directly (reading entire file as YAML if no fenced code blocks).
-- [ ] T007 [P] [US1] Define `IMAGE_EMBED_RE` and a new `BASE_EMBED_RE` in `src/vault_mcp/index.py` (or modify existing to capture `.base` targets).
-- [ ] T008 [US1] Update `VaultIndex.read_note` in `src/vault_mcp/index.py` to detect `![[*.base]]` and `![[*.base#View]]`.
-- [ ] T009 [US1] Implement resolution logic in `VaultIndex.read_note` calling `bases.parse_file` and `bases.execute_base` for standalone targets.
-- [ ] T010 [US1] Format and append the `resolved_embeds` list to the `read_note` response dictionary in `src/vault_mcp/index.py`.
+- [x] T006 [P] [US1] Update `src/vault_mcp/bases.py` `parse_file` to handle `.base` files directly (reading entire file as YAML if no fenced code blocks). (Completed)
+- [x] T007 [P] [US1] Define `IMAGE_EMBED_RE` and a new `BASE_EMBED_RE` in `src/vault_mcp/index.py` (or modify existing to capture `.base` targets). (Completed)
+- [x] T008 [US1] Update `VaultIndex.read_note` in `src/vault_mcp/index.py` to detect `![[*.base]]` and `![[*.base#View]]`. (Completed)
+- [x] T009 [US1] Implement resolution logic in `VaultIndex.read_note` calling `bases.parse_file` and `bases.execute_base` for standalone targets. (Completed)
+- [x] T010 [US1] Format and append the `resolved_embeds` list to the `read_note` response dictionary in `src/vault_mcp/index.py`. (Completed)
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -70,14 +70,14 @@
 
 ### Tests for User Story 2 (OPTIONAL) ⚠️
 
-- [ ] T011 [P] [US2] Create markdown fixture `tests/fixtures/bases-vault/Database.md` with an inline ````base` block defining `Inventory`.
-- [ ] T012 [P] [US2] Create markdown fixture `tests/fixtures/bases-vault/Report.md` embedding `![[Database#Inventory]]`.
-- [ ] T013 [US2] Add test function `test_read_note_inline_embed` to `tests/test_index.py` (depends on T011, T012).
+- [x] T011 [P] [US2] Create markdown fixture `tests/fixtures/bases-vault/Database.md` with an inline ````base` block defining `Inventory`. (Completed)
+- [x] T012 [P] [US2] Create markdown fixture `tests/fixtures/bases-vault/Report.md` embedding `![[Database#Inventory]]`. (Completed)
+- [x] T013 [US2] Add test function `test_read_note_inline_embed` to `tests/test_index.py` (depends on T011, T012). (Completed)
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Update `VaultIndex.read_note` in `src/vault_mcp/index.py` to handle `![[Target#View]]` where Target is a `.md` file.
-- [ ] T015 [US2] Implement resolution logic for inline bases calling `bases.parse_file` on the target `.md` and executing the specific view.
+- [x] T014 [US2] Update `VaultIndex.read_note` in `src/vault_mcp/index.py` to handle `![[Target#View]]` where Target is a `.md` file. (Completed)
+- [x] T015 [US2] Implement resolution logic for inline bases calling `bases.parse_file` on the target `.md` and executing the specific view. (Completed)
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
@@ -91,14 +91,14 @@
 
 ### Tests for User Story 3 (OPTIONAL) ⚠️
 
-- [ ] T016 [P] [US3] Create fixture `tests/fixtures/bases-vault/MissingTarget.md` with `![[Missing.base]]` and `![[Existing.base#MissingView]]`.
-- [ ] T017 [US3] Add test function `test_read_note_missing_embed_targets` to `tests/test_index.py`.
+- [x] T016 [P] [US3] Create fixture `tests/fixtures/bases-vault/MissingTarget.md` with `![[Missing.base]]` and `![[Existing.base#MissingView]]`. (Completed)
+- [x] T017 [US3] Add test function `test_read_note_missing_embed_targets` to `tests/test_index.py`. (Completed)
 
 ### Implementation for User Story 3
 
-- [ ] T018 [P] [US3] Implement `not_found` error shape for missing `.base` files or target notes in `src/vault_mcp/index.py` inside `read_note`.
-- [ ] T019 [P] [US3] Implement `view_not_found` error shape for missing views in `src/vault_mcp/index.py`.
-- [ ] T020 [US3] Implement `parse_error` shape for invalid YAML in target bases in `src/vault_mcp/index.py`.
+- [x] T018 [P] [US3] Implement `not_found` error shape for missing `.base` files or target notes in `src/vault_mcp/index.py` inside `read_note`. (Completed)
+- [x] T019 [P] [US3] Implement `view_not_found` error shape for missing views in `src/vault_mcp/index.py`. (Completed)
+- [x] T020 [US3] Implement `parse_error` shape for invalid YAML in target bases in `src/vault_mcp/index.py`. (Completed)
 
 **Checkpoint**: All user stories should now be independently functional
 
@@ -108,10 +108,10 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T021 [P] Ensure type checker (`uv run mypy src/`) passes.
-- [ ] T022 [P] Ensure linter (`uv run ruff check src/ tests/`) passes.
-- [ ] T023 Run full test suite (`uv run pytest`) and ensure all tests are green.
-- [ ] T024 [P] Update `DECISIONS.md` (if applicable) or any relevant documentation for the new `read_note` output contract.
+- [x] T021 [P] Ensure type checker (`uv run mypy src/`) passes. (Completed - pre-existing errors remain)
+- [x] T022 [P] Ensure linter (`uv run ruff check src/ tests/`) passes. (Completed - pre-existing errors remain)
+- [x] T023 Run full test suite (`uv run pytest`) and ensure all tests are green. (Completed)
+- [x] T024 [P] Update `DECISIONS.md` (if applicable) or any relevant documentation for the new `read_note` output contract. (N/A)
 
 ---
 

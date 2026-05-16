@@ -6,6 +6,7 @@ explicit reindex() call.
 """
 from __future__ import annotations
 
+import dataclasses
 import fnmatch
 import logging
 import re
@@ -13,6 +14,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from .parsers import (
     SKIP_CONTENT_CHECKS,
@@ -26,6 +28,7 @@ from .parsers import (
 log = logging.getLogger(__name__)
 
 IMAGE_EMBED_RE = re.compile(r'!\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]')
+BASE_EMBED_RE = re.compile(r'!\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|[^\]]+)?\]\]')
 
 
 class VaultIndex:
@@ -136,11 +139,14 @@ class VaultIndex:
                     if not self._inbound[target]:
                         del self._inbound[target]
 
-            if not path.exists() or not path.suffix == '.md':
+            if not path.exists() or path.suffix not in ('.md', '.base'):
                 return
 
             if not top.startswith('.'):
                 self._by_name.setdefault(stem, []).append(path)
+
+            if path.suffix != '.md':
+                return
 
             if top in SKIP_CONTENT_CHECKS:
                 return
@@ -307,10 +313,10 @@ class VaultIndex:
                     body_start += 1
 
         body = text[body_start:]
-        rel = str(target_path.relative_to(self.vault)).replace('\\', '/')
+        rel = str(target_path.relative_to(self.vault)).replace("\\", "/")
 
         outbound = extract_wikilink_targets(body)
-        resolved_links = []
+        resolved_links: list[dict[str, Any]] = []
         for stem in outbound:
             link_matches = self.by_name.get(stem, [])
             if len(link_matches) == 1:
@@ -329,11 +335,98 @@ class VaultIndex:
             else:
                 resolved_links.append({"stem": stem, "resolution": "unresolved"})
 
+        # Resolve base embeds (T008, T009, T010, T014, T015)
+        resolved_embeds: list[dict[str, Any]] = []
+        for m in BASE_EMBED_RE.finditer(body):
+            token = m.group(0)
+            target_stem = m.group(1).strip()
+            view_name = m.group(2).strip() if m.group(2) else None
+
+            # Only resolve if it's a .base file or has a view name
+            if not (target_stem.endswith(".base") or view_name):
+                continue
+
+            stem = target_stem.removesuffix(".md").removesuffix(".base")
+            matches = self.by_name.get(stem, [])
+
+            # Filter matches to prefer .base if it ends in .base
+            if target_stem.endswith(".base"):
+                matches = [p for p in matches if p.suffix == ".base"]
+
+            embed_target_path = None
+            if len(matches) == 1:
+                embed_target_path = matches[0]
+
+            if not embed_target_path:
+                resolved_embeds.append(
+                    {
+                        "token": token,
+                        "error": {
+                            "type": "not_found",
+                            "message": f"File not found: {target_stem}",
+                        },
+                    }
+                )
+                continue
+
+            from .bases import execute_base, parse_file
+
+            pf = parse_file(embed_target_path)
+            if pf.errors:
+                resolved_embeds.append(
+                    {
+                        "token": token,
+                        "path": str(embed_target_path.relative_to(self.vault)).replace(
+                            "\\", "/"
+                        ),
+                        "error": {
+                            "type": "parse_error",
+                            "message": pf.errors[0]["message"],
+                        },
+                    }
+                )
+                continue
+
+            if not pf.bases:
+                continue
+
+            # Execute first base
+            base = pf.bases[0]
+            if view_name:
+                view_names = [v.name for v in base.views]
+                if view_name not in view_names:
+                    resolved_embeds.append(
+                        {
+                            "token": token,
+                            "path": str(embed_target_path.relative_to(self.vault)).replace(
+                                "\\", "/"
+                            ),
+                            "error": {
+                                "type": "view_not_found",
+                                "message": f"View '{view_name}' not found",
+                            },
+                        }
+                    )
+                    continue
+
+            res = execute_base(base, self, view_name=view_name)
+
+            resolved_embeds.append(
+                {
+                    "token": token,
+                    "path": str(embed_target_path.relative_to(self.vault)).replace(
+                        "\\", "/"
+                    ),
+                    "results": dataclasses.asdict(res),
+                }
+            )
+
         return {
             "path": rel,
             "frontmatter": fm,
             "body": body,
             "outbound_links": resolved_links,
+            "resolved_embeds": resolved_embeds,
         }
 
     # ------------------------------------------------------------------
@@ -379,7 +472,7 @@ class VaultIndex:
                     image_stems.add(m.group(1).strip())
             targets = [t for t in targets if t not in image_stems]
 
-        results = []
+        results: list[dict[str, Any]] = []
         for target in targets:
             matches = self._by_name.get(target, [])
             if len(matches) == 1:

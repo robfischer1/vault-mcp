@@ -4,12 +4,13 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 import httpx
+
 from vault_mcp.rest_client import ObsidianRESTClient
 
 

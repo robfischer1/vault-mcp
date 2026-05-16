@@ -9,7 +9,6 @@ import os
 import re
 from pathlib import Path
 
-
 SKIP_DIRS: set[str] = {
     ".git", ".obsidian", ".claude", ".amazonq", ".trash",
     ".smart-env", "attachments",
@@ -142,13 +141,16 @@ def build_content_index(
 
         top = parts[0] if parts else ''
         for fname in filenames:
-            if not fname.endswith('.md'):
+            if not (fname.endswith('.md') or fname.endswith('.base')):
                 continue
             p_file = Path(dirpath) / fname
             rel = p_file.relative_to(vault)
 
             if not top.startswith('.'):
                 by_name.setdefault(p_file.stem, []).append(p_file)
+
+            if not fname.endswith('.md'):
+                continue
 
             if top in _skip_content:
                 continue
