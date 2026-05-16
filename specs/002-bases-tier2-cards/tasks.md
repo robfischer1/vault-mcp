@@ -18,9 +18,9 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 [P] Create test fixtures for Tier 2 expressions in `tests/fixtures/bases/tier2-formulas.md`
-- [ ] T002 [P] Create test fixtures for cards view in `tests/fixtures/bases/cards-view.md`
-- [ ] T003 [P] Add Tier 2 expression patterns to `_TIER2_PATTERNS` in `src/vault_mcp/bases.py` (if missing)
+- [x] T001 [P] Create test fixtures for Tier 2 expressions in `tests/fixtures/bases/tier2-formulas.md`
+- [x] T002 [P] Create test fixtures for cards view in `tests/fixtures/bases/cards-view.md`
+- [x] T003 [P] Add Tier 2 expression patterns to `_TIER2_PATTERNS` in `src/vault_mcp/bases.py` (if missing)
 
 ---
 
@@ -30,9 +30,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Implement a restricted formula evaluator (using `ast` or custom subset) in `src/vault_mcp/bases.py`
-- [ ] T005 Implement the regex timeout logic (100ms) in the evaluator within `src/vault_mcp/bases.py`
-- [ ] T006 Implement nesting depth tracking (max 10) in the evaluator within `src/vault_mcp/bases.py`
+- [x] T004 Implement a restricted formula evaluator (using `ast` or custom subset) in `src/vault_mcp/bases.py`
+- [x] T005 Implement the regex timeout logic (100ms) in the evaluator within `src/vault_mcp/bases.py`
+- [x] T006 Implement nesting depth tracking (max 10) in the evaluator within `src/vault_mcp/bases.py`
 
 **Checkpoint**: Foundation ready - Tier 2 expression evaluation can now be integrated into user stories.
 
@@ -46,16 +46,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add unit tests for `if()` evaluation in `tests/test_bases.py`
-- [ ] T008 [P] [US1] Add unit tests for list-shaping (`map`, `join`) in `tests/test_bases.py`
-- [ ] T009 [P] [US1] Add unit tests for string concatenation and `.toString()` in `tests/test_bases.py`
-- [ ] T010 [P] [US1] Add unit tests for `.replace()` with regex in `tests/test_bases.py`
+- [x] T007 [P] [US1] Add unit tests for `if()` evaluation in `tests/test_bases.py`
+- [x] T008 [P] [US1] Add unit tests for list-shaping (`map`, `join`) in `tests/test_bases.py`
+- [x] T009 [P] [US1] Add unit tests for string concatenation and `.toString()` in `tests/test_bases.py`
+- [x] T010 [P] [US1] Add unit tests for `.replace()` with regex in `tests/test_bases.py`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Integrate the restricted evaluator into `evaluate_formula` in `src/vault_mcp/bases.py`
-- [ ] T012 [US1] Remove the "Tier 2 expression not supported" error in `evaluate_formula` in `src/vault_mcp/bases.py`
-- [ ] T013 [US1] Ensure `evaluate_formula` handles `html()` as a pass-through in `src/vault_mcp/bases.py`
+- [x] T011 [US1] Integrate the restricted evaluator into `evaluate_formula` in `src/vault_mcp/bases.py`
+- [x] T012 [US1] Remove the "Tier 2 expression not supported" error in `evaluate_formula` in `src/vault_mcp/bases.py`
+- [x] T013 [US1] Ensure `evaluate_formula` handles `html()` as a pass-through in `src/vault_mcp/bases.py`
 
 **Checkpoint**: User Story 1 is functional. Tier 2 expressions now compute values instead of warnings in table views.
 
@@ -69,14 +69,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add integration test for cards view execution in `tests/test_bases.py`
-- [ ] T015 [P] [US2] Add unit test for card metadata extraction in `tests/test_bases.py`
+- [x] T014 [P] [US2] Add integration test for cards view execution in `tests/test_bases.py`
+- [x] T015 [P] [US2] Add unit test for card metadata extraction in `tests/test_bases.py`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Update `QueryResult` dataclass to include `view_properties` in `src/vault_mcp/bases.py`
-- [ ] T017 [US2] Update `execute_base` to allow `type: cards` and extract properties from `ViewConfig.extra` in `src/vault_mcp/bases.py`
-- [ ] T018 [US2] Update `_serialize_base` to include `view_properties` in the serialized output in `src/vault_mcp/bases.py`
+- [x] T016 [US2] Update `QueryResult` dataclass to include `view_properties` in `src/vault_mcp/bases.py`
+- [x] T017 [US2] Update `execute_base` to allow `type: cards` and extract properties from `ViewConfig.extra` in `src/vault_mcp/bases.py`
+- [x] T018 [US2] Update `_serialize_base` to include `view_properties` in the serialized output in `src/vault_mcp/bases.py`
 
 **Checkpoint**: User Story 2 is functional. Cards views can now be executed and return structured layout data.
 
@@ -90,14 +90,14 @@
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Add test case for unknown function calls in `tests/test_bases.py`
-- [ ] T020 [P] [US3] Add test case for exceeding nesting depth in `tests/test_bases.py`
-- [ ] T021 [P] [US3] Add test case for regex timeout in `tests/test_bases.py`
+- [x] T019 [P] [US3] Add test case for unknown function calls in `tests/test_bases.py`
+- [x] T020 [P] [US3] Add test case for exceeding nesting depth in `tests/test_bases.py`
+- [x] T021 [P] [US3] Add test case for regex timeout in `tests/test_bases.py`
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Refine the warning path in `evaluate_formula` to capture evaluator errors in `src/vault_mcp/bases.py`
-- [ ] T023 [US3] Ensure malformed Tier 2 expressions are caught and reported as warnings in `src/vault_mcp/bases.py`
+- [x] T022 [US3] Refine the warning path in `evaluate_formula` to capture evaluator errors in `src/vault_mcp/bases.py`
+- [x] T023 [US3] Ensure malformed Tier 2 expressions are caught and reported as warnings in `src/vault_mcp/bases.py`
 
 **Checkpoint**: All user stories complete. The system is robust and handles complex formulas safely.
 
@@ -107,10 +107,10 @@
 
 **Purpose**: Final validation and hygiene
 
-- [ ] T024 [P] Run `mypy --strict src/vault_mcp/bases.py` and resolve any type issues
-- [ ] T025 [P] Run `ruff check src/vault_mcp/bases.py` and ensure lint cleanliness
-- [ ] T026 [P] Update `docs/architecture.md` (if applicable) to reflect Tier 2 support
-- [ ] T027 Run all tests (`pytest`) and ensure 100% pass rate including regressions
+- [x] T024 [P] Run `mypy --strict src/vault_mcp/bases.py` and resolve any type issues
+- [x] T025 [P] Run `ruff check src/vault_mcp/bases.py` and ensure lint cleanliness
+- [x] T026 [P] Update `docs/architecture.md` (if applicable) to reflect Tier 2 support
+- [x] T027 Run all tests (`pytest`) and ensure 100% pass rate including regressions
 
 ---
 

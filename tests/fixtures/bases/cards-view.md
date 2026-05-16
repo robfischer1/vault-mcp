@@ -1,25 +1,23 @@
----
-note_type: folder
----
+# Cards View Fixture
 
-# Cards
+This note contains a Base with a cards view for testing purposes.
+
+## Base 1: Cards
 
 ```base
-filters:
-  and:
-    - file.folder == "Concepts"
 formulas:
-  Summary: note["summary"]
+  summary: 'description.replace(/\n.*/, "")'
 views:
-  - type: cards
-    name: Cards
+  - name: "Project Cards"
+    type: cards
     cardSize: medium
+    image: cover
+    imageAspectRatio: "16/9"
+    indentProperties: true
+    filters:
+      type: project
     order:
       - file.name
-      - formula.Summary
-  - type: table
-    name: Table
-    order:
-      - file.name
-      - formula.Summary
+      - formula.summary
+      - status
 ```

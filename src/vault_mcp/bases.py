@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import concurrent.futures
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,7 +70,8 @@ class QueryResult:
     notes: list[dict[str, Any]]
     warnings: list[dict[str, str]]
     view_name: str | None
-    total: int
+    view_properties: dict[str, Any] = field(default_factory=dict)
+    total: int = 0
 
 
 @dataclass
@@ -311,6 +314,202 @@ def parse_file(file_path: Path) -> ParsedFile:
 
 
 # ---------------------------------------------------------------------------
+# Evaluator — Tier 2 Restricted (T004, T005, T006)
+# ---------------------------------------------------------------------------
+
+class FormulaError(Exception):
+    """Base class for formula evaluation errors."""
+    pass
+
+
+class FormulaTimeoutError(FormulaError):
+    """Regex evaluation timed out."""
+    pass
+
+
+class FormulaDepthError(FormulaError):
+    """Maximum nesting depth exceeded."""
+    pass
+
+
+class FormulaEvaluator:
+    """Restricted AST-based evaluator for Tier 2 expressions."""
+
+    def __init__(
+        self,
+        context: dict[str, Any],
+        max_depth: int = 10,
+        regex_timeout: float = 0.1,
+    ):
+        self.context = context
+        self.max_depth = max_depth
+        self.regex_timeout = regex_timeout
+        self._current_depth = 0
+
+    def evaluate(self, expression: str) -> Any:
+        # Pre-process simple JS arrow functions: (t) => ... or t => ...
+        # into a format we can handle. Since we're restricted, we'll
+        # just extract the body and assume the parameter name.
+        cleaned = expression
+        if "=>" in expression:
+            parts = expression.split("=>", 1)
+            cleaned = parts[1].strip()
+
+        # Python's 'if' is a keyword. We'll rename it to '_if_' for parsing.
+        cleaned = re.sub(r'\bif\(', '_if_(', cleaned)
+
+        try:
+            tree = ast.parse(cleaned, mode="eval")
+            return self._visit(tree.body)
+        except Exception as e:
+            if isinstance(e, FormulaError):
+                raise
+            raise FormulaError(f"Evaluation failed: {e}") from e
+
+    def _visit(self, node: ast.AST) -> Any:
+        self._current_depth += 1
+        if self._current_depth > self.max_depth:
+            raise FormulaDepthError(f"Max nesting depth of {self.max_depth} exceeded")
+
+        try:
+            if isinstance(node, ast.Constant):
+                return node.value
+
+            if isinstance(node, ast.Name):
+                if node.id == "if":
+                    return "if"  # Marker for Call
+                return self.context.get(node.id)
+
+            if isinstance(node, ast.Attribute):
+                value = self._visit(node.value)
+                if value is None:
+                    return None
+
+                # Handle file.* properties
+                if isinstance(node.value, ast.Name) and node.value.id == "file":
+                    return self.context.get(f"file.{node.attr}")
+
+                # Handle frontmatter properties
+                if isinstance(value, dict):
+                    return value.get(node.attr)
+
+                return getattr(value, node.attr, None)
+
+            if isinstance(node, ast.Call):
+                func_name = self._get_func_name(node.func)
+                args = [self._visit(arg) for arg in node.args]
+
+                if func_name == "_if_":
+                    if len(args) != 3:
+                        raise FormulaError("if() requires 3 arguments")
+                    return args[1] if args[0] else args[2]
+
+                if func_name == "html":
+                    return args[0] if args else ""
+
+                if isinstance(node.func, ast.Attribute):
+                    target = self._visit(node.func.value)
+                    method = node.func.attr
+
+                    if method == "map" and isinstance(target, list):
+                        # Simple map support for US1: tags.map(t => "#" + t)
+                        # We'll need to parse the lambda/arrow func if we want true JS parity.
+                        # For now, we'll skip complex lambdas and handle basic ones.
+                        return [self._eval_lambda(node.args[0], item) for item in target]
+
+                    if method == "join" and isinstance(target, list):
+                        sep = args[0] if args else ", "
+                        return str(sep).join(str(i) for i in target)
+
+                    if method == "replace":
+                        if len(args) < 2:
+                            raise FormulaError("replace() requires 2 arguments")
+                        return self._safe_replace(target, args[0], args[1])
+
+                    if method == "toString":
+                        return str(target)
+
+                raise FormulaError(f"Unsupported function or method: {func_name}")
+
+            if isinstance(node, ast.BinOp):
+                left = self._visit(node.left)
+                right = self._visit(node.right)
+                if isinstance(node.op, ast.Add):
+                    # Handle string concatenation or addition
+                    if isinstance(left, str) or isinstance(right, str):
+                        return str(left) + str(right)
+                    return left + right
+
+            if isinstance(node, ast.Compare):
+                left = self._visit(node.left)
+                # For US1, we handle single comparisons
+                if len(node.ops) == 1:
+                    op = node.ops[0]
+                    right = self._visit(node.comparators[0])
+                    if isinstance(op, ast.Eq):
+                        return left == right
+                    if isinstance(op, ast.NotEq):
+                        return left != right
+
+            raise FormulaError(f"Unsupported expression construct: {type(node).__name__}")
+        finally:
+            self._current_depth -= 1
+
+    def _get_func_name(self, node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return None
+
+    def _safe_replace(self, target: Any, pattern: Any, replacement: Any) -> str:
+        target_str = str(target)
+        pattern_str = str(pattern)
+
+        # Check if pattern is a JS-style regex /pattern/
+        is_regex = pattern_str.startswith("/") and pattern_str.endswith("/")
+
+        if is_regex:
+            regex_str = pattern_str[1:-1]
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(re.sub, regex_str, str(replacement), target_str)
+                    return future.result(timeout=self.regex_timeout)
+            except concurrent.futures.TimeoutError:
+                raise FormulaTimeoutError(f"Regex evaluation timed out after {self.regex_timeout}s") from None
+            except Exception as e:
+                raise FormulaError(f"Regex error: {e}") from e
+        else:
+            return target_str.replace(pattern_str, str(replacement))
+
+    def _eval_lambda(self, node: ast.AST, item: Any) -> Any:
+        # node is the lambda body (which we already parsed in evaluate if it was the top level)
+        # But for list-shaping like tags.map(t => "#" + t), the .map() arg is a string
+        # that needs its own evaluation context.
+
+        # Extract the lambda string from the node if it's a string constant
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            # If it's not a string, we might have a different AST structure.
+            # For US1, we assume the JS-style formulas are strings in the YAML.
+            return str(item)
+
+        expr_str = node.value
+        sub_context = self.context.copy()
+
+        # Basic arrow function parsing for the sub-expression
+        lambda_var = "t"
+        body_expr = expr_str
+        if "=>" in expr_str:
+            parts = expr_str.split("=>", 1)
+            lambda_var = parts[0].strip().strip("()").strip()
+            body_expr = parts[1].strip()
+
+        sub_context[lambda_var] = item
+        evaluator = FormulaEvaluator(sub_context, self.max_depth, self.regex_timeout)
+        return evaluator.evaluate(body_expr)
+
+
+# ---------------------------------------------------------------------------
 # Evaluator — filter (T016)
 # ---------------------------------------------------------------------------
 
@@ -385,10 +584,33 @@ def evaluate_formula(
     outbound_links: set[str],
     inbound_links: set[str],
 ) -> tuple[Any, str | None]:
-    if formula.tier == 2:
-        return (None, f"Tier 2 expression not supported: {formula.expression}")
-
     expr = formula.expression
+
+    if formula.tier == 2:
+        context = frontmatter.copy()
+        context.update({
+            "file.name": path.stem,
+            "file.folder": str(Path(rel_path).parent).replace("\\", "/"),
+            "file.path": rel_path,
+            "file.ext": path.suffix.lstrip("."),
+            "file.links": list(outbound_links),
+            "file.backlinks": list(inbound_links),
+        })
+        # Add 'tags' if present in frontmatter for list operations
+        if "tags" not in context and "tags" in frontmatter:
+            context["tags"] = frontmatter["tags"]
+
+        evaluator = FormulaEvaluator(context)
+        try:
+            return (evaluator.evaluate(expr), None)
+        except FormulaTimeoutError as e:
+            return (None, str(e))
+        except FormulaDepthError as e:
+            return (None, str(e))
+        except FormulaError as e:
+            return (None, f"Evaluation error: {e}")
+        except Exception as e:
+            return (None, f"Unexpected error: {e}")
 
     m = _NOTE_KEY_RE.match(expr)
     if m:
@@ -455,18 +677,26 @@ def execute_base(
                 view_name=view_name,
                 total=0,
             )
-        if selected_view.type != "table":
+        if selected_view.type not in ("table", "cards"):
             return QueryResult(
                 notes=[],
                 warnings=[
                     {
                         "formula": "",
-                        "reason": f"Only table views are executable in Phase 1 (got {selected_view.type})",
+                        "reason": f"View type '{selected_view.type}' is not supported (table/cards only)",
                     }
                 ],
                 view_name=view_name,
                 total=0,
             )
+
+    view_props = {}
+    if selected_view:
+        view_props["type"] = selected_view.type
+        if selected_view.type == "cards":
+            for key in ("cardSize", "image", "imageAspectRatio", "indentProperties"):
+                if key in selected_view.extra:
+                    view_props[key] = selected_view.extra[key]
 
     merged_filter: FilterNode | None = None
     if base.filters and selected_view and selected_view.filters:
@@ -542,6 +772,7 @@ def execute_base(
         notes=notes,
         warnings=warnings,
         view_name=view_name,
+        view_properties=view_props,
         total=len(notes),
     )
 
@@ -578,7 +809,8 @@ def _serialize_base(base: Base) -> dict[str, Any]:
                 "sort": [{"property": s.property, "direction": s.direction} for s in v.sort],
                 **({"markers": v.markers} if v.markers else {}),
                 **({"column_sizes": v.column_sizes} if v.column_sizes else {}),
-                **({"extra": v.extra} if v.extra else {}),
+                **({k: val for k, val in v.extra.items() if v.type == "cards" and k in ("cardSize", "image", "imageAspectRatio", "indentProperties")}),
+                **({"extra": {k: val for k, val in v.extra.items() if not (v.type == "cards" and k in ("cardSize", "image", "imageAspectRatio", "indentProperties"))}} if v.extra else {}),
             }
             for v in base.views
         ],

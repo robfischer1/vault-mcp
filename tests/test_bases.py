@@ -13,6 +13,8 @@ from vault_mcp.bases import (  # noqa: E402
     Base,
     FilterNode,
     Formula,
+    QueryResult,
+    ViewConfig,
     _classify_formula_tier,
     _parse_filter_predicate,
     _serialize_base,
@@ -178,11 +180,10 @@ class TestViewConfigParsing:
     def test_cards_view_parsed(self):
         pf = parse_file(FIXTURES / "cards-view.md")
         base = pf.bases[0]
-        assert len(base.views) == 2
-        cards = [v for v in base.views if v.type == "cards"]
-        assert len(cards) == 1
-        assert cards[0].name == "Cards"
-        assert "cardSize" in cards[0].extra
+        assert len(base.views) == 1
+        assert base.views[0].type == "cards"
+        assert base.views[0].name == "Project Cards"
+        assert "cardSize" in base.views[0].extra
 
     def test_no_views(self):
         pf = parse_file(FIXTURES / "no-views.md")
@@ -282,14 +283,31 @@ class TestFormulaEvaluation:
         for note in result.notes:
             assert note["formulas"]["Name"] == Path(note["path"]).stem
 
-    def test_tier2_returns_null_with_warning(self):
+    def test_tier2_evaluation_success(self):
         idx = _vault_idx()
-        pf = parse_file(FIXTURES / "tier2-formula.md")
+        pf = parse_file(FIXTURES / "tier2-formulas.md")
+        # Base 1: Conditionals
         base = pf.bases[0]
         result = execute_base(base, idx)
-        assert len(result.warnings) > 0
-        for w in result.warnings:
-            assert "Tier 2" in w["reason"] or "not supported" in w["reason"]
+        assert len(result.warnings) == 0
+        for note in result.notes:
+            # Check labels based on status
+            status = note["frontmatter"].get("status")
+            if status == "active":
+                assert note["formulas"]["label"] == "ACTIVE"
+            else:
+                assert note["formulas"]["label"] == "INACTIVE"
+
+    def test_cards_view_execution(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "cards-view.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="Project Cards")
+        assert result.view_properties["type"] == "cards"
+        assert result.view_properties["cardSize"] == "medium"
+        assert result.view_properties["image"] == "cover"
+        assert result.view_properties["imageAspectRatio"] == "16/9"
+        assert result.view_properties["indentProperties"] is True
 
 
 class TestLinkCountFormula:
@@ -369,13 +387,18 @@ class TestViewSelection:
         assert result.total == 0
         assert result.notes == []
 
-    def test_cards_view_unsupported(self):
+    def test_invalid_view_type_unsupported(self):
         idx = _vault_idx()
-        pf = parse_file(FIXTURES / "cards-view.md")
-        base = pf.bases[0]
-        result = execute_base(base, idx, view_name="Cards")
+        base = Base(
+            filters=None,
+            formulas={},
+            views=[ViewConfig(name="Gallery", type="gallery")],
+            raw_yaml="",
+            line_number=1,
+        )
+        result = execute_base(base, idx, view_name="Gallery")
         assert result.total == 0
-        assert len(result.warnings) > 0
+        assert any("not supported" in w["reason"] for w in result.warnings)
 
     def test_no_views_execution(self):
         idx = _vault_idx()
