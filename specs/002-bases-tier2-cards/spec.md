@@ -8,6 +8,14 @@
 
 **Input**: User description: "Add Tier 2 formula expression evaluation and `cards` view execution to vault-mcp's Bases support. Tier 1 (shipped in 001) covers property access, file metadata, and link-counting chains. Tier 2 covers the expression patterns one file in the vault currently uses (Core Concepts.md) and that future bases are likely to reach for: conditionals via `if()`, HTML rendering via `html()`, list-shaping via `.map()` / `.join()` / `.replace()` (including regex), `.toString()` coercion, and string concatenation with `+`. The `cards` view type also lands in this brief because the one cards-using file in the vault depends on Tier 2 expressions, making the two a practical bundle."
 
+## Clarifications
+
+### Session 2026-05-16
+
+- Q: How should "safe HTML data" be enforced for the html() helper? → A: Pass-through: Return the raw string; assume the client handles rendering safety.
+- Q: How should the system handle long-running or resource-intensive regex evaluations? → A: Time-out: Set a strict execution limit (e.g., 100ms) for each regex evaluation.
+- Q: Should we impose a hard limit on the nesting depth of if() expressions? → A: Limit: Enforce a maximum nesting depth of 10 levels.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Executing Complex Bases (Priority: P1)
@@ -57,17 +65,17 @@ As a user, I want the system to identify and warn me about truly unsupported for
 
 ### Edge Cases
 
-- **Regex in `.replace()`**: Handling invalid regex patterns provided in the formula.
-- **Deeply nested `if()`**: Ensuring the evaluator handles multiple levels of conditional nesting.
+- **Regex in `.replace()`**: Handling invalid regex patterns provided in the formula and enforcing the 100ms timeout.
+- **Deeply nested `if()`**: Ensuring the evaluator handles up to 10 levels of conditional nesting and gracefully errors beyond that.
 - **Null/Undefined values in list operations**: Handling `.map()` or `.join()` on properties that are missing in some files.
-- **Malformed HTML in `html()`**: Ensuring the `html()` helper doesn't cause security or parsing issues when passed invalid strings.
+- **Malformed HTML in `html()`**: Handled as pass-through; ensuring malformed strings don't crash the evaluator.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: System MUST evaluate the `if(condition, trueVal, falseVal)` expression.
-- **FR-002**: System MUST evaluate the `html(content)` expression, preserving the content as safe HTML data.
+- **FR-002**: System MUST evaluate the `html(content)` expression, returning the content as-is (pass-through) for the client to handle safely.
 - **FR-003**: System MUST support list-shaping methods: `.map()`, `.join()`, and `.replace()`.
 - **FR-004**: System MUST support regex patterns within the `.replace(regex, replacement)` method.
 - **FR-005**: System MUST support `.toString()` coercion and string concatenation using the `+` operator.
@@ -75,6 +83,8 @@ As a user, I want the system to identify and warn me about truly unsupported for
 - **FR-007**: System MUST extract and return Card-specific metadata: `cardSize`, `image`, `imageAspectRatio`, and `indentProperties`.
 - **FR-008**: System MUST maintain the warning path for genuine Tier 3+ unsupported expressions.
 - **FR-009**: System MUST NOT regress on existing Tier 1 evaluation (property access, file metadata, link-counting).
+- **FR-010**: System MUST enforce a 100ms time-out for regular expression evaluation to prevent resource exhaustion.
+- **FR-011**: System MUST support up to 10 levels of nested `if()` expressions.
 
 ### Key Entities *(include if feature involves data)*
 
