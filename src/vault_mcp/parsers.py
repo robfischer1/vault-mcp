@@ -111,7 +111,7 @@ def build_content_index(
     skip_dirs: set[str] | None = None,
     skip_content: set[str] | None = None,
     skip_system: set[str] | None = None,
-) -> tuple[list[tuple[Path, dict, str]], dict[str, list[Path]]]:
+) -> tuple[list[tuple[Path, dict, str]], dict[str, list[Path]], dict[Path, float]]:
     """Single vault walk with topdown directory pruning.
 
     Returns:
@@ -124,6 +124,7 @@ def build_content_index(
 
     content: list[tuple[Path, dict, str]] = []
     by_name: dict[str, list[Path]] = {}
+    mtime_map: dict[Path, float] = {}
     vault_str = str(vault)
 
     for dirpath, dirnames, filenames in os.walk(vault_str, topdown=True, followlinks=False):
@@ -146,6 +147,9 @@ def build_content_index(
             p_file = Path(dirpath) / fname
             rel = p_file.relative_to(vault)
 
+            stat = p_file.stat()
+            mtime_map[p_file] = stat.st_mtime
+
             if not top.startswith('.'):
                 by_name.setdefault(p_file.stem, []).append(p_file)
 
@@ -164,7 +168,7 @@ def build_content_index(
             rel_str = str(rel).replace('\\', '/')
             content.append((p_file, fm, rel_str))
 
-    return content, by_name
+    return content, by_name, mtime_map
 
 
 def load_ignores(

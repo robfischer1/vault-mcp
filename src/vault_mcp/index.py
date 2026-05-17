@@ -39,6 +39,7 @@ class VaultIndex:
         self.ttl = ttl_seconds
         self._content: list[tuple[Path, dict, str]] = []
         self._by_name: dict[str, list[Path]] = {}
+        self._mtime: dict[Path, float] = {}
         self._outbound: dict[str, list[str]] = {}
         self._inbound: dict[str, list[str]] = {}
         self._built_at: float = 0.0
@@ -99,7 +100,7 @@ class VaultIndex:
         """Force full rebuild. Returns stats."""
         t0 = time.time()
         with self._lock:
-            self._content, self._by_name = build_content_index(self.vault)
+            self._content, self._by_name, self._mtime = build_content_index(self.vault)
             self._build_link_graph()
             self._built_at = time.time()
             self.last_indexed_at = datetime.fromtimestamp(self._built_at).isoformat(timespec="seconds")
@@ -139,8 +140,14 @@ class VaultIndex:
                     if not self._inbound[target]:
                         del self._inbound[target]
 
+            self._mtime.pop(path, None)
+
             if not path.exists() or path.suffix not in ('.md', '.base'):
                 return
+
+            stat = path.stat() if path.exists() else None
+            if stat is not None:
+                self._mtime[path] = stat.st_mtime
 
             if not top.startswith('.'):
                 self._by_name.setdefault(stem, []).append(path)
@@ -256,9 +263,8 @@ class VaultIndex:
                 rel = str(p.relative_to(self.vault)).replace('\\', '/')
                 if scope and not rel.startswith(scope):
                     continue
-                try:
-                    mtime = p.stat().st_mtime
-                except OSError:
+                mtime = self._mtime.get(p)
+                if mtime is None:
                     continue
                 if mtime >= since_ts:
                     candidates.append({
@@ -638,12 +644,10 @@ class VaultIndex:
                     if isinstance(t, str) and t:
                         tag_counts[t] = tag_counts.get(t, 0) + 1
 
-            try:
-                mtime = path.stat().st_mtime
+            mtime = self._mtime.get(path)
+            if mtime is not None:
                 week = datetime.fromtimestamp(mtime).strftime('%Y-W%W')
                 week_counts[week] = week_counts.get(week, 0) + 1
-            except OSError:
-                pass
 
         top_types = sorted(type_counts.items(), key=lambda x: -x[1])
         top_tags = sorted(tag_counts.items(), key=lambda x: -x[1])[:20]
@@ -656,3 +660,55 @@ class VaultIndex:
             "top_tags": [{"tag": t, "count": c} for t, c in top_tags],
             "edit_volume_by_week": [{"week": w, "count": c} for w, c in recent_weeks],
         }
+
+    def all_tags(self, include_body: bool = True) -> list[dict]:
+        """Collect all tags from frontmatter and optionally body text, with counts.
+
+        Returns sorted list of {tag, count, sources} where sources indicates
+        whether the tag appears in frontmatter, body, or both.
+        """
+        self._ensure_fresh()
+        fm_counts: dict[str, int] = {}
+        body_counts: dict[str, int] = {}
+
+        for path, fm, _rel in self._content:
+            fm_tags = fm.get('tags', [])
+            if isinstance(fm_tags, list):
+                for t in fm_tags:
+                    if isinstance(t, str) and t:
+                        fm_counts[t] = fm_counts.get(t, 0) + 1
+
+            if include_body:
+                try:
+                    text = path.read_text(encoding='utf-8')
+                except Exception:
+                    continue
+                body_start = 0
+                if text.startswith('---'):
+                    end = text.find('\n---', 3)
+                    if end != -1:
+                        body_start = end + 4
+                body = text[body_start:]
+                for m in self.BODY_TAG_RE.finditer(body):
+                    tag = '#' + m.group(1)
+                    body_counts[tag] = body_counts.get(tag, 0) + 1
+
+        all_keys = set(fm_counts) | set(body_counts)
+        results = []
+        for tag in all_keys:
+            fc = fm_counts.get(tag, 0)
+            bc = body_counts.get(tag, 0)
+            sources = []
+            if fc:
+                sources.append("frontmatter")
+            if bc:
+                sources.append("body")
+            results.append({
+                "tag": tag,
+                "count": fc + bc,
+                "frontmatter_count": fc,
+                "body_count": bc,
+                "sources": sources,
+            })
+        results.sort(key=lambda x: -(x["count"] if isinstance(x["count"], int) else 0))
+        return results

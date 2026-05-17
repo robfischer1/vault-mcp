@@ -280,6 +280,25 @@ def tag_glossary_check() -> dict[str, Any]:
 
 
 @mcp.tool()
+def all_tags(include_body: bool = True) -> dict[str, Any]:
+    """Get all tags in the vault with counts (parser-backed, no Obsidian needed).
+
+    Collects tags from frontmatter `tags:` arrays and optionally inline #tags
+    in body text. Unlike the REST-backed vault_tags(), this works without
+    Obsidian running — it reads directly from the indexed files.
+
+    Args:
+        include_body: If True (default), also scan body text for inline #tags.
+                      Set False for frontmatter-only (faster).
+
+    Returns:
+        {"count": int, "tags": [{tag, count, frontmatter_count, body_count, sources}]}
+    """
+    results = _get_index().all_tags(include_body=include_body)
+    return {"count": len(results), "tags": results}
+
+
+@mcp.tool()
 def vault_stats() -> dict[str, Any]:
     """Aggregate vault statistics.
 
