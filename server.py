@@ -33,6 +33,11 @@ from vault_mcp.bases import (  # noqa: E402
     _serialize_base,
 )
 
+# phdb sibling-repo import for predicate table (Phase 9 — triple tools)
+_phdb_src = Path(__file__).resolve().parent.parent / "personal-history-db" / "src"
+if str(_phdb_src) not in sys.path:
+    sys.path.insert(0, str(_phdb_src))
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -805,11 +810,267 @@ if not REST_DISABLE:
         return result["data"]
 
 
+# ---------------------------------------------------------------------------
+# Phase 9 — Predicate table (triple store) tools
+# ---------------------------------------------------------------------------
+
+PHDB_DB_PATH = os.environ.get("PHDB_DB_PATH", "")
+_phdb_conn = None
+
+
+def _get_phdb_conn():
+    global _phdb_conn
+    if _phdb_conn is None:
+        if not PHDB_DB_PATH:
+            return None
+        db_file = Path(PHDB_DB_PATH)
+        if not db_file.exists():
+            return None
+        from phdb.db import connect_persistent
+        _phdb_conn = connect_persistent(db_file)
+    return _phdb_conn
+
+
+@mcp.tool()
+def query_triples(
+    subject: str | None = None,
+    predicate: str | None = None,
+    object: str | None = None,
+    provenance: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    include_null_objects: bool | None = None,
+    include_inverse: bool = False,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Query the predicate table (RDF-triple store) for typed edges.
+
+    Searches subject → predicate → object triples with optional filters.
+    String arguments are resolved to node/predicate IDs automatically.
+
+    Args:
+        subject: Node label or ID to filter by subject.
+        predicate: Predicate name (e.g. "childOf", "mentions") or ID.
+        object: Node label or ID to filter by object.
+        provenance: Filter by provenance ("extraction", "explicit", "ai-emitted").
+        since: ISO-8601 datetime — only triples observed at or after this time.
+        until: ISO-8601 datetime — only triples observed at or before this time.
+        include_null_objects: True = only open triples, False = only complete, None = all.
+        include_inverse: If True, also return triples via the inverse predicate.
+        limit: Max results (default 100).
+
+    Returns:
+        {"count": int, "triples": [...]} or {"error": str} if DB unavailable.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.triples import query_triples as _qt
+    results = _qt(
+        conn,
+        subject=subject,
+        predicate=predicate,
+        object_=object,
+        provenance=provenance,
+        since=since,
+        until=until,
+        include_null_objects=include_null_objects,
+        include_inverse=include_inverse,
+        limit=limit,
+    )
+    return {"count": len(results), "triples": results}
+
+
+@mcp.tool()
+def add_triple(
+    subject: str,
+    predicate: str,
+    object: str | None = None,
+    observed_at: str | None = None,
+    provenance: str = "explicit",
+    source_ref: str | None = None,
+    subject_kind: str = "concept",
+    object_kind: str = "concept",
+    qualifiers: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Add a typed triple to the predicate table.
+
+    Creates nodes on demand; idempotent (INSERT OR IGNORE). Uses the
+    controlled predicate vocabulary seeded by migration 0012.
+
+    Args:
+        subject: Subject node label (resolved or created automatically).
+        predicate: Predicate name (e.g. "childOf", "mentions", "wantsTo").
+        object: Object node label. Omit for an open/incomplete triple.
+        observed_at: ISO-8601 datetime when the relationship held.
+        provenance: One of "extraction", "explicit", "ai-emitted".
+        source_ref: File path or session ID for audit trail.
+        subject_kind: Node kind for subject ("file", "concept", "person", etc.).
+        object_kind: Node kind for object.
+        qualifiers: Optional list of {"key": str, "value": str} qualifier pairs.
+
+    Returns:
+        {"triple_id": int, "created": bool, ...} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.triples import add_triple as _at
+    try:
+        return _at(
+            conn,
+            subject=subject,
+            predicate=predicate,
+            object_=object,
+            observed_at=observed_at,
+            provenance=provenance,
+            source_ref=source_ref,
+            subject_kind=subject_kind,
+            object_kind=object_kind,
+            qualifiers=qualifiers,
+        )
+    except ValueError as e:
+        return {"error": "invalid_predicate", "detail": str(e)}
+
+
+@mcp.tool()
+def triple_stats() -> dict[str, Any]:
+    """Get summary statistics for the predicate table.
+
+    Returns node count, triple count, null-object count, qualifier count,
+    predicate usage breakdown, and node-kind distribution.
+
+    Returns:
+        {"nodes": int, "triples": int, ...} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.triples import triple_stats as _ts
+    return _ts(conn)
+
+
+@mcp.tool()
+def node_neighborhood(
+    node: str,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Get the 1-hop neighborhood of a node in the triple graph.
+
+    Returns the node's metadata plus all outgoing and incoming triples.
+
+    Args:
+        node: Node label to look up.
+        limit: Max triples per direction (default 50).
+
+    Returns:
+        {"node": {...}, "outgoing": [...], "incoming": [...]} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.triples import node_neighborhood as _nn
+    return _nn(conn, node, limit=limit)
+
+
+@mcp.tool()
+def list_predicates() -> dict[str, Any]:
+    """List all predicates in the controlled vocabulary.
+
+    Returns:
+        {"count": int, "predicates": [...]} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.triples import list_predicates as _lp
+    preds = _lp(conn)
+    return {"count": len(preds), "predicates": preds}
+
+
+@mcp.tool()
+def render_predicate_stub(
+    predicate_name: str,
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Render an ephemeral hub-note for a predicate in Atlas/Predicates/.
+
+    The hub-note contains wikilinks to every subject and object connected by
+    this predicate, making the typed edge visible in Obsidian's graph view.
+
+    Set apply=True to write the file; default is dry-run preview.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb not configured (PHDB_DB_PATH missing)"}
+
+    from phdb.triples import query_triples as _qt
+
+    triples = _qt(conn, predicate=predicate_name, limit=10000)
+    if not triples:
+        return {"error": f"No triples found for predicate '{predicate_name}'"}
+
+    from datetime import datetime
+
+    generated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    pairs = [(t["subject_label"], t.get("object_label")) for t in triples]
+
+    lines = [
+        "---",
+        '"@context": "https://schema.org"',
+        '"@type": "CollectionPage"',
+        f'name: "Predicate: {predicate_name}"',
+        f'identifier: "predicate-stub-{predicate_name}"',
+        f'date: {datetime.now().strftime("%Y-%m-%d")}',
+        'author_type: "ai-generated"',
+        "execution_type: recomputed",
+        f'generated_at: "{generated_at}"',
+        "ephemeral: true",
+        "status: Active",
+        "tags: []",
+        'up: "[[Atlas]]"',
+        "---",
+        "",
+        f"## {predicate_name}",
+        "",
+        "> [!INFO] Ephemeral hub-note",
+        f"> Auto-generated from the predicate table. {len(pairs)} triples.",
+        "> Regenerate with `render_predicate_stubs.py` or the MCP tool.",
+        "",
+        "| Subject | Object |",
+        "| :--- | :--- |",
+    ]
+    for subj, obj in pairs:
+        obj_link = f"[[{obj}]]" if obj else "_(open)_"
+        lines.append(f"| [[{subj}]] | {obj_link} |")
+    lines.append("")
+    content = "\n".join(lines)
+
+    if apply:
+        stub_dir = VAULT_PATH / "Atlas" / "Predicates"
+        stub_dir.mkdir(parents=True, exist_ok=True)
+        stub_path = stub_dir / f"{predicate_name}.md"
+        stub_path.write_text(content, encoding="utf-8", newline="\n")
+        return {
+            "status": "written",
+            "path": str(stub_path.relative_to(VAULT_PATH)),
+            "triples": len(pairs),
+        }
+
+    return {
+        "status": "dry-run",
+        "triples": len(pairs),
+        "preview_lines": len(lines),
+    }
+
+
 def main() -> None:
     watch_status = "watch=on" if WATCH_ENABLED else "watch=off"
     rest_status = "rest=off" if REST_DISABLE else f"rest={REST_URL}"
+    phdb_status = f"phdb={PHDB_DB_PATH}" if PHDB_DB_PATH else "phdb=off"
     print(
-        f"vault-mcp: vault={VAULT_PATH}, ttl={TTL_SECONDS}s, {watch_status}, {rest_status}",
+        f"vault-mcp: vault={VAULT_PATH}, ttl={TTL_SECONDS}s, "
+        f"{watch_status}, {rest_status}, {phdb_status}",
         file=sys.stderr,
     )
     mcp.run()
