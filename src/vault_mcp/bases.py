@@ -798,11 +798,6 @@ def _partition_results(
                 val = note["path"]
             elif prop == "file.ext":
                 val = Path(note["path"]).suffix.lstrip(".")
-            elif prop == "file.mtime":
-                val = note["frontmatter"].get("file.mtime")  # Often None in fm, but we use it in execute
-                # Fallback to path.stat if not in fm? In execute_base, we don't store it in note dict currently
-                # except if it was a formula.
-                pass
             else:
                 val = note["frontmatter"].get(prop[5:])
         else:

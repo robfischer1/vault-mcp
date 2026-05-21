@@ -861,3 +861,59 @@ class TestGrouping:
         names = [Path(n["path"]).stem for n in group.notes]
         assert names == ["Gamma", "Beta", "Alpha"]
 
+    def test_groupby_missing_property_yields_none_group(self):
+        """Notes without the groupBy property land in a '(None)' group."""
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "groupby-missing-prop.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="PhaseGroup")
+
+        # Alpha has phase=1, Beta has phase=2, Gamma has NO phase
+        labels = {g.label for g in result.groups}
+        assert "(None)" in labels
+        none_group = [g for g in result.groups if g.label == "(None)"][0]
+        none_paths = [Path(n["path"]).stem for n in none_group.notes]
+        assert "Gamma" in none_paths
+
+    def test_groupby_file_name_metadata(self):
+        """groupBy on file.name uses each note's stem as the group key."""
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "groupby-file-name.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="ByFileName")
+
+        # Three projects: Alpha, Beta, Gamma — each in its own group
+        assert len(result.groups) == 3
+        labels = sorted(g.label for g in result.groups)
+        assert labels == ["Alpha", "Beta", "Gamma"]
+        for g in result.groups:
+            assert g.count == 1
+
+    def test_groupby_empty_result_set(self):
+        """groupBy on a base with no matching notes produces empty groups."""
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "groupby-empty.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="EmptyGroup")
+
+        assert result.total == 0
+        assert result.groups == []
+
+    def test_groupby_non_string_key_coercion(self):
+        """Numeric property values are coerced to string group labels."""
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "groupby-missing-prop.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="PhaseGroup")
+
+        # Alpha: phase=1, Beta: phase=2, Gamma: no phase
+        labels = [g.label for g in result.groups]
+        # Numeric values coerced to strings
+        assert "1" in labels
+        assert "2" in labels
+        assert "(None)" in labels
+        # Verify counts
+        for g in result.groups:
+            if g.label in ("1", "2"):
+                assert g.count == 1
+
