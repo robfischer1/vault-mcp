@@ -1,0 +1,12 @@
+{
+  "feature": "005-add-groupby-evaluation",
+  "spec_hash": "0f8623b76fe26e9267b249d0278f87d85a8e40af178993c96e75087eb2b3a510",
+  "spec_self_validation": "passed",
+  "spec_validated_at": "2026-05-21T10:45:00",
+  "spec_critical_count": 9,
+  "spec_missed_items": ["Q2", "Q7", "Q9"],
+  "review_status": "approved",
+  "approval_status": "allowed",
+  "reviewer": "Rob Fischer",
+  "reviewed_at": "2026-05-21T10:50:00Z"
+}
