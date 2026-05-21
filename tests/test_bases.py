@@ -793,3 +793,71 @@ class TestSummaries:
         result = execute_base(base, idx)
         assert result.summaries["NullAvg"] is None
 
+
+# ===================================================================
+# Phase 9: Grouping tests (005)
+# ===================================================================
+
+
+class TestGrouping:
+    def test_groupby_raw_property(self):
+        idx = _vault_idx()
+        # Alpha: active, Beta: complete, Gamma: draft
+        # ASC: active, complete, draft
+        pf = parse_file(FIXTURES / "groupby-raw.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="StatusGroup")
+
+        assert len(result.groups) == 3
+        assert result.groups[0].label == "active"
+        assert result.groups[0].count == 1
+        assert result.groups[1].label == "complete"
+        assert result.groups[1].count == 1
+        assert result.groups[2].label == "draft"
+        assert result.groups[2].count == 1
+
+        # DESC: draft, complete, active
+        pf_desc = parse_file(FIXTURES / "groupby-desc.md")
+        base_desc = pf_desc.bases[0]
+        result_desc = execute_base(base_desc, idx, view_name="StatusGroupDesc")
+
+        assert len(result_desc.groups) == 3
+        assert result_desc.groups[0].label == "draft"
+        assert result_desc.groups[1].label == "complete"
+        assert result_desc.groups[2].label == "active"
+
+    def test_groupby_formula(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "groupby-formula.md")
+        base = pf.bases[0]
+
+        # IconGroup DESC
+        result = execute_base(base, idx, view_name="IconGroup")
+        assert len(result.groups) == 3
+        # DESC: 🟢, ✅, ⚪ (Verify alphabetical order in Python)
+        labels = [g.label for g in result.groups]
+        assert labels == sorted(labels, reverse=True)
+        assert result.groups[0].label == "🟢"
+        assert result.groups[1].label == "✅"
+        assert result.groups[2].label == "⚪"
+
+        # ErrorGroup
+        result_err = execute_base(base, idx, view_name="ErrorGroup")
+        assert len(result_err.groups) == 1
+        assert result_err.groups[0].label == "Error"
+        assert result_err.groups[0].count == 3
+
+    def test_groupby_preserves_sort(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "groupby-sorted.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="TypeGroup")
+
+        assert len(result.groups) == 1
+        group = result.groups[0]
+        assert group.label == "plan"
+        assert group.count == 3
+        # Should be Gamma, Beta, Alpha (DESC name)
+        names = [Path(n["path"]).stem for n in group.notes]
+        assert names == ["Gamma", "Beta", "Alpha"]
+

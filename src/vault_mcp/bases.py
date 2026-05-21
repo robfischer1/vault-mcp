@@ -45,12 +45,19 @@ class SortDirective:
 
 
 @dataclass
+class GroupByConfig:
+    property: str
+    direction: str
+
+
+@dataclass
 class ViewConfig:
     name: str
     type: str
     filters: FilterNode | None = None
     order: list[str] = field(default_factory=list)
     sort: list[SortDirective] = field(default_factory=list)
+    group_by: GroupByConfig | None = None
     summaries: list[Summary] = field(default_factory=list)
     markers: str | None = None
     column_sizes: dict[str, int] = field(default_factory=dict)
@@ -75,12 +82,20 @@ class ParsedFile:
 
 
 @dataclass
+class GroupResult:
+    label: str
+    count: int
+    notes: list[dict[str, Any]]
+
+
+@dataclass
 class QueryResult:
     notes: list[dict[str, Any]]
     warnings: list[dict[str, str]]
     view_name: str | None
     view_properties: dict[str, Any] = field(default_factory=dict)
     summaries: dict[str, Any] = field(default_factory=dict)
+    groups: list[GroupResult] = field(default_factory=list)
     total: int = 0
 
 
@@ -290,12 +305,21 @@ def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Ba
                 for name, expr in raw_v_summaries.items():
                     view_summaries.append(_parse_summary(name, str(expr)))
 
+            group_by_config = None
+            raw_group_by = v.get("groupBy")
+            if isinstance(raw_group_by, dict):
+                group_by_config = GroupByConfig(
+                    property=str(raw_group_by.get("property", "")),
+                    direction=str(raw_group_by.get("direction", "ASC")).upper(),
+                )
+
             known_keys = {
                 "name",
                 "type",
                 "filters",
                 "order",
                 "sort",
+                "groupBy",
                 "summaries",
                 "markers",
                 "columnSizes",
@@ -314,6 +338,7 @@ def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Ba
                     filters=_build_filter_tree(v.get("filters")),
                     order=v.get("order", []) or [],
                     sort=sort_list,
+                    group_by=group_by_config,
                     summaries=view_summaries,
                     markers=v.get("markers"),
                     column_sizes=col_sizes,
@@ -744,6 +769,72 @@ def evaluate_formula(
 # ---------------------------------------------------------------------------
 
 
+def _partition_results(
+    notes: list[dict[str, Any]],
+    config: GroupByConfig,
+) -> list[GroupResult]:
+    """Group notes by property and sort groups."""
+    from collections import defaultdict
+
+    groups_map = defaultdict(list)
+    prop = config.property
+
+    for note in notes:
+        # Resolve group key
+        val = None
+        is_error = False
+        if prop.startswith("formula."):
+            fname = prop[8:]
+            if fname in note.get("note_warnings", {}):
+                is_error = True
+            else:
+                val = note["formulas"].get(fname)
+        elif prop.startswith("file."):
+            if prop == "file.name":
+                val = Path(note["path"]).stem
+            elif prop == "file.folder":
+                val = str(Path(note["path"]).parent).replace("\\", "/")
+            elif prop == "file.path":
+                val = note["path"]
+            elif prop == "file.ext":
+                val = Path(note["path"]).suffix.lstrip(".")
+            elif prop == "file.mtime":
+                val = note["frontmatter"].get("file.mtime")  # Often None in fm, but we use it in execute
+                # Fallback to path.stat if not in fm? In execute_base, we don't store it in note dict currently
+                # except if it was a formula.
+                pass
+            else:
+                val = note["frontmatter"].get(prop[5:])
+        else:
+            val = note["frontmatter"].get(prop)
+
+        # Coerce to string
+        if is_error:
+            label = "Error"
+        elif val is None:
+            label = "(None)"
+        else:
+            label = str(val)
+
+        groups_map[label].append(note)
+
+    # Sort groups
+    reverse = config.direction == "DESC"
+    sorted_labels = sorted(groups_map.keys(), reverse=reverse)
+
+    results = []
+    for label in sorted_labels:
+        group_notes = groups_map[label]
+        results.append(
+            GroupResult(
+                label=label,
+                count=len(group_notes),
+                notes=group_notes,
+            )
+        )
+    return results
+
+
 def execute_base(
     base: Base,
     index: Any,
@@ -828,6 +919,7 @@ def execute_base(
             continue
 
         formula_values: dict[str, Any] = {}
+        note_warnings: dict[str, str] = {}
         for name, formula in base.formulas.items():
             val, warning = evaluate_formula(
                 formula,
@@ -838,15 +930,18 @@ def execute_base(
                 inbound,
             )
             formula_values[name] = val
-            if warning and name not in warned_formulas:
-                warnings.append({"formula": name, "reason": warning})
-                warned_formulas.add(name)
+            if warning:
+                note_warnings[name] = warning
+                if name not in warned_formulas:
+                    warnings.append({"formula": name, "reason": warning})
+                    warned_formulas.add(name)
 
         notes.append(
             {
                 "path": rel,
                 "frontmatter": fm,
                 "formulas": formula_values,
+                "note_warnings": note_warnings,
             }
         )
 
@@ -924,12 +1019,17 @@ def execute_base(
 
             notes.sort(key=sort_key, reverse=reverse)
 
+    groups = []
+    if selected_view and selected_view.group_by:
+        groups = _partition_results(notes, selected_view.group_by)
+
     return QueryResult(
         notes=notes,
         warnings=warnings,
         view_name=view_name,
         view_properties=view_props,
         summaries=results,
+        groups=groups,
         total=len(notes),
     )
 
@@ -968,6 +1068,12 @@ def _serialize_base(base: Base) -> dict[str, Any]:
                 "filters": _serialize_filter_node(v.filters) if v.filters else None,
                 "order": v.order,
                 "sort": [{"property": s.property, "direction": s.direction} for s in v.sort],
+                "groupBy": {
+                    "property": v.group_by.property,
+                    "direction": v.group_by.direction,
+                }
+                if v.group_by
+                else None,
                 "summaries": {
                     s.name: f"{s.function}({s.property})" if s.property else s.function
                     for s in v.summaries
