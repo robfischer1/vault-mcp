@@ -13,12 +13,19 @@ Config resolution (highest priority first):
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
+import logging
 import os
 import sys
+import threading
+import uuid
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Callable, cast
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 
 if TYPE_CHECKING:
     from vault_mcp.rest_client import ObsidianRESTClient
@@ -74,6 +81,176 @@ REST_KEY_PATH = os.environ.get(
     "VAULT_MCP_REST_KEY_PATH",
     str(Path.home() / "Obsidian" / ".local" / "rest-api-key.txt"),
 )
+
+# ---------------------------------------------------------------------------
+# Subscriptions
+# ---------------------------------------------------------------------------
+
+_active_sessions: set[Any] = set()
+
+
+@dataclass
+class Subscription:
+    handle: str
+    path: str
+    view: str | None
+    base_index: int
+    last_result_hash: str | None = None
+
+
+class SubscriptionManager:
+    """Manages Bases live update subscriptions and pushes notifications."""
+
+    def __init__(self, mcp_server: FastMCP):
+        self.mcp = mcp_server
+        self.subscriptions: dict[str, Subscription] = {}
+        self.lock = threading.Lock()
+        self.log = logging.getLogger(__name__)
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._queue: asyncio.Queue[Path] | None = None
+        self._worker_task: asyncio.Task[None] | None = None
+
+    def _ensure_worker(self) -> None:
+        """Ensure the background worker is running."""
+        if self._worker_task is not None:
+            return
+
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Not in an event loop yet
+            return
+
+        self._queue = asyncio.Queue()
+        self._worker_task = self._loop.create_task(self._worker())
+        self.log.info("Subscription worker started")
+
+    async def _worker(self) -> None:
+        while True:
+            if self._queue is None:
+                break
+            path = await self._queue.get()
+            try:
+                await self.notify_all(path)
+            except Exception:
+                self.log.exception("Error in subscription worker for %s", path)
+            finally:
+                self._queue.task_done()
+
+    def on_file_invalidated(self, path: Path) -> None:
+        """Sync callback for VaultIndex."""
+        if self._loop and self._queue:
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, path)
+
+    def add(self, path: str, view: str | None, base_index: int) -> str:
+        self._ensure_worker()
+        handle = f"sub_{uuid.uuid4().hex[:8]}"
+        with self.lock:
+            self.subscriptions[handle] = Subscription(
+                handle=handle,
+                path=path,
+                view=view,
+                base_index=base_index,
+            )
+        return handle
+
+    def remove(self, handle: str) -> bool:
+        with self.lock:
+            if handle in self.subscriptions:
+                del self.subscriptions[handle]
+                return True
+        return False
+
+    def _hash_result(self, result: Any) -> str:
+        """Create a stable hash of a QueryResult."""
+        if hasattr(result, "__dataclass_fields__"):
+            data = asdict(result)
+        else:
+            data = result
+
+        hash_data = {
+            "notes": [
+                {"path": n["path"], "formulas": n["formulas"]} for n in data.get("notes", [])
+            ],
+            "summaries": data.get("summaries", {}),
+            "total": data.get("total", 0),
+        }
+        dump = json.dumps(hash_data, sort_keys=True)
+        return hashlib.sha256(dump.encode("utf-8")).hexdigest()
+
+    async def notify_all(self, _changed_path: Path) -> None:
+        subs_to_check = []
+        with self.lock:
+            subs_to_check = list(self.subscriptions.values())
+
+        if not subs_to_check:
+            return
+
+        idx = _get_index()
+
+        for sub in subs_to_check:
+            file_path = idx.vault / sub.path
+            if not file_path.exists():
+                continue
+
+            try:
+                pf = _parse_file_impl(file_path)
+                if sub.base_index >= len(pf.bases):
+                    continue
+                base = pf.bases[sub.base_index]
+
+                if sub.view:
+                    matched = [v for v in base.views if v.name == sub.view]
+                    if not matched:
+                        continue
+
+                result = _execute_base_impl(base, idx, view_name=sub.view)
+                current_hash = self._hash_result(result)
+
+                if current_hash == sub.last_result_hash:
+                    continue
+
+                sub.last_result_hash = current_hash
+                await self._push_notification(sub, result)
+            except Exception:
+                self.log.exception("Error updating subscription %s", sub.handle)
+
+    async def _push_notification(self, sub: Subscription, result: Any) -> None:
+        payload = {
+            "handle": sub.handle,
+            "path": sub.path,
+            "view": sub.view,
+            "results": asdict(result) if hasattr(result, "__dataclass_fields__") else result,
+        }
+
+        from mcp.types import JSONRPCNotification
+
+        notification = JSONRPCNotification(
+            jsonrpc="2.0",
+            method="notifications/bases/update",
+            params=payload,
+        )
+
+        disconnected = []
+        for session in _active_sessions:
+            try:
+                await session.send_notification(cast(Any, notification))
+            except Exception:
+                disconnected.append(session)
+
+        for session in disconnected:
+            _active_sessions.discard(session)
+
+
+_sub_manager: SubscriptionManager | None = None
+
+
+def _get_sub_manager() -> SubscriptionManager:
+    global _sub_manager
+    if _sub_manager is None:
+        _sub_manager = SubscriptionManager(mcp)
+        _get_index().on_invalidate.append(_sub_manager.on_file_invalidated)
+    return _sub_manager
 
 # ---------------------------------------------------------------------------
 # Shared state
@@ -405,6 +582,77 @@ def vault_stats() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Phase 8 — Bases tools
 # ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def subscribe_base(
+    path: str,
+    view: str | None = None,
+    base_index: int = 0,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Subscribe to live updates for a base query.
+
+    Pushes a notification whenever the result set for this base changes.
+    Notifications use method 'notifications/bases/update'.
+
+    Args:
+        path: Vault-relative file path containing the base.
+        view: Named view to restrict to.
+        base_index: 0-based index of which base (default 0).
+
+    Returns:
+        {"handle": str, "initial_results": dict}
+    """
+    idx = _get_index()
+    file_path = idx.vault / path
+    if not file_path.exists():
+        return {"error": "not_found", "path": path}
+
+    pf = _parse_file_impl(file_path)
+    if pf.errors and not pf.bases:
+        return {"error": "parse_error", "path": path, "detail": pf.errors[0]["message"]}
+
+    if base_index < 0 or base_index >= len(pf.bases):
+        return {
+            "error": "invalid_base_index",
+            "path": path,
+            "index": base_index,
+            "available": len(pf.bases),
+        }
+
+    if ctx:
+        _active_sessions.add(ctx.session)
+
+    mgr = _get_sub_manager()
+    handle = mgr.add(path, view, base_index)
+
+    base = pf.bases[base_index]
+    result = _execute_base_impl(base, idx, view_name=view)
+
+    with mgr.lock:
+        if handle in mgr.subscriptions:
+            mgr.subscriptions[handle].last_result_hash = mgr._hash_result(result)
+
+    return {
+        "handle": handle,
+        "initial_results": asdict(result) if hasattr(result, "__dataclass_fields__") else result,
+    }
+
+
+@mcp.tool()
+async def unsubscribe_base(handle: str) -> dict[str, Any]:
+    """Cancel a base live update subscription.
+
+    Args:
+        handle: The subscription handle returned by subscribe_base.
+
+    Returns:
+        {"ok": bool}
+    """
+    mgr = _get_sub_manager()
+    success = mgr.remove(handle)
+    return {"ok": success}
 
 
 @mcp.tool()

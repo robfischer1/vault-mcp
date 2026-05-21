@@ -80,6 +80,7 @@ Module count is disciplined. Adding modules requires justification in a plan.
 | 005 | Bases Tier 5 — Grouping (`groupBy` evaluation for properties and formulas) | Complete |
 | 006 | Obsidian CLI Integration — plugin reload, eval, whitelisted commands | Complete |
 | 008 | Bases Map View Support — parse, round-trip, execution warning | Complete |
+| 009 | Bases Live Updates — subscribe/unsubscribe tools, push notifications | Complete |
 
 ## Lessons from 002 (Read This)
 
