@@ -118,6 +118,18 @@ _REGEX_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
 _LINKS_FILTER_RE = re.compile(r"^file\.(links|backlinks)\.filter\(.*\)\.length$")
 
+_CARD_PROPS = {"cardSize", "image", "imageAspectRatio", "indentProperties"}
+_MAP_PROPS = {
+    "latProperty",
+    "lngProperty",
+    "defaultZoom",
+    "markerConfig",
+    "lat property",
+    "lng property",
+    "default zoom",
+    "marker config",
+}
+
 _SUMMARY_RE = re.compile(r"^(\w+)(?:\((.+)\))?$")
 
 
@@ -852,6 +864,22 @@ def execute_base(
                 view_name=view_name,
                 total=0,
             )
+        if selected_view.type == "map":
+            return QueryResult(
+                notes=[],
+                warnings=[
+                    {
+                        "formula": "",
+                        "reason": (
+                            "Execution of 'map' views is not supported by vault-mcp. "
+                            "It requires the Obsidian Maps community plugin."
+                        ),
+                    }
+                ],
+                view_name=view_name,
+                total=0,
+            )
+
         if selected_view.type not in ("table", "cards"):
             return QueryResult(
                 notes=[],
@@ -1075,8 +1103,8 @@ def _serialize_base(base: Base) -> dict[str, Any]:
                 },
                 **({"markers": v.markers} if v.markers else {}),
                 **({"column_sizes": v.column_sizes} if v.column_sizes else {}),
-                **({k: val for k, val in v.extra.items() if v.type == "cards" and k in ("cardSize", "image", "imageAspectRatio", "indentProperties")}),
-                **({"extra": {k: val for k, val in v.extra.items() if not (v.type == "cards" and k in ("cardSize", "image", "imageAspectRatio", "indentProperties"))}} if v.extra else {}),
+                **({k: val for k, val in v.extra.items() if (v.type == "cards" and k in _CARD_PROPS) or (v.type == "map" and k in _MAP_PROPS)}),
+                **({"extra": {k: val for k, val in v.extra.items() if not ((v.type == "cards" and k in _CARD_PROPS) or (v.type == "map" and k in _MAP_PROPS))}} if v.extra else {}),
             }
             for v in base.views
         ],
