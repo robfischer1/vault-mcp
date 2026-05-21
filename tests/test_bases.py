@@ -185,6 +185,15 @@ class TestViewConfigParsing:
         assert base.views[0].name == "Project Cards"
         assert "cardSize" in base.views[0].extra
 
+    def test_parse_map_view(self):
+        pf = parse_file(FIXTURES / "map-view.md")
+        base = pf.bases[0]
+        v = base.views[0]
+        assert v.type == "map"
+        assert v.extra.get("lat property") == "latitude"
+        assert v.extra.get("lng property") == "longitude"
+        assert v.extra.get("default zoom") == 12
+
     def test_no_views(self):
         pf = parse_file(FIXTURES / "no-views.md")
         base = pf.bases[0]
@@ -472,6 +481,14 @@ class TestViewSelection:
         assert result.total == 0
         assert any("not supported" in w["reason"] for w in result.warnings)
 
+    def test_execute_map_view(self):
+        idx = _vault_idx()
+        pf = parse_file(FIXTURES / "map-view.md")
+        base = pf.bases[0]
+        result = execute_base(base, idx, view_name="Global Map")
+        assert result.notes == []
+        assert any("Maps community plugin" in w["reason"] for w in result.warnings)
+
     def test_no_views_execution(self):
         idx = _vault_idx()
         pf = parse_file(FIXTURES / "no-views.md")
@@ -511,6 +528,17 @@ class TestSerializeBase:
         s = _serialize_base(base)
         cards = [v for v in s["views"] if v["type"] == "cards"]
         assert len(cards) == 1
+
+    def test_round_trip_map_view(self):
+        pf = parse_file(FIXTURES / "map-view.md")
+        base = pf.bases[0]
+        s = _serialize_base(base)
+        v = s["views"][0]
+        assert v["type"] == "map"
+        assert v["lat property"] == "latitude"
+        assert v["lng property"] == "longitude"
+        assert v["default zoom"] == 12
+        assert v["marker config"] == "custom-icon"
 
     def test_parse_empty_file(self):
         import tempfile

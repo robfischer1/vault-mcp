@@ -75,7 +75,9 @@ Module count is disciplined. Adding modules requires justification in a plan.
 | Spec | Feature | Status |
 |------|---------|--------|
 | 001 | Bases Tier 1 — parse, execute, write, validate | Complete |
-| 002 | Bases Tier 2 — `if()`, `.map()`, `.join()`, `.replace()`, `html()`, `.toString()`, `+`, cards view | Complete (after fix pass) |
+| 002 | Bases Tier 2 — if(), .map(), .join(), .replace(), html(), .toString(), +, cards view | Complete (after fix pass) |
+| 006 | Bases Map View Support — parse, round-trip, execution warning | Complete |
+
 
 ## Lessons from 002 (Read This)
 
