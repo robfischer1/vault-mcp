@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .parsers import (
     SKIP_CONTENT_CHECKS,
@@ -46,6 +46,7 @@ class VaultIndex:
         self._lock = threading.Lock()
         self._watcher_active = False
         self.last_indexed_at: str | None = None
+        self.on_invalidate: list[Callable[[Path], None]] = []
 
     def _ensure_fresh(self) -> None:
         if self._watcher_active:
@@ -114,10 +115,15 @@ class VaultIndex:
             return
 
         path = path.resolve()
+        vault_resolved = self.vault.resolve()
         try:
-            rel_dir = path.parent.relative_to(self.vault)
+            rel_dir = path.parent.relative_to(vault_resolved)
         except ValueError:
-            return
+            # Try again with resolved parent
+            try:
+                rel_dir = path.parent.resolve().relative_to(vault_resolved)
+            except ValueError:
+                return
 
         parts = rel_dir.parts
         top = parts[0] if parts else ''
@@ -194,6 +200,12 @@ class VaultIndex:
 
             for target in all_targets:
                 self._inbound.setdefault(target, []).append(stem)
+
+        for callback in self.on_invalidate:
+            try:
+                callback(path)
+            except Exception:
+                log.exception("Error in on_invalidate callback for %s", path)
 
     def enable_watcher(self) -> None:
         """Mark that a filesystem watcher is active — disables TTL refresh."""
