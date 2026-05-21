@@ -50,6 +50,7 @@ Quick fixes skip the ceremony and go straight to commit.
 ```
 src/vault_mcp/
 ├── bases.py        # Obsidian Bases parser, evaluator, writer, validator
+├── cli_client.py   # Obsidian CLI (obsidian-cli) wrapper
 ├── index.py        # TTL-cached vault index with link graph
 ├── parsers.py      # YAML frontmatter + wikilink extraction
 ├── rest_client.py  # Centralized HTTP client for Local REST API
@@ -75,9 +76,10 @@ Module count is disciplined. Adding modules requires justification in a plan.
 | Spec | Feature | Status |
 |------|---------|--------|
 | 001 | Bases Tier 1 — parse, execute, write, validate | Complete |
-| 002 | Bases Tier 2 — if(), .map(), .join(), .replace(), html(), .toString(), +, cards view | Complete (after fix pass) |
-| 006 | Bases Map View Support — parse, round-trip, execution warning | Complete |
-
+| 002 | Bases Tier 2 — `if()`, `.map()`, `.join()`, `.replace()`, `html()`, `.toString()`, `+`, cards view | Complete (after fix pass) |
+| 005 | Bases Tier 5 — Grouping (`groupBy` evaluation for properties and formulas) | Complete |
+| 006 | Obsidian CLI Integration — plugin reload, eval, whitelisted commands | Complete |
+| 008 | Bases Map View Support — parse, round-trip, execution warning | Complete |
 
 ## Lessons from 002 (Read This)
 

@@ -16,9 +16,13 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from mcp.server.fastmcp import FastMCP
+
+if TYPE_CHECKING:
+    from vault_mcp.rest_client import ObsidianRESTClient
+    from vault_mcp.cli_client import ObsidianCLI
 
 _src = Path(__file__).resolve().parent / "src"
 if str(_src) not in sys.path:
@@ -90,10 +94,10 @@ def _get_index() -> VaultIndex:
 
 
 # REST client (Phase 6)
-_rest_client = None
+_rest_client: ObsidianRESTClient | None = None
 
 
-def _get_rest_client():
+def _get_rest_client() -> ObsidianRESTClient:
     global _rest_client
     if _rest_client is None:
         from vault_mcp.rest_client import ObsidianRESTClient
@@ -102,10 +106,83 @@ def _get_rest_client():
     return _rest_client
 
 
+# CLI client (Phase 006)
+_cli_client: ObsidianCLI | None = None
+
+
+def _get_cli_client() -> ObsidianCLI:
+    global _cli_client
+    if _cli_client is None:
+        from vault_mcp.cli_client import ObsidianCLI
+        _cli_client = ObsidianCLI()
+        _cli_client.probe()
+    return _cli_client
+
+
 # ---------------------------------------------------------------------------
 # MCP server + tools
 # ---------------------------------------------------------------------------
 mcp = FastMCP("vault-mcp")
+
+
+@mcp.tool()
+def obsidian_cli_status() -> dict[str, Any]:
+    """Check Obsidian CLI availability and version.
+
+    Returns:
+        {"available": bool, "version": str|None, "error": str|None, "detail": str|None}
+    """
+    return _get_cli_client().probe()
+
+
+@mcp.tool()
+def obsidian_cli_reload_plugin(id: str) -> dict[str, Any]:
+    """[CLI-backed] Reload an Obsidian community plugin by ID.
+
+    Essential for plugin development workflows.
+
+    Args:
+        id: The plugin ID (e.g., "obsidian-local-rest-api").
+
+    Returns:
+        {"ok": bool, "data": Any} on success.
+    """
+    return _get_cli_client().run("plugin:reload", id=id)
+
+
+@mcp.tool()
+def obsidian_cli_eval(code: str) -> dict[str, Any]:
+    """[CLI-backed] Execute arbitrary JavaScript in the Obsidian app console.
+
+    Extremely powerful; provides full access to the Obsidian API. Use with
+    caution.
+
+    Args:
+        code: JavaScript snippet to execute.
+
+    Returns:
+        {"ok": bool, "data": Any} on success.
+    """
+    return _get_cli_client().run("eval", code=code)
+
+
+@mcp.tool()
+def obsidian_cli_command(
+    command: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """[CLI-backed] Execute an Obsidian CLI command (allowlisted only).
+
+    The allowlist is enforced in ObsidianCLI.run() itself (defense in depth).
+
+    Args:
+        command: The CLI command name.
+        params: Optional dict of key=value parameters.
+
+    Returns:
+        {"ok": bool, "data": Any} on success.
+    """
+    return _get_cli_client().run(command, **(params or {}))
 
 
 @mcp.tool()
@@ -441,9 +518,8 @@ def write_base(
         {"written": true, "path": str, "action": str, "base_index": int} on success.
     """
     file_path = VAULT_PATH / path
-    if not file_path.exists():
-        if not file_path.parent.exists():
-            return {"error": "not_found", "path": path}
+    if not file_path.exists() and not file_path.parent.exists():
+        return {"error": "not_found", "path": path}
 
     if validate:
         vr = _validate_base_impl(base)
