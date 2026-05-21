@@ -107,6 +107,53 @@ functions. If tasks.md has N test tasks, the file must have N corresponding
 test methods. Run the tests and confirm they pass. Do not check off tasks
 based on intent — check them off based on observed output.
 
+## Lessons from 005-008 Dispatch (Read This)
+
+Features 005 (groupBy), 006 (CLI integration), 008 (map views), and 009 (live
+subscriptions) were dispatched as a batch via spec-kit. Key failures and
+patterns:
+
+1. **Gemini does not auto-commit.** After implementing, changes sit uncommitted
+   in the worktree. The dispatcher (or reviewer) must commit explicitly. Don't
+   assume a green `tasks.md` means the code is committed.
+
+2. **Spec auto-numbering ignores brief filenames.** Gemini assigns spec numbers
+   by scanning `specs/` for the next available slot, not by reading the brief's
+   intended number. Brief `006-bases-live-subscriptions.md` landed as
+   `specs/009-bases-live-subscriptions/` because slots 005-008 were taken.
+   Brief filenames are suggestions, not binding — check the actual spec
+   directory after pipeline runs.
+
+3. **`ctx.session_id` does not exist on FastMCP Context.** Use `ctx.client_id`
+   instead. This surfaced in the subscriptions feature — the generated code
+   referenced a non-existent attribute. When Gemini writes code against a
+   framework API, verify the attribute exists before trusting the reference.
+
+4. **Subscription manager leak pattern.** The initial implementation added
+   clients to the subscription manager without validating they were still
+   connected. Always validate before adding to a collection that outlives the
+   request — especially for long-lived server-side state.
+
+5. **`from server import ...` fails when server.py is at repo root.** Python
+   doesn't treat the repo root as a package by default. Fix: add
+   `pythonpath = ["."]` to `[tool.pytest.ini_options]` in `pyproject.toml`.
+   This bit every feature that needed to import from `server.py` in tests.
+
+6. **pytest-asyncio must be a dev dependency.** Async test fixtures and
+   `@pytest.mark.asyncio` silently skip or error without it. Add to
+   `[project.optional-dependencies] dev` before writing async tests.
+
+7. **Defense-in-depth allowlist in cli_client.py.** The CLI integration
+   hardcodes an allowed-commands allowlist. Any new Obsidian CLI command must
+   be added to this allowlist or it will be rejected at runtime — even if the
+   spec says it should work.
+
+**Cross-cutting pattern**: Test infrastructure gaps surface when features cross
+module boundaries. The first feature that needs async tests, the first that
+imports from a root-level module, the first that touches server-side state —
+each one exposes a missing piece of test scaffolding. Budget a fix pass after
+the first feature in each new testing shape.
+
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
