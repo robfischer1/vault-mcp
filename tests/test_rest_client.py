@@ -9,9 +9,9 @@ from unittest.mock import MagicMock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import httpx
+import httpx  # noqa: E402
 
-from vault_mcp.rest_client import ObsidianRESTClient
+from vault_mcp.rest_client import ObsidianRESTClient  # noqa: E402
 
 
 def _mock_response(status: int = 200, json_data=None, text: str = "", headers=None):

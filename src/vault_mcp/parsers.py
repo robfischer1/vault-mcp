@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 SKIP_DIRS: set[str] = {
     ".git", ".obsidian", ".claude", ".amazonq", ".trash",
@@ -19,7 +20,7 @@ SKIP_SYSTEM_SUBDIRS: set[str] = {"Tools", "Templates"}
 WIKILINK_RE = re.compile(r'\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]')
 
 
-def parse_frontmatter(text: str) -> dict:
+def parse_frontmatter(text: str) -> dict[str, Any]:
     """Extract YAML frontmatter into a plain dict.
 
     Hand-rolled parser matching vault-propagation/audit.py behavior:
@@ -31,7 +32,7 @@ def parse_frontmatter(text: str) -> dict:
     if end == -1:
         return {}
     yaml_text = text[3:end].strip('\n')
-    fm: dict = {}
+    fm: dict[str, Any] = {}
     lines = yaml_text.split('\n')
     i = 0
     while i < len(lines):
@@ -89,7 +90,16 @@ def parse_frontmatter(text: str) -> dict:
     return fm
 
 
-def extract_wikilink_targets(value) -> list[str]:
+def strip_frontmatter(text: str) -> str:
+    """Return the body of a markdown file with YAML frontmatter removed."""
+    if text.startswith('---'):
+        end = text.find('\n---', 3)
+        if end != -1:
+            return text[end + 4:]
+    return text
+
+
+def extract_wikilink_targets(value: Any) -> list[str]:
     """Pull wikilink stems from a string or list of strings."""
     if isinstance(value, str):
         values = [value]
@@ -111,7 +121,7 @@ def build_content_index(
     skip_dirs: set[str] | None = None,
     skip_content: set[str] | None = None,
     skip_system: set[str] | None = None,
-) -> tuple[list[tuple[Path, dict, str]], dict[str, list[Path]], dict[Path, float]]:
+) -> tuple[list[tuple[Path, dict[str, Any], str]], dict[str, list[Path]], dict[Path, float]]:
     """Single vault walk with topdown directory pruning.
 
     Returns:
@@ -122,7 +132,7 @@ def build_content_index(
     _skip_content = skip_content if skip_content is not None else SKIP_CONTENT_CHECKS
     _skip_system = skip_system if skip_system is not None else SKIP_SYSTEM_SUBDIRS
 
-    content: list[tuple[Path, dict, str]] = []
+    content: list[tuple[Path, dict[str, Any], str]] = []
     by_name: dict[str, list[Path]] = {}
     mtime_map: dict[Path, float] = {}
     vault_str = str(vault)
@@ -169,37 +179,3 @@ def build_content_index(
             content.append((p_file, fm, rel_str))
 
     return content, by_name, mtime_map
-
-
-def load_ignores(
-    vault: Path,
-    ignores_rel: str = "System/Tools/Skills/vault-propagation/audit-ignores.md",
-) -> tuple[set[str], set[str]]:
-    """Parse audit-ignores.md for hash suppressions and folder exemptions.
-
-    Returns:
-        (hash_ignores, folder_exempts) — both sets of strings.
-    """
-    path = vault / ignores_rel
-    if not path.exists():
-        return set(), set()
-    text = path.read_text(encoding='utf-8')
-    hashes: set[str] = set()
-    for m in re.finditer(r'^\|\s*([a-f0-9]{8})\s*\|', text, re.MULTILINE):
-        hashes.add(m.group(1))
-    folder_exempts: set[str] = set()
-    section_match = re.search(
-        r'###\s+Folder[^\n]*exempt[^\n]*\n([\s\S]*?)(?=\n###\s|\Z)',
-        text, re.IGNORECASE,
-    )
-    if section_match:
-        body = section_match.group(1)
-        for line in body.split('\n'):
-            m = re.match(r'^\|\s*`?([A-Za-z][^|`]*?)`?\s*\|', line)
-            if not m:
-                continue
-            prefix = m.group(1).strip()
-            if prefix.lower() in ('path prefix', 'path-prefix') or set(prefix) <= set(' :-'):
-                continue
-            folder_exempts.add(prefix)
-    return hashes, folder_exempts

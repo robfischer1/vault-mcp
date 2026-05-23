@@ -8,7 +8,7 @@ FastMCP server exposing an Obsidian vault as read-only query tools over MCP.
 - **MCP server** for AI assistant integration
 - **Quality tooling** — pytest, ruff, mypy (strict)
 - **Python 3.11+**
-- **MIT licensed**
+- **Apache-2.0 licensed**
 
 ## Quickstart
 
@@ -62,4 +62,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 
 ## License
 
-[MIT](LICENSE)
+[Apache-2.0](LICENSE)

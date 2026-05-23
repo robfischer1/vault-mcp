@@ -17,10 +17,13 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 import httpx
 
 log = logging.getLogger(__name__)
+
+DEFAULT_REST_URL = "http://127.0.0.1:27123"
 
 _BACKOFF_STEPS = [30, 300, 1800]
 
@@ -30,7 +33,7 @@ class ObsidianRESTClient:
 
     def __init__(
         self,
-        base_url: str = "http://127.0.0.1:27123",
+        base_url: str = DEFAULT_REST_URL,
         key_path: str | Path | None = None,
     ):
         self._base_url = base_url.rstrip("/")
@@ -87,7 +90,7 @@ class ObsidianRESTClient:
             return True
         return time.time() - self._last_probed > self._probe_ttl
 
-    def probe(self) -> dict:
+    def probe(self) -> dict[str, Any]:
         """Probe GET / to check reachability. Returns health dict."""
         if self._key_error:
             return {
@@ -131,13 +134,13 @@ class ObsidianRESTClient:
         method: str,
         path: str,
         *,
-        params: dict | None = None,
-        json_body: dict | None = None,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
         content: str | None = None,
         content_type: str | None = None,
         accept: str = "application/json",
         extra_headers: dict[str, str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Shared request handler with uniform error envelope."""
         if self._key_error:
             return {"ok": False, "error": "rest_no_key", "detail": self._key_error}
@@ -161,7 +164,7 @@ class ObsidianRESTClient:
             headers.update(extra_headers)
 
         try:
-            kwargs: dict = {"params": params, "headers": headers}
+            kwargs: dict[str, Any] = {"params": params, "headers": headers}
             if json_body is not None:
                 kwargs["json"] = json_body
             elif content is not None:
@@ -197,19 +200,19 @@ class ObsidianRESTClient:
         *,
         accept: str = "application/json",
         extra_headers: dict[str, str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         return self._request("GET", path, accept=accept, extra_headers=extra_headers)
 
     def post(
         self,
         path: str,
         *,
-        params: dict | None = None,
-        json_body: dict | None = None,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
         content: str | None = None,
         content_type: str | None = None,
         accept: str = "application/json",
-    ) -> dict:
+    ) -> dict[str, Any]:
         return self._request(
             "POST", path,
             params=params, json_body=json_body,

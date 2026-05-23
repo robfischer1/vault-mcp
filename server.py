@@ -23,26 +23,27 @@ import threading
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import Context, FastMCP
 
 if TYPE_CHECKING:
-    from vault_mcp.rest_client import ObsidianRESTClient
     from vault_mcp.cli_client import ObsidianCLI
+    from vault_mcp.rest_client import ObsidianRESTClient
 
 _src = Path(__file__).resolve().parent / "src"
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from vault_mcp.index import VaultIndex  # noqa: E402
-from vault_mcp.bases import (  # noqa: E402
-    parse_file as _parse_file_impl,
+from vault_mcp.bases import (  # noqa: E402, I001
+    _serialize_base,
     execute_base as _execute_base_impl,
+    parse_file as _parse_file_impl,
     validate_base as _validate_base_impl,
     write_base_to_file as _write_base_to_file_impl,
-    _serialize_base,
 )
+from vault_mcp.index import VaultIndex  # noqa: E402, I001
+from vault_mcp.rest_client import DEFAULT_REST_URL  # noqa: E402, I001
 
 # phdb sibling-repo import for predicate table (Phase 9 — triple tools)
 _phdb_src = Path(__file__).resolve().parent.parent / "personal-history-db" / "src"
@@ -76,10 +77,10 @@ WATCH_ENABLED = os.environ.get("VAULT_MCP_WATCH", "1") != "0"
 
 # REST API config (Phase 6)
 REST_DISABLE = os.environ.get("VAULT_MCP_REST_DISABLE", "0") == "1"
-REST_URL = os.environ.get("VAULT_MCP_REST_URL", "http://127.0.0.1:27123")
+REST_URL = os.environ.get("VAULT_MCP_REST_URL", DEFAULT_REST_URL)
 REST_KEY_PATH = os.environ.get(
     "VAULT_MCP_REST_KEY_PATH",
-    str(Path.home() / "Obsidian" / ".local" / "rest-api-key.txt"),
+    "",
 )
 
 # ---------------------------------------------------------------------------
@@ -163,10 +164,7 @@ class SubscriptionManager:
 
     def _hash_result(self, result: Any) -> str:
         """Create a stable hash of a QueryResult."""
-        if hasattr(result, "__dataclass_fields__"):
-            data = asdict(result)
-        else:
-            data = result
+        data = asdict(result) if hasattr(result, "__dataclass_fields__") else result
 
         hash_data = {
             "notes": [
@@ -278,7 +276,7 @@ def _get_rest_client() -> ObsidianRESTClient:
     global _rest_client
     if _rest_client is None:
         from vault_mcp.rest_client import ObsidianRESTClient
-        _rest_client = ObsidianRESTClient(base_url=REST_URL, key_path=REST_KEY_PATH)
+        _rest_client = ObsidianRESTClient(base_url=REST_URL, key_path=REST_KEY_PATH or None)
         _rest_client.probe()
     return _rest_client
 

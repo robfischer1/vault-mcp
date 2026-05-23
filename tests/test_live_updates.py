@@ -1,12 +1,10 @@
-import asyncio
 import os
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 os.environ["VAULT_MCP_PATH"] = "."
-from server import SubscriptionManager, mcp, Subscription
+from server import SubscriptionManager
 from vault_mcp.index import VaultIndex
 
 
@@ -56,7 +54,7 @@ async def test_notification_triggered(sub_mgr, tmp_path):
     server._get_index = lambda: idx
 
     try:
-        from vault_mcp.bases import parse_file, execute_base
+        from vault_mcp.bases import execute_base, parse_file
         pf = parse_file(base_file)
         result = execute_base(pf.bases[0], idx)
         sub_mgr.subscriptions[handle].last_result_hash = sub_mgr._hash_result(result)
@@ -107,7 +105,7 @@ async def test_no_notification_if_result_unchanged(sub_mgr, tmp_path):
     server._get_index = lambda: idx
 
     try:
-        from vault_mcp.bases import parse_file, execute_base
+        from vault_mcp.bases import execute_base, parse_file
         pf = parse_file(base_file)
         result = execute_base(pf.bases[0], idx)
         sub_mgr.subscriptions[handle].last_result_hash = sub_mgr._hash_result(result)

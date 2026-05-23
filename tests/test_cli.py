@@ -2,14 +2,13 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-import pytest
 from vault_mcp.cli_client import ObsidianCLI
 
 
 def test_cli_probe_success():
     """Verifies that probe() handles a successful binary check."""
-    with patch("vault_mcp.cli_client.shutil.which", return_value="/usr/bin/obsidian"):
-        with patch("subprocess.run") as mock_run:
+    with patch("vault_mcp.cli_client.shutil.which", return_value="/usr/bin/obsidian"), \
+         patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="1.0.0\n", stderr=""
             )

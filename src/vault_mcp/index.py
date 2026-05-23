@@ -12,9 +12,10 @@ import logging
 import re
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .parsers import (
     SKIP_CONTENT_CHECKS,
@@ -23,6 +24,7 @@ from .parsers import (
     build_content_index,
     extract_wikilink_targets,
     parse_frontmatter,
+    strip_frontmatter,
 )
 
 log = logging.getLogger(__name__)
@@ -34,10 +36,21 @@ BASE_EMBED_RE = re.compile(r'!\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|[^\]]+)?\]\]')
 class VaultIndex:
     """In-memory vault index with TTL-based refresh and per-file invalidation."""
 
+    @staticmethod
+    def _normalize_link_targets(raw: list[str]) -> list[str]:
+        """Strip path prefixes and .md suffixes to match by_name stems."""
+        normalized = []
+        for t in raw:
+            t = t.rsplit('/', 1)[-1]
+            if t.endswith('.md'):
+                t = t[:-3]
+            normalized.append(t)
+        return list(set(normalized))
+
     def __init__(self, vault_path: Path, ttl_seconds: int = 300):
         self.vault = vault_path.resolve()
         self.ttl = ttl_seconds
-        self._content: list[tuple[Path, dict, str]] = []
+        self._content: list[tuple[Path, dict[str, Any], str]] = []
         self._by_name: dict[str, list[Path]] = {}
         self._mtime: dict[Path, float] = {}
         self._outbound: dict[str, list[str]] = {}
@@ -61,34 +74,21 @@ class VaultIndex:
         outbound: dict[str, list[str]] = {}
         inbound: dict[str, list[str]] = {}
 
-        for path, fm, rel in self._content:
+        for path, fm, _rel in self._content:
             stem = path.stem
             try:
                 text = path.read_text(encoding='utf-8')
             except Exception:
                 continue
 
-            body_start = 0
-            if text.startswith('---'):
-                end = text.find('\n---', 3)
-                if end != -1:
-                    body_start = end + 4
-
-            body = text[body_start:]
+            body = strip_frontmatter(text)
             body_links = [m.group(1).strip() for m in WIKILINK_RE.finditer(body)]
 
             up_val = fm.get('up', '')
             up_links = extract_wikilink_targets(up_val)
 
             raw_targets = list(set(body_links + up_links))
-            # Normalize: strip paths and .md suffixes to match by_name stems
-            normalized = []
-            for t in raw_targets:
-                t = t.rsplit('/', 1)[-1]  # drop path prefix
-                if t.endswith('.md'):
-                    t = t[:-3]
-                normalized.append(t)
-            all_targets = list(set(normalized))
+            all_targets = self._normalize_link_targets(raw_targets)
             outbound[stem] = all_targets
 
             for target in all_targets:
@@ -97,7 +97,7 @@ class VaultIndex:
         self._outbound = outbound
         self._inbound = inbound
 
-    def reindex(self) -> dict:
+    def reindex(self) -> dict[str, Any]:
         """Force full rebuild. Returns stats."""
         t0 = time.time()
         with self._lock:
@@ -177,25 +177,13 @@ class VaultIndex:
             rel_str = str(rel).replace('\\', '/')
             self._content.append((path, fm, rel_str))
 
-            body_start = 0
-            if text.startswith('---'):
-                end = text.find('\n---', 3)
-                if end != -1:
-                    body_start = end + 4
-
-            body = text[body_start:]
+            body = strip_frontmatter(text)
             body_links = [m.group(1).strip() for m in WIKILINK_RE.finditer(body)]
             up_val = fm.get('up', '')
             up_links = extract_wikilink_targets(up_val)
 
             raw_targets = list(set(body_links + up_links))
-            normalized = []
-            for t in raw_targets:
-                t = t.rsplit('/', 1)[-1]
-                if t.endswith('.md'):
-                    t = t[:-3]
-                normalized.append(t)
-            all_targets = list(set(normalized))
+            all_targets = self._normalize_link_targets(raw_targets)
             self._outbound[stem] = all_targets
 
             for target in all_targets:
@@ -212,7 +200,7 @@ class VaultIndex:
         self._watcher_active = True
 
     @property
-    def content(self) -> list[tuple[Path, dict, str]]:
+    def content(self) -> list[tuple[Path, dict[str, Any], str]]:
         self._ensure_fresh()
         return self._content
 
@@ -222,8 +210,8 @@ class VaultIndex:
         return self._by_name
 
     def find_notes_by_frontmatter(
-        self, filters: dict, scope: str | None = None
-    ) -> list[dict]:
+        self, filters: dict[str, Any], scope: str | None = None
+    ) -> list[dict[str, Any]]:
         """Equality-match on frontmatter fields, with optional scope prefix."""
         results = []
         for _path, fm, rel in self.content:
@@ -245,7 +233,7 @@ class VaultIndex:
 
     def find_by_filename(
         self, pattern: str, scope: str | None = None
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """fnmatch over the by_name index keys."""
         results = []
         for stem, paths in self.by_name.items():
@@ -260,7 +248,7 @@ class VaultIndex:
 
     def recent_edits(
         self, since: str, scope: str | None = None, limit: int = 50
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Files modified since a given ISO-8601 date, sorted by mtime desc."""
         try:
             since_dt = datetime.fromisoformat(since)
@@ -288,7 +276,7 @@ class VaultIndex:
         candidates.sort(key=lambda r: r["modified"], reverse=True)
         return candidates[:limit]
 
-    def read_note(self, stem_or_path: str) -> dict:
+    def read_note(self, stem_or_path: str) -> dict[str, Any]:
         """Read a note by wikilink stem or vault-relative path.
 
         Returns {frontmatter, body, path} with resolved wikilinks per Q7.
@@ -322,15 +310,7 @@ class VaultIndex:
             return {"error": "read_failed", "path": str(target_path), "detail": str(e)}
 
         fm = parse_frontmatter(text)
-        body_start = 0
-        if text.startswith('---'):
-            end = text.find('\n---', 3)
-            if end != -1:
-                body_start = end + 4
-                while body_start < len(text) and text[body_start] in ('\n', '\r'):
-                    body_start += 1
-
-        body = text[body_start:]
+        body = strip_frontmatter(text).lstrip('\n\r')
         rel = str(target_path.relative_to(self.vault)).replace("\\", "/")
 
         outbound = extract_wikilink_targets(body)
@@ -451,7 +431,7 @@ class VaultIndex:
     # Phase 2 — Graph tools
     # ------------------------------------------------------------------
 
-    def backlinks_to(self, stem: str) -> list[dict]:
+    def backlinks_to(self, stem: str) -> list[dict[str, Any]]:
         """Files that link to `stem` via body wikilinks or `up:` frontmatter."""
         self._ensure_fresh()
         sources = self._inbound.get(stem, [])
@@ -467,7 +447,7 @@ class VaultIndex:
 
     def outbound_links(
         self, stem: str, include_image_embeds: bool = False
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Wikilinks from `stem`'s body (excluding image embeds by default)."""
         self._ensure_fresh()
         targets = self._outbound.get(stem, [])
@@ -480,12 +460,7 @@ class VaultIndex:
                     text = p.read_text(encoding='utf-8')
                 except Exception:
                     continue
-                body_start = 0
-                if text.startswith('---'):
-                    end = text.find('\n---', 3)
-                    if end != -1:
-                        body_start = end + 4
-                body = text[body_start:]
+                body = strip_frontmatter(text)
                 for m in IMAGE_EMBED_RE.finditer(body):
                     image_stems.add(m.group(1).strip())
             targets = [t for t in targets if t not in image_stems]
@@ -514,7 +489,7 @@ class VaultIndex:
     def find_orphans(
         self, scope: str | None = None,
         exempt_prefixes: list[str] | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Files with no inbound links and no `up:` frontmatter.
 
         Honors folder-prefix exemptions from audit-ignores.md.
@@ -600,7 +575,7 @@ class VaultIndex:
                         tags.add(tag)
         return tags
 
-    def tag_glossary_check(self, glossary_path: Path) -> list[dict]:
+    def tag_glossary_check(self, glossary_path: Path) -> list[dict[str, Any]]:
         """Find body #tags not in the Tags Glossary.
 
         Excludes \\#tag escapes and #activity/processed per policy.
@@ -609,19 +584,13 @@ class VaultIndex:
         valid_tags = self.parse_tags_glossary(glossary_path)
         violations: dict[str, list[str]] = {}
 
-        for path, fm, rel in self._content:
+        for path, _fm, rel in self._content:
             try:
                 text = path.read_text(encoding='utf-8')
             except Exception:
                 continue
 
-            body_start = 0
-            if text.startswith('---'):
-                end = text.find('\n---', 3)
-                if end != -1:
-                    body_start = end + 4
-
-            body = text[body_start:]
+            body = strip_frontmatter(text)
             for m in self.BODY_TAG_RE.finditer(body):
                 tag = '#' + m.group(1)
                 if tag in valid_tags:
@@ -638,14 +607,14 @@ class VaultIndex:
             })
         return results
 
-    def vault_stats(self) -> dict:
+    def vault_stats(self) -> dict[str, Any]:
         """Aggregate stats: counts by @type, top tags, edit volume by week."""
         self._ensure_fresh()
         type_counts: dict[str, int] = {}
         tag_counts: dict[str, int] = {}
         week_counts: dict[str, int] = {}
 
-        for path, fm, rel in self._content:
+        for path, fm, _rel in self._content:
             at_type = fm.get('@type', fm.get('type', 'unknown'))
             if isinstance(at_type, str):
                 type_counts[at_type] = type_counts.get(at_type, 0) + 1
@@ -673,7 +642,7 @@ class VaultIndex:
             "edit_volume_by_week": [{"week": w, "count": c} for w, c in recent_weeks],
         }
 
-    def all_tags(self, include_body: bool = True) -> list[dict]:
+    def all_tags(self, include_body: bool = True) -> list[dict[str, Any]]:
         """Collect all tags from frontmatter and optionally body text, with counts.
 
         Returns sorted list of {tag, count, sources} where sources indicates
@@ -695,12 +664,7 @@ class VaultIndex:
                     text = path.read_text(encoding='utf-8')
                 except Exception:
                     continue
-                body_start = 0
-                if text.startswith('---'):
-                    end = text.find('\n---', 3)
-                    if end != -1:
-                        body_start = end + 4
-                body = text[body_start:]
+                body = strip_frontmatter(text)
                 for m in self.BODY_TAG_RE.finditer(body):
                     tag = '#' + m.group(1)
                     body_counts[tag] = body_counts.get(tag, 0) + 1

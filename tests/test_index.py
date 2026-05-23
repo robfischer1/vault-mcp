@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vault_mcp.index import VaultIndex
+from vault_mcp.index import VaultIndex  # noqa: E402
 
 MINI_VAULT = ROOT / "tests" / "fixtures" / "mini-vault"
 
@@ -133,16 +133,16 @@ class TestReadNote:
         idx = _idx()
         result = idx.read_note("Stoicism")
         links = result["outbound_links"]
-        stems = [l["stem"] for l in links]
+        stems = [lnk["stem"] for lnk in links]
         assert "AGENTS" in stems
-        resolved = [l for l in links if l["stem"] == "AGENTS"]
+        resolved = [lnk for lnk in links if lnk["stem"] == "AGENTS"]
         assert "path" in resolved[0]
 
     def test_unresolved_link(self):
         idx = _idx()
         result = idx.read_note("Stoicism")
         links = result["outbound_links"]
-        unresolved = [l for l in links if l["stem"] == "Nonexistent Note"]
+        unresolved = [lnk for lnk in links if lnk["stem"] == "Nonexistent Note"]
         assert len(unresolved) == 1
         assert unresolved[0]["resolution"] == "unresolved"
 

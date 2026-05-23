@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -29,7 +29,7 @@ class _VaultEventHandler(FileSystemEventHandler):
         self._lock = threading.Lock()
 
     def _handle(self, event: FileSystemEvent) -> None:
-        src = event.src_path
+        src = event.src_path if isinstance(event.src_path, str) else event.src_path.decode("utf-8", errors="replace")
         if not src.endswith('.md'):
             return
         path = Path(src)
@@ -52,14 +52,18 @@ class _VaultEventHandler(FileSystemEventHandler):
     def on_moved(self, event: FileSystemEvent) -> None:
         if not event.is_directory:
             self._handle(event)
-            if hasattr(event, 'dest_path') and event.dest_path.endswith('.md'):
-                dest = Path(event.dest_path)
+            if hasattr(event, 'dest_path'):
+                dest_path = event.dest_path
+                dest_str = dest_path if isinstance(dest_path, str) else dest_path.decode("utf-8", errors="replace")
+                if not dest_str.endswith('.md'):
+                    return
+                dest = Path(dest_str)
                 with self._lock:
                     self._index.invalidate_file(dest)
                     log.debug("invalidated (move dest): %s", dest)
 
 
-def start_watcher(index: VaultIndex) -> Observer:
+def start_watcher(index: VaultIndex) -> Any:
     """Start a background filesystem watcher on the vault directory.
 
     Returns the Observer instance (call .stop() to shut down).

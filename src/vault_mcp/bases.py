@@ -695,10 +695,6 @@ def evaluate_filter(
 # Evaluator — formula (T017)
 # ---------------------------------------------------------------------------
 
-_NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
-_LINKS_FILTER_RE = re.compile(r"^file\.(links|backlinks)\.filter\(.*\)\.length$")
-
-
 def evaluate_formula(
     formula: Formula,
     path: Path,
