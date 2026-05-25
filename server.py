@@ -1310,6 +1310,182 @@ def list_predicates() -> dict[str, Any]:
     return {"count": len(preds), "predicates": preds}
 
 
+# ---------------------------------------------------------------------------
+# Phase 6 of Git for Ideas — file_revisions tools (migration 0039)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def materialize_revision(
+    rev_id: int,
+    repo_root: str | None = None,
+) -> dict[str, Any]:
+    """Materialize the body of a file_revisions row via `git cat-file -p`.
+
+    Bodies are not stored in phdb — the revision row references a git
+    blob SHA, and this tool shells out to git to retrieve it. Constant
+    time per call (git's content-addressable storage).
+
+    Args:
+        rev_id: Primary key of the file_revisions row.
+        repo_root: Override the repo checkout path. Defaults to the
+            value of commit_authorship_repos.repo_path for the
+            revision's repo (typically the vault repo).
+
+    Returns:
+        {"rev_id": int, "file_path": str, "body": str, ...} on success,
+        {"error": str, "detail": str} on miss.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.file_revisions import get_revision, materialize
+    row = get_revision(conn, rev_id)
+    if row is None:
+        return {"error": "not_found", "detail": f"rev_id={rev_id} has no file_revisions row"}
+    try:
+        body = materialize(conn, rev_id, repo_root=repo_root)
+    except FileNotFoundError as e:
+        return {"error": "not_found", "detail": str(e)}
+    except Exception as e:  # noqa: BLE001 — surface git errors verbatim
+        return {"error": "materialize_failed", "detail": str(e)}
+    return {
+        "rev_id": rev_id,
+        "repo": row["repo"],
+        "commit_sha": row["commit_sha"],
+        "file_path": row["file_path"],
+        "git_blob_sha": row["git_blob_sha"],
+        "change_type": row["change_type"],
+        "authorship": row["authorship"],
+        "body": body,
+    }
+
+
+@mcp.tool()
+def list_file_revisions(
+    file_path: str,
+    repo: str = "vault",
+    limit: int = 50,
+) -> dict[str, Any]:
+    """List chronological revision history for one vault path.
+
+    Args:
+        file_path: Vault-relative POSIX path (forward slashes).
+        repo: Repo name (default "vault").
+        limit: Max rows; pass 0 for the full history.
+
+    Returns:
+        {"count": int, "revisions": [...]} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.file_revisions import list_for_path
+    rows = list_for_path(
+        conn, file_path, repo=repo,
+        limit=None if limit == 0 else limit,
+    )
+    return {"count": len(rows), "revisions": rows}
+
+
+@mcp.tool()
+def revision_triple_deltas(rev_id: int) -> dict[str, Any]:
+    """Return predicate-graph edges added/removed by one revision.
+
+    Each delta row records the op ('add' | 'remove'), the three node
+    IDs, and human-readable labels where resolvable. Use to trace how
+    a single commit reshaped the typed-graph for one note.
+
+    Args:
+        rev_id: Primary key of the file_revisions row.
+
+    Returns:
+        {"count": int, "deltas": [...]} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.file_revisions import triple_deltas
+    deltas = triple_deltas(conn, rev_id)
+    return {"count": len(deltas), "deltas": deltas}
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 of Dissolution Tracking — registry lookup tools (migration 0041)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def dissolution_lookup(vault_path: str, repo: str = "vault") -> dict[str, Any]:
+    """Full lifecycle for a vault path — dissolution + materialization events.
+
+    Returns dissolution waves and materialization events linked to the
+    given path, ordered chronologically. Use to answer "what happened
+    to this file?" — dissolved to which DB tables, when, and whether
+    it's been materialized back as a stub since.
+
+    Args:
+        vault_path: Vault-relative POSIX path (forward slashes).
+        repo: Repo name (default "vault").
+
+    Returns:
+        {"file_path": ..., "repo": ..., "dissolutions": [...],
+         "materializations": [...], "lifecycle": [...]} or {"error": ...}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.dissolutions import lookup_vault_path
+    return lookup_vault_path(conn, vault_path, repo=repo)
+
+
+@mcp.tool()
+def list_dissolution_waves(repo: str = "vault") -> dict[str, Any]:
+    """Wave-level browse over the dissolution registry.
+
+    Args:
+        repo: Repo name (default "vault").
+
+    Returns:
+        {"count": int, "waves": [...]} where each wave dict includes
+        plan_slug, migration_id, target_schemas/tables, dissolved_at,
+        and linked_files count.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.dissolutions import list_waves
+    waves = list_waves(conn, repo=repo)
+    return {"count": len(waves), "waves": waves}
+
+
+@mcp.tool()
+def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
+    """Given a file_revisions row id, return its dissolution (if any).
+
+    Args:
+        rev_id: Primary key of the file_revisions row.
+
+    Returns:
+        Dissolution dict on hit, {"dissolution": None} when the
+        revision is not linked to any dissolution, or
+        {"error": str} on lookup failure.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    row = conn.execute(
+        "SELECT d.id FROM dissolutions d"
+        " JOIN file_revision_dissolutions frd ON frd.dissolution_pk = d.id"
+        " WHERE frd.file_revision_pk = ?",
+        (rev_id,),
+    ).fetchone()
+    if row is None:
+        return {"dissolution": None}
+    from phdb.dissolutions import get
+    return {"dissolution": get(conn, int(row[0]))}
+
+
 def main() -> None:
     watch_status = "watch=on" if WATCH_ENABLED else "watch=off"
     rest_status = "rest=off" if REST_DISABLE else f"rest={REST_URL}"
