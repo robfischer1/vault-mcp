@@ -151,12 +151,16 @@ class ConventionGate:
         actor: Actor = Actor.AGENT,
         mode: WriteMode = WriteMode.CREATE,
         created: str | None = None,
+        directory: str | None = None,
+        extra_fields: dict[str, Any] | None = None,
     ) -> WriteResult:
         """Create a compliant note and write it through the Obsidian writer.
 
         Validates inputs and enforces protection *before* any write; on any
         rejection no file is created. Governance fields (provenance, created)
-        are stamped by the Gate, never trusted from the caller.
+        are stamped by the Gate, never trusted from the caller. ``directory``
+        overrides schema routing (used by the compute path to target a
+        compute-only directory); ``extra_fields`` adds extra frontmatter.
         """
         tags = tags or []
         if title.strip() == "":
@@ -164,7 +168,8 @@ class ConventionGate:
 
         self._validate_tags(tags)
 
-        directory = self._schema.resolve_directory(note_type=note_type, pillar=pillar)
+        if directory is None:
+            directory = self._schema.resolve_directory(note_type=note_type, pillar=pillar)
         self.check_protection(directory, actor, mode, touches_body=True)
 
         provenance = stamp(actor, mode)
@@ -175,6 +180,7 @@ class ConventionGate:
             tags=tags,
             provenance=provenance,
             created=created if created is not None else _today(),
+            extra_fields=extra_fields,
         )
 
         path = f"{directory}/{title}.md"
@@ -245,6 +251,7 @@ class ConventionGate:
         tags: list[str],
         provenance: Provenance,
         created: str,
+        extra_fields: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         fm: dict[str, Any] = {
             "title": title,
@@ -257,6 +264,11 @@ class ConventionGate:
             fm["pillar"] = pillar
         if len(tags) > 0:
             fm["tags"] = tags
+        if extra_fields is not None:
+            for key, value in extra_fields.items():
+                if key in ("title", "created", "provenance"):
+                    continue  # governance fields are Gate-stamped, never caller-set
+                fm[key] = value
 
         missing = [req for req in self._schema.required_frontmatter if fm.get(req) in (None, "")]
         if len(missing) > 0:
