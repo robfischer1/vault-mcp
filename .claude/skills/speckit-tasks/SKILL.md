@@ -1,13 +1,33 @@
 ---
 name: speckit-tasks
-description: 'Forge override: redirects /speckit-tasks to board-mcp deepen. Instead
-  of generating a local tasks.md, breaks Stories into sub-issue Tasks on the GitHub
-  Projects board.'
+description: Break down implementation plans into actionable task lists.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: forge-pipeline:commands/speckit.tasks.md
+  source: preset:cross-platform-governance
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Speckit Tasks Skill
+
+Before continuing, apply the Cross-Platform Governance preset:
+
+- add explicit tasks for both `*.sh` and `*.ps1` variants in the same
+  change
+- add tasks for the Unix man-page and the bilingual PowerShell help
+  block
+- add a task to expose the PowerShell variant as a Cmdlet with an
+  approved `Verb-Noun` name
+- add a parity-verification task using the script-parity checklist
+
+Before continuing, apply the Security Governance preset:
+
+- convert MSL applicability and justification needs into explicit tasks
+- convert security obligations into explicit tasks
+- include evidence-production tasks under `docs/security/`
+- avoid leaving secure-development work as undocumented assumptions
+
 
 ## User Input
 
@@ -16,6 +36,41 @@ $ARGUMENTS
 ```
 
 You **MUST** consider the user input before proceeding (if not empty).
+
+## Pre-Execution Checks
+
+**Check for extension hooks (before tasks generation)**:
+- Check if `.specify/extensions.yml` exists in the project root.
+- If it exists, read it and look for entries under the `hooks.before_tasks` key
+- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
+- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
+  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
+  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
+- For each executable hook, output the following based on its `optional` flag:
+  - **Optional hook** (`optional: true`):
+    ```
+    ## Extension Hooks
+
+    **Optional Pre-Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Prompt: {prompt}
+    To execute: `/{command}`
+    ```
+  - **Mandatory hook** (`optional: false`):
+    ```
+    ## Extension Hooks
+
+    **Automatic Pre-Hook**: {extension}
+    Executing: `/{command}`
+    EXECUTE_COMMAND: {command}
+
+    Wait for the result of the hook command before proceeding.
+    ```
+- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Forge Pipeline Override
 
@@ -68,6 +123,38 @@ After all Stories are deepened, report:
 - Total Tasks created (by Story)
 - Any Stories skipped or errored
 - Suggested next step: `/speckit-implement` to dispatch to the fleet
+
+### 6. Extension hooks (after tasks)
+
+After the Stories are deepened, check if `.specify/extensions.yml` exists in the project root.
+- If it exists, read it and look for entries under the `hooks.after_tasks` key
+- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
+- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
+  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
+  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
+- For each executable hook, output the following based on its `optional` flag:
+  - **Optional hook** (`optional: true`):
+    ```
+    ## Extension Hooks
+
+    **Optional Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Prompt: {prompt}
+    To execute: `/{command}`
+    ```
+  - **Mandatory hook** (`optional: false`):
+    ```
+    ## Extension Hooks
+
+    **Automatic Hook**: {extension}
+    Executing: `/{command}`
+    EXECUTE_COMMAND: {command}
+    ```
+- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Fallback: Local tasks.md
 

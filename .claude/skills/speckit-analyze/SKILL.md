@@ -1,13 +1,16 @@
 ---
 name: speckit-analyze
-description: 'Forge-adapted analyze: traceability gate checking RFC-to-board alignment,
-  dependency completeness, Impact scoring, Decision Log, and Definition of Ready.
-  Runs AFTER /speckit-tasks, BEFORE /speckit-implement.'
+description: Perform cross-artifact consistency analysis across spec.md, plan.md,
+  and tasks.md.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: forge-pipeline:commands/speckit.analyze.md
+  source: preset:forge-pipeline
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Speckit Analyze Skill
 
 ## User Input
 

@@ -29,6 +29,8 @@ from mcp.server.fastmcp import Context, FastMCP
 
 if TYPE_CHECKING:
     from vault_mcp.cli_client import ObsidianCLI
+    from vault_mcp.compute import ComputeReceiver
+    from vault_mcp.gate import ConventionGate
     from vault_mcp.rest_client import ObsidianRESTClient
 
 _src = Path(__file__).resolve().parent / "src"
@@ -1589,6 +1591,161 @@ def note_list(
     from phdb.vault_notes import list_notes
     results = list_notes(conn, status=status, at_type=at_type, limit=limit)
     return {"count": len(results), "notes": results}
+
+
+# ---------------------------------------------------------------------------
+# vault-mcp v2 — Convention Gate write tools (schema-driven, provenance-stamped)
+# ---------------------------------------------------------------------------
+
+_gate: ConventionGate | None = None
+_compute_receiver: ComputeReceiver | None = None
+
+
+def _get_gate() -> ConventionGate:
+    """Lazily build the Convention Gate from VAULT_MCP_SCHEMA + the Obsidian CLI."""
+    global _gate
+    if _gate is None:
+        from vault_mcp.cli_client import ObsidianNoteIO
+        from vault_mcp.gate import ConventionGate
+        from vault_mcp.schema import load_schema
+
+        _gate = ConventionGate(load_schema(), ObsidianNoteIO(_get_cli_client()))
+    return _gate
+
+
+def _load_templates() -> dict[str, str]:
+    d = os.environ.get("VAULT_MCP_TEMPLATES")
+    if not d:
+        return {}
+    base = Path(d)
+    if not base.is_dir():
+        return {}
+    return {p.stem: p.read_text(encoding="utf-8") for p in base.glob("*.md")}
+
+
+def _get_compute_receiver() -> ComputeReceiver:
+    global _compute_receiver
+    if _compute_receiver is None:
+        from vault_mcp.compute import ComputeReceiver
+
+        _compute_receiver = ComputeReceiver(_get_gate(), _load_templates())
+    return _compute_receiver
+
+
+def _gate_error_envelope(exc: Exception) -> dict[str, Any]:
+    """Map Gate/schema/IO exceptions to a structured tool error."""
+    from vault_mcp.cli_client import ObsidianIOError
+    from vault_mcp.gate import GateError
+    from vault_mcp.schema import RouteError, SchemaError
+
+    if isinstance(exc, SchemaError) and not isinstance(exc, RouteError):
+        return {"ok": False, "error": "schema_unavailable", "detail": str(exc)}
+    if isinstance(exc, RouteError):
+        return {"ok": False, "error": "no_route", "detail": str(exc)}
+    if isinstance(exc, GateError):
+        return {"ok": False, "error": "rejected", "detail": str(exc)}
+    if isinstance(exc, ObsidianIOError):
+        return {"ok": False, "error": "io_error", "detail": str(exc)}
+    raise exc
+
+
+@mcp.tool()
+def create_note(
+    title: str,
+    note_type: str | None = None,
+    pillar: str | None = None,
+    body: str = "",
+    tags: list[str] | None = None,
+    actor: str = "agent",
+) -> dict[str, Any]:
+    """Create a convention-compliant vault note through the Convention Gate.
+
+    The Gate generates correct frontmatter, validates tags against the closed
+    glossary, routes to the schema-resolved pillar directory, enforces
+    write-protection, and stamps provenance. Invalid writes are rejected with a
+    structured error and no file is created.
+
+    Args:
+        title: Note title (also the filename).
+        note_type: Schema note type used for routing (e.g., 'note').
+        pillar: Schema pillar used for routing (e.g., 'Knowledge').
+        body: Markdown body.
+        tags: Tags; each must be in the closed glossary.
+        actor: 'agent' (default) or 'human' — drives the provenance stamp.
+
+    Returns:
+        {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
+    """
+    from vault_mcp.provenance import Actor
+
+    try:
+        gate = _get_gate()
+        result = gate.create_note(
+            title=title,
+            note_type=note_type,
+            pillar=pillar,
+            body=body,
+            tags=tags or [],
+            actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
+        )
+        return result.to_dict()
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def update_note(
+    path: str,
+    fields: dict[str, Any] | None = None,
+    body: str | None = None,
+    tags: list[str] | None = None,
+    actor: str = "agent",
+) -> dict[str, Any]:
+    """Update an existing vault note through the Convention Gate.
+
+    Changes only the requested fields, preserves untouched content, advances
+    provenance per the transition rules, and enforces write-protection (a body
+    edit on a body-immutable directory is rejected; metadata-only may pass).
+
+    Returns:
+        {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
+    """
+    from vault_mcp.provenance import Actor
+
+    try:
+        gate = _get_gate()
+        result = gate.update_note(
+            path,
+            fields=fields,
+            body=body,
+            tags=tags,
+            actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
+        )
+        return result.to_dict()
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
+    """Render a structured compute payload into an ai-computed vault note.
+
+    Accepts a payload (template, title, directory, data, frontmatter) from a
+    periodic compute job, renders it through a named template (pure
+    substitution, no LLM), and writes it via the Gate's compute-only path.
+
+    Returns:
+        {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
+    """
+    from vault_mcp.compute import ComputePayloadError
+
+    try:
+        result = _get_compute_receiver().receive(payload, created=created)
+        return result.to_dict()
+    except ComputePayloadError as exc:
+        return {"ok": False, "error": "bad_payload", "detail": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
 
 
 def main() -> None:

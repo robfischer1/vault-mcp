@@ -1,13 +1,35 @@
 ---
 name: speckit-specify
-description: 'Forge override: redirects /speckit-specify to the Discovery posture.
-  In Forge projects, specify IS discovery -- divergent ideation that produces a pitch,
-  not a structured spec file.'
+description: Create or update feature specifications from natural language descriptions.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: forge-pipeline:commands/speckit.specify.md
+  source: preset:cross-platform-governance
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Speckit Specify Skill
+
+Before continuing, apply the Cross-Platform Governance preset:
+
+- identify whether this feature adds, changes, or removes a
+  script-shaped tool
+- record that both Bash (`*.sh`) and PowerShell (`*.ps1`) variants are
+  in scope, plus a Unix man-page and a bilingual PowerShell help block
+- record the planned `Verb-Noun` Cmdlet name (approved verbs only)
+- record dry-run / `-WhatIf` parity expectations
+
+Before continuing, apply the Security Governance preset:
+
+- determine whether the primary implementation language is memory-safe
+- document a short justification if the language is not memory-safe
+- determine whether `NIST SSDF`, `CWE Top 25`, `OWASP ASVS`, `SBOM`, `VEX`,
+  and `SLSA` are relevant
+- document `N/A` decisions with rationale
+- identify which security evidence artefacts should be created or updated under
+  `docs/security/`
+
 
 ## User Input
 
@@ -16,6 +38,41 @@ $ARGUMENTS
 ```
 
 You **MUST** consider the user input before proceeding (if not empty).
+
+## Pre-Execution Checks
+
+**Check for extension hooks (before discovery)**:
+- Check if `.specify/extensions.yml` exists in the project root.
+- If it exists, read it and look for entries under the `hooks.before_specify` key
+- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
+- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
+  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
+  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
+- For each executable hook, output the following based on its `optional` flag:
+  - **Optional hook** (`optional: true`):
+    ```
+    ## Extension Hooks
+
+    **Optional Pre-Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Prompt: {prompt}
+    To execute: `/{command}`
+    ```
+  - **Mandatory hook** (`optional: false`):
+    ```
+    ## Extension Hooks
+
+    **Automatic Pre-Hook**: {extension}
+    Executing: `/{command}`
+    EXECUTE_COMMAND: {command}
+
+    Wait for the result of the hook command before proceeding.
+    ```
+- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Forge Pipeline Override
 
@@ -46,6 +103,38 @@ When the user gives a short, confirming response (no new idea/question, not expa
 
 ### Output
 At initiative-scale (3+ independent epic-shaped branches) with the shape stabilizing, draft the **pitch** -- lay-readable, no jargon. Save to `Outputs/Pitches/` if in the vault, or to `specs/{NNN-feature}/pitch.md` if in a spec-kit project. Then chain to `/speckit-plan`.
+
+### Extension hooks (after discovery)
+
+After producing the pitch, check if `.specify/extensions.yml` exists in the project root.
+- If it exists, read it and look for entries under the `hooks.after_specify` key
+- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
+- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
+  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
+  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
+- For each executable hook, output the following based on its `optional` flag:
+  - **Optional hook** (`optional: true`):
+    ```
+    ## Extension Hooks
+
+    **Optional Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Prompt: {prompt}
+    To execute: `/{command}`
+    ```
+  - **Mandatory hook** (`optional: false`):
+    ```
+    ## Extension Hooks
+
+    **Automatic Hook**: {extension}
+    Executing: `/{command}`
+    EXECUTE_COMMAND: {command}
+    ```
+- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Context
 

@@ -14,16 +14,18 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-CLI_COMMAND_ALLOWLIST: frozenset[str] = frozenset({
-    "plugin:reload",
-    "eval",
-    "devtools",
-    "dev:errors",
-    "dev:screenshot",
-    "daily",
-    "templates",
-    "bookmarks",
-})
+CLI_COMMAND_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "plugin:reload",
+        "eval",
+        "devtools",
+        "dev:errors",
+        "dev:screenshot",
+        "daily",
+        "templates",
+        "bookmarks",
+    }
+)
 
 
 class ObsidianCLI:
@@ -154,3 +156,97 @@ class ObsidianCLI:
                 pass
 
         return {"ok": True, "data": stdout}
+
+
+class ObsidianIOError(Exception):
+    """A vault write/read through the Obsidian CLI failed."""
+
+
+# Returned by write eval so the adapter can confirm the write actually ran.
+# Guards against a binary (e.g. the Obsidian GUI launcher) that exits 0
+# without evaluating the JS — which would otherwise look like a silent success.
+WRITE_OK_SENTINEL = "__vault_mcp_write_ok__"
+
+
+# obsidian-cli's `eval` evaluates code as a plain script and returns the value
+# of the LAST EXPRESSION, prefixed with "=> " on stdout. Top-level `return` and
+# `await` are both illegal, but the harness awaits a returned promise — so each
+# builder is a single async-IIFE expression (no leading `return`), and the
+# adapter strips the "=> " prefix off the result.
+_EVAL_PREFIX = "=> "
+
+
+def build_create_js(path: str, content: str) -> str:
+    """Build eval JS that creates a new note. Args are JSON-encoded (JS-safe)."""
+    return (
+        f"(async () => {{ "
+        f"await app.vault.create({json.dumps(path)}, {json.dumps(content)}); "
+        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})()"
+    )
+
+
+def build_modify_js(path: str, content: str) -> str:
+    """Build eval JS that overwrites an existing note."""
+    return (
+        f"(async () => {{ "
+        f"const f = app.vault.getAbstractFileByPath({json.dumps(path)}); "
+        f"await app.vault.modify(f, {json.dumps(content)}); "
+        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})()"
+    )
+
+
+def build_read_js(path: str) -> str:
+    """Build eval JS that returns an existing note's content."""
+    return (
+        f"(async () => {{ "
+        f"const f = app.vault.getAbstractFileByPath({json.dumps(path)}); "
+        f"return await app.vault.read(f); }})()"
+    )
+
+
+def _eval_value(data: object) -> object:
+    """Strip obsidian-cli's '=> ' result prefix from eval stdout."""
+    if isinstance(data, str) and data.startswith(_EVAL_PREFIX):
+        return data[len(_EVAL_PREFIX) :]
+    return data
+
+
+class ObsidianNoteIO:
+    """Implements the Convention Gate's NoteIO protocol over the Obsidian CLI.
+
+    Writes route through the ``eval`` command so Obsidian's own indexing and
+    plugins fire (the v2 write-path decision). Per Constitution III this is
+    exercised against a mock, never a live instance; the JS builders above are
+    unit-tested independently of the subprocess call.
+    """
+
+    def __init__(self, cli: ObsidianCLI) -> None:
+        self._cli = cli
+
+    def create_note(self, path: str, content: str) -> None:
+        self._eval_write(build_create_js(path, content), path)
+
+    def write_note(self, path: str, content: str) -> None:
+        self._eval_write(build_modify_js(path, content), path)
+
+    def read_note(self, path: str) -> str:
+        res = self._eval(build_read_js(path), path)
+        data = _eval_value(res.get("data"))
+        if not isinstance(data, str):
+            raise ObsidianIOError(f"unexpected read result for {path}: {data!r}")
+        return data
+
+    def _eval_write(self, code: str, path: str) -> None:
+        res = self._eval(code, path)
+        value = _eval_value(res.get("data"))
+        if value != WRITE_OK_SENTINEL:
+            raise ObsidianIOError(
+                f"write to {path} not confirmed (got {value!r}); "
+                f"is obsidian-cli connected and the path's parent folder present?"
+            )
+
+    def _eval(self, code: str, path: str) -> dict[str, Any]:
+        res = self._cli.run("eval", code=code)
+        if not res.get("ok"):
+            raise ObsidianIOError(res.get("detail") or f"eval failed for {path}")
+        return res

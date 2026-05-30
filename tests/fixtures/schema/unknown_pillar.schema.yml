@@ -1,0 +1,21 @@
+# Invalid: a route references a pillar absent from `pillars`.
+pillars:
+  - Knowledge
+
+tags:
+  - status/active
+
+routes:
+  - note_type: note
+    pillar: Nonexistent
+    directory: Knowledge/Notes
+
+required_frontmatter:
+  - title
+
+write_protection: []
+
+provenance:
+  levels:
+    - human
+    - ai-computed

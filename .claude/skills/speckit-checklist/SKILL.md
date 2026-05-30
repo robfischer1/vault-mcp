@@ -1,11 +1,16 @@
 ---
 name: speckit-checklist
-description: Generate a custom checklist for the current feature based on user requirements.
+description: Generate custom quality checklists for validating requirements completeness
+  and clarity.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: claude-ask-questions:commands/speckit.checklist.md
+  source: preset:forge-pipeline
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Speckit Checklist Skill
 
 ## Checklist Purpose: "Unit Tests for English"
 
@@ -46,6 +51,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 - For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
   - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
 - For each executable hook, output the following based on its `optional` flag:
   - **Optional hook** (`optional: true`):
     ```
@@ -183,49 +189,10 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Reference spec section `[Spec §X.Y]` when checking existing requirements
    - Use `[Gap]` marker when checking for missing requirements
 
-   **EXAMPLES BY QUALITY DIMENSION**:
-
-   Completeness:
-   - "Are error handling requirements defined for all API failure modes? [Gap]"
-   - "Are accessibility requirements specified for all interactive elements? [Completeness]"
-   - "Are mobile breakpoint requirements defined for responsive layouts? [Gap]"
-
-   Clarity:
-   - "Is 'fast loading' quantified with specific timing thresholds? [Clarity, Spec §NFR-2]"
-   - "Are 'related episodes' selection criteria explicitly defined? [Clarity, Spec §FR-5]"
-   - "Is 'prominent' defined with measurable visual properties? [Ambiguity, Spec §FR-4]"
-
-   Consistency:
-   - "Do navigation requirements align across all pages? [Consistency, Spec §FR-10]"
-   - "Are card component requirements consistent between landing and detail pages? [Consistency]"
-
-   Coverage:
-   - "Are requirements defined for zero-state scenarios (no episodes)? [Coverage, Edge Case]"
-   - "Are concurrent user interaction scenarios addressed? [Coverage, Gap]"
-   - "Are requirements specified for partial data loading failures? [Coverage, Exception Flow]"
-
-   Measurability:
-   - "Are visual hierarchy requirements measurable/testable? [Acceptance Criteria, Spec §FR-1]"
-   - "Can 'balanced visual weight' be objectively verified? [Measurability, Spec §FR-2]"
-
-   **Scenario Classification & Coverage** (Requirements Quality Focus):
-   - Check if requirements exist for: Primary, Alternate, Exception/Error, Recovery, Non-Functional scenarios
-   - For each scenario class, ask: "Are [scenario type] requirements complete, clear, and consistent?"
-   - If scenario class missing: "Are [scenario type] requirements intentionally excluded or missing? [Gap]"
-   - Include resilience/rollback when state mutation occurs: "Are rollback requirements defined for migration failures? [Gap]"
-
    **Traceability Requirements**:
    - MINIMUM: ≥80% of items MUST include at least one traceability reference
    - Each item should reference: spec section `[Spec §X.Y]`, or use markers: `[Gap]`, `[Ambiguity]`, `[Conflict]`, `[Assumption]`
    - If no ID system exists: "Is a requirement & acceptance criteria ID scheme established? [Traceability]"
-
-   **Surface & Resolve Issues** (Requirements Quality Problems):
-   Ask questions about the requirements themselves:
-   - Ambiguities: "Is the term 'fast' quantified with specific metrics? [Ambiguity, Spec §NFR-1]"
-   - Conflicts: "Do navigation requirements conflict between §FR-10 and §FR-10a? [Conflict]"
-   - Assumptions: "Is the assumption of 'always available podcast API' validated? [Assumption]"
-   - Dependencies: "Are external podcast API requirements documented? [Dependency, Gap]"
-   - Missing definitions: "Is 'visual hierarchy' defined with measurable criteria? [Gap]"
 
    **Content Consolidation**:
    - Soft cap: If raw candidate items > 40, prioritize by risk/impact
@@ -256,87 +223,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Actor/timing
    - Any explicit user-specified must-have items incorporated
 
-**Important**: Each `/speckit.checklist` command invocation uses a short, descriptive checklist filename and either creates a new file or appends to an existing one. This allows:
-
-- Multiple checklists of different types (e.g., `ux.md`, `test.md`, `security.md`)
-- Simple, memorable filenames that indicate checklist purpose
-- Easy identification and navigation in the `checklists/` folder
-
-To avoid clutter, use descriptive types and clean up obsolete checklists when done.
-
-## Example Checklist Types & Sample Items
-
-**UX Requirements Quality:** `ux.md`
-
-Sample items (testing the requirements, NOT the implementation):
-
-- "Are visual hierarchy requirements defined with measurable criteria? [Clarity, Spec §FR-1]"
-- "Is the number and positioning of UI elements explicitly specified? [Completeness, Spec §FR-1]"
-- "Are interaction state requirements (hover, focus, active) consistently defined? [Consistency]"
-- "Are accessibility requirements specified for all interactive elements? [Coverage, Gap]"
-- "Is fallback behavior defined when images fail to load? [Edge Case, Gap]"
-- "Can 'prominent display' be objectively measured? [Measurability, Spec §FR-4]"
-
-**API Requirements Quality:** `api.md`
-
-Sample items:
-
-- "Are error response formats specified for all failure scenarios? [Completeness]"
-- "Are rate limiting requirements quantified with specific thresholds? [Clarity]"
-- "Are authentication requirements consistent across all endpoints? [Consistency]"
-- "Are retry/timeout requirements defined for external dependencies? [Coverage, Gap]"
-- "Is versioning strategy documented in requirements? [Gap]"
-
-**Performance Requirements Quality:** `performance.md`
-
-Sample items:
-
-- "Are performance requirements quantified with specific metrics? [Clarity]"
-- "Are performance targets defined for all critical user journeys? [Coverage]"
-- "Are performance requirements under different load conditions specified? [Completeness]"
-- "Can performance requirements be objectively measured? [Measurability]"
-- "Are degradation requirements defined for high-load scenarios? [Edge Case, Gap]"
-
-**Security Requirements Quality:** `security.md`
-
-Sample items:
-
-- "Are authentication requirements specified for all protected resources? [Coverage]"
-- "Are data protection requirements defined for sensitive information? [Completeness]"
-- "Is the threat model documented and requirements aligned to it? [Traceability]"
-- "Are security requirements consistent with compliance obligations? [Consistency]"
-- "Are security failure/breach response requirements defined? [Gap, Exception Flow]"
-
-## Anti-Examples: What NOT To Do
-
-**❌ WRONG - These test implementation, not requirements:**
-
-```markdown
-- [ ] CHK001 - Verify landing page displays 3 episode cards [Spec §FR-001]
-- [ ] CHK002 - Test hover states work correctly on desktop [Spec §FR-003]
-- [ ] CHK003 - Confirm logo click navigates to home page [Spec §FR-010]
-- [ ] CHK004 - Check that related episodes section shows 3-5 items [Spec §FR-005]
-```
-
-**✅ CORRECT - These test requirements quality:**
-
-```markdown
-- [ ] CHK001 - Are the number and layout of featured episodes explicitly specified? [Completeness, Spec §FR-001]
-- [ ] CHK002 - Are hover state requirements consistently defined for all interactive elements? [Consistency, Spec §FR-003]
-- [ ] CHK003 - Are navigation requirements clear for all clickable brand elements? [Clarity, Spec §FR-010]
-- [ ] CHK004 - Is the selection criteria for related episodes documented? [Gap, Spec §FR-005]
-- [ ] CHK005 - Are loading state requirements defined for asynchronous episode data? [Gap]
-- [ ] CHK006 - Can "visual hierarchy" requirements be objectively measured? [Measurability, Spec §FR-001]
-```
-
-**Key Differences:**
-
-- Wrong: Tests if the system works correctly
-- Correct: Tests if the requirements are written correctly
-- Wrong: Verification of behavior
-- Correct: Validation of requirement quality
-- Wrong: "Does it do X?"
-- Correct: "Is X clearly specified?"
+**Important**: Each `/speckit-checklist` invocation uses a short, descriptive checklist filename and either creates a new file or appends to an existing one. Use descriptive types (e.g., `ux.md`, `security.md`) and clean up obsolete checklists when done.
 
 ## Post-Execution Checks
 
@@ -348,6 +235,7 @@ Check if `.specify/extensions.yml` exists in the project root.
 - For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
   - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
 - For each executable hook, output the following based on its `optional` flag:
   - **Optional hook** (`optional: true`):
     ```
