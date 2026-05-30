@@ -1,12 +1,15 @@
 ---
 name: speckit-clarify
-description: 'Forge-adapted clarify: recommendation-first, max 5 questions, taxonomy
-  anchored to the RFC/board hierarchy (Component/Capability/Slice). Runs BEFORE /speckit-plan.'
+description: Structured clarification workflow for underspecified requirements.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: forge-pipeline:commands/speckit.clarify.md
+  source: preset:forge-pipeline
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Speckit Clarify Skill
 
 ## User Input
 
@@ -95,18 +98,28 @@ Maximum 5 questions. Prioritize by (Impact * Uncertainty). Each question must be
 - Authentication method (standard session-based or OAuth2 for web; API keys for services)
 - Integration patterns (project-appropriate: REST/GraphQL for web, function calls for libraries, CLI args for tools)
 
-### 4. Sequential questioning loop
+### 4. Sequential questioning loop (interactive picker)
 
-Present ONE question at a time.
+Present EXACTLY ONE question at a time using the `AskUserQuestion` tool as a native structured picker -- not a prose table.
 
-For multiple-choice:
-- Lead with `**Recommended:** Option [X] - {reasoning}` (1-2 sentences)
-- Render options as a Markdown table
-- Accept "yes" / "recommended" to use the recommendation
+For multiple-choice questions:
+- **Analyze all options first** and determine the most suitable one (best practices for the project type, constitution principles, common patterns, alignment with the RFC's stated goals/constraints).
+- Call `AskUserQuestion`:
+  - `question`: the clarification text, prefixed `"Recommended: Option [X] -- <1-2 sentence reasoning>\n\n<question text>"`.
+  - `options[]`: `{label, description}` objects with the **recommended option first**, its `description` prefixed `Recommended -- <reasoning>.`
+  - Append a final `{label: "Short", description: "Provide my own short answer (<=5 words)"}` escape hatch.
+  - `multiSelect`: `false`.
+- If the user picks "Short", ask a follow-up free-text question constrained to <=5 words.
 
-For short-answer:
-- Lead with `**Suggested:** {answer} - {reasoning}`
-- Accept "yes" / "suggested" to use the suggestion
+For short-answer questions (no meaningful discrete options):
+- Determine your **suggested answer** from best practices and RFC context.
+- Call `AskUserQuestion`:
+  - `question`: `"Suggested: <answer> -- <brief reasoning>\n\n<question text>\nFormat: Short answer (<=5 words)."`
+  - `options[]`: `[{label: "Accept suggestion", description: "Use the suggested answer above"}, {label: "Custom", description: "Provide my own short answer (<=5 words)"}]`.
+  - `multiSelect`: `false`.
+- If the user picks "Custom", ask a follow-up free-text question constrained to <=5 words.
+
+After each answer: if the user accepted the recommendation/suggestion option, use your stated recommendation as the answer; otherwise validate it maps to one option or fits the <=5-word constraint. Record in working memory; never reveal queued questions in advance.
 
 Stop when: all critical ambiguities resolved, user signals done, or 5 questions asked.
 

@@ -1,13 +1,33 @@
 ---
 name: speckit-plan
-description: 'Forge override: redirects /speckit-plan to the Design posture. In Forge
-  projects, plan IS design -- convergent sculpting of a pitch into an RFC ending at
-  Definition of Ready.'
+description: Generate technical implementation plans from feature specifications.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: forge-pipeline:commands/speckit.plan.md
+  source: preset:cross-platform-governance
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Speckit Plan Skill
+
+Before continuing, apply the Cross-Platform Governance preset:
+
+- plan paired Bash + PowerShell script work as a single unit
+- plan the man-page, the bilingual PowerShell help block, and the
+  `Verb-Noun` Cmdlet alongside the script
+- plan manual verification on at least one target OS per variant
+- plan implementation discipline checks (Bash quoting, `set -euo
+  pipefail`, `Set-StrictMode -Version Latest`, `-NoProfile`) and the
+  parity-checklist artefact
+
+Before continuing, apply the Security Governance preset:
+
+- plan explicit MSL applicability or non-MSL justification work when relevant
+- plan explicit secure-development verification work
+- plan dependency and supply-chain evidence updates where relevant
+- surface security review checkpoints instead of leaving them implicit
+
 
 ## User Input
 
@@ -16,6 +36,41 @@ $ARGUMENTS
 ```
 
 You **MUST** consider the user input before proceeding (if not empty).
+
+## Pre-Execution Checks
+
+**Check for extension hooks (before design)**:
+- Check if `.specify/extensions.yml` exists in the project root.
+- If it exists, read it and look for entries under the `hooks.before_plan` key
+- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
+- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
+  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
+  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
+- For each executable hook, output the following based on its `optional` flag:
+  - **Optional hook** (`optional: true`):
+    ```
+    ## Extension Hooks
+
+    **Optional Pre-Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Prompt: {prompt}
+    To execute: `/{command}`
+    ```
+  - **Mandatory hook** (`optional: false`):
+    ```
+    ## Extension Hooks
+
+    **Automatic Pre-Hook**: {extension}
+    Executing: `/{command}`
+    EXECUTE_COMMAND: {command}
+
+    Wait for the result of the hook command before proceeding.
+    ```
+- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Forge Pipeline Override
 
@@ -99,6 +154,40 @@ Save the RFC:
 - In a spec-kit project: to `specs/{NNN-feature}/spec.md`
 
 Report: Definition of Ready status, analyze gate results, suggested next step (projecter or `/speckit-tasks`).
+
+### Step 7: Extension hooks (after design)
+
+After reporting, check if `.specify/extensions.yml` exists in the project root.
+- If it exists, read it and look for entries under the `hooks.after_plan` key
+- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
+- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
+  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
+  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
+- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`).
+- For each executable hook, output the following based on its `optional` flag:
+  - **Optional hook** (`optional: true`):
+    ```
+    ## Extension Hooks
+
+    **Optional Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Prompt: {prompt}
+    To execute: `/{command}`
+    ```
+  - **Mandatory hook** (`optional: false`):
+    ```
+    ## Extension Hooks
+
+    **Automatic Hook**: {extension}
+    Executing: `/{command}`
+    EXECUTE_COMMAND: {command}
+    ```
+- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+
+This is the hook that offers `/speckit-projecter-reconcile` after the RFC is produced (projecter's `after_plan` hook, `optional: true`).
 
 ## Context
 

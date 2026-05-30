@@ -1,9 +1,10 @@
 {
-  "ai": "gemini",
+  "ai": "claude",
+  "ai_skills": true,
   "branch_numbering": "sequential",
-  "context_file": "GEMINI.md",
+  "context_file": "CLAUDE.md",
   "here": true,
-  "integration": "gemini",
+  "integration": "claude",
   "script": "ps",
   "speckit_version": "0.8.10"
 }
