@@ -1486,16 +1486,155 @@ def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
     return {"dissolution": get(conn, int(row[0]))}
 
 
+# ---------------------------------------------------------------------------
+# Phase 8 of Git for Ideas — vault_notes tools (migration 0042)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def note_lookup(query: str) -> dict[str, Any]:
+    """Exact-match lookup of a vault note by name or file_path.
+
+    Returns the full note record including body text, frontmatter
+    metadata, and lifecycle status. Use when you know the exact note
+    name or path.
+
+    Args:
+        query: Note name (filename stem or frontmatter `name:`) or
+            vault-relative POSIX path.
+
+    Returns:
+        Full note dict on hit, {"result": None} on miss, or {"error": ...}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.vault_notes import lookup
+    result = lookup(conn, query)
+    if result is None:
+        return {"result": None}
+    return result
+
+
+@mcp.tool()
+def note_search(query: str, limit: int = 20) -> dict[str, Any]:
+    """Full-text search over vault notes (name, description, body).
+
+    Uses SQLite FTS5 with porter stemming. Returns ranked results
+    with body snippets. Use for keyword/topic discovery across the
+    vault's current state.
+
+    Args:
+        query: FTS5 query string (supports AND, OR, NOT, phrase quotes).
+        limit: Max results (default 20).
+
+    Returns:
+        {"count": int, "results": [...]} with snippet per hit.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.vault_notes import search
+    results = search(conn, query, limit=limit)
+    return {"count": len(results), "results": results}
+
+
+@mcp.tool()
+def note_read(name_or_path: str) -> dict[str, Any]:
+    """Read the full body text of one vault note.
+
+    Returns the complete markdown content including frontmatter.
+    Use when you need to read a specific note's content without
+    filesystem access.
+
+    Args:
+        name_or_path: Note name or vault-relative POSIX path.
+
+    Returns:
+        {"name_or_path": str, "body": str} on hit,
+        {"result": None} on miss.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.vault_notes import read_note
+    body = read_note(conn, name_or_path)
+    if body is None:
+        return {"result": None}
+    return {"name_or_path": name_or_path, "body": body}
+
+
+@mcp.tool()
+def note_list(
+    status: str | None = None,
+    at_type: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Browse vault notes with optional filters.
+
+    Returns a lightweight listing (no body text) sorted by most
+    recently updated. Use for browsing by status or @type.
+
+    Args:
+        status: Filter by lifecycle status ('live', 'dissolved', 'deleted').
+        at_type: Filter by Schema.org @type (e.g., 'Person', 'CreativeWork').
+        limit: Max results (default 50).
+
+    Returns:
+        {"count": int, "notes": [...]}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.vault_notes import list_notes
+    results = list_notes(conn, status=status, at_type=at_type, limit=limit)
+    return {"count": len(results), "notes": results}
+
+
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="vault-mcp MCP server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default="stdio",
+        help="Transport protocol (default: stdio)",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Bind host for HTTP transports (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8100,
+        help="Bind port for HTTP transports (default: 8100)",
+    )
+    args = parser.parse_args()
+
     watch_status = "watch=on" if WATCH_ENABLED else "watch=off"
     rest_status = "rest=off" if REST_DISABLE else f"rest={REST_URL}"
     phdb_status = f"phdb={PHDB_DB_PATH}" if PHDB_DB_PATH else "phdb=off"
     print(
         f"vault-mcp: vault={VAULT_PATH}, ttl={TTL_SECONDS}s, "
-        f"{watch_status}, {rest_status}, {phdb_status}",
+        f"{watch_status}, {rest_status}, {phdb_status}, "
+        f"transport={args.transport}",
         file=sys.stderr,
     )
-    mcp.run()
+
+    if args.transport != "stdio":
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+        )
+        print(f"vault-mcp: listening on {args.host}:{args.port}", file=sys.stderr)
+
+    mcp.run(transport=args.transport)
 
 
 if __name__ == "__main__":
