@@ -10,14 +10,21 @@ they cannot violate them.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import yaml
 
-from .provenance import Actor, Provenance, WriteMode, stamp
+from .provenance import Actor, Provenance, WriteMode, parse, stamp, transition
 from .schema import VaultSchema, WriteProtectionRule
+
+log = logging.getLogger(__name__)
+
+# A diff sink receives a structured write record for downstream ingestion.
+DiffSink = Callable[[dict[str, Any]], None]
 
 
 class GateError(Exception):
@@ -36,10 +43,12 @@ class ProtectionError(GateError):
     """The target directory is write-protected for this write."""
 
 
-class NoteWriter(Protocol):
-    """The write surface the Gate depends on (Obsidian CLI implements it)."""
+class NoteIO(Protocol):
+    """The vault IO surface the Gate depends on (Obsidian CLI implements it)."""
 
     def create_note(self, path: str, content: str) -> None: ...
+    def read_note(self, path: str) -> str: ...
+    def write_note(self, path: str, content: str) -> None: ...
 
 
 @dataclass
@@ -55,6 +64,7 @@ class WriteResult:
         return {
             "ok": True,
             "path": self.path,
+            "created": self.created,
             "frontmatter": self.frontmatter,
             "provenance": self.provenance.value,
         }
@@ -64,12 +74,32 @@ def _today() -> str:
     return datetime.now(UTC).date().isoformat()
 
 
-class ConventionGate:
-    """Schema- and provenance-aware write API over an injected NoteWriter."""
+def _split_note(text: str) -> tuple[dict[str, Any], str]:
+    """Split a note into (frontmatter dict, body). Body excludes the fences."""
+    if not text.startswith("---"):
+        return {}, text
+    end = text.find("\n---", 3)
+    if end == -1:
+        return {}, text
+    loaded = yaml.safe_load(text[3:end])
+    fm: dict[str, Any] = loaded if isinstance(loaded, dict) else {}
+    body = text[end + 4 :].lstrip("\n")
+    return fm, body
 
-    def __init__(self, schema: VaultSchema, writer: NoteWriter) -> None:
+
+def _render_note(frontmatter: dict[str, Any], body: str) -> str:
+    """Serialize frontmatter + body into a markdown note."""
+    fm_yaml = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).rstrip("\n")
+    return f"---\n{fm_yaml}\n---\n\n{body}\n"
+
+
+class ConventionGate:
+    """Schema- and provenance-aware write API over an injected NoteIO."""
+
+    def __init__(self, schema: VaultSchema, io: NoteIO, diff_sink: DiffSink | None = None) -> None:
         self._schema = schema
-        self._writer = writer
+        self._io = io
+        self._diff_sink = diff_sink
 
     # --- Write-protection (Feature: Write-protection enforcement) ----------
     def _protection_for(self, directory: str) -> WriteProtectionRule | None:
@@ -148,8 +178,63 @@ class ConventionGate:
         )
 
         path = f"{directory}/{title}.md"
-        self._writer.create_note(path, _render_note(frontmatter, body))
-        return WriteResult(path=path, frontmatter=frontmatter, provenance=provenance)
+        self._io.create_note(path, _render_note(frontmatter, body))
+        result = WriteResult(path=path, frontmatter=frontmatter, provenance=provenance)
+        self._emit_diff(path, "create", sorted(frontmatter.keys()), provenance)
+        return result
+
+    # --- Note update (Feature: Note update) --------------------------------
+    def update_note(
+        self,
+        path: str,
+        *,
+        fields: dict[str, Any] | None = None,
+        body: str | None = None,
+        tags: list[str] | None = None,
+        actor: Actor = Actor.AGENT,
+    ) -> WriteResult:
+        """Update an existing note, preserving untouched content and lineage.
+
+        Only the requested fields change; provenance advances per the
+        transition rules. A body edit triggers body-protection checks while a
+        metadata-only edit may be permitted on body-immutable directories.
+        """
+        touches_body = body is not None
+        mode = WriteMode.CREATE if touches_body else WriteMode.METADATA
+        directory = path.rsplit("/", 1)[0] if "/" in path else ""
+        self.check_protection(directory, actor, mode, touches_body=touches_body)
+
+        if tags is not None:
+            self._validate_tags(tags)
+
+        current_fm, current_body = _split_note(self._io.read_note(path))
+
+        new_fm: dict[str, Any] = dict(current_fm)
+        changed: list[str] = []
+        if fields is not None:
+            new_fm.update(fields)
+            changed.extend(fields.keys())
+        if tags is not None:
+            new_fm["tags"] = tags
+            changed.append("tags")
+
+        raw_prov = current_fm.get("provenance")
+        current_prov = (
+            parse(raw_prov) if isinstance(raw_prov, str) and raw_prov else Provenance.HUMAN
+        )
+        new_prov = transition(current_prov, actor)
+        new_fm["provenance"] = new_prov.value
+        if new_prov is not current_prov:
+            changed.append("provenance")
+
+        new_body = body if body is not None else current_body
+        if touches_body:
+            changed.append("body")
+
+        self._io.write_note(path, _render_note(new_fm, new_body))
+        result = WriteResult(path=path, frontmatter=new_fm, provenance=new_prov, created=False)
+        self._emit_diff(path, "update", changed, new_prov)
+        return result
 
     def _build_frontmatter(
         self,
@@ -178,8 +263,22 @@ class ConventionGate:
             raise FieldError(f"missing required frontmatter field(s): {missing}")
         return fm
 
-
-def _render_note(frontmatter: dict[str, Any], body: str) -> str:
-    """Serialize frontmatter + body into a markdown note."""
-    fm_yaml = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).rstrip("\n")
-    return f"---\n{fm_yaml}\n---\n\n{body}\n"
+    # --- Write observability (Feature: Write observability) ----------------
+    def _emit_diff(
+        self, path: str, op: str, fields_changed: list[str], provenance: Provenance
+    ) -> None:
+        """Emit a structured write diff. Emission never blocks or reverts a write."""
+        if self._diff_sink is None:
+            return
+        record = {
+            "path": path,
+            "op": op,
+            "fields_changed": fields_changed,
+            "provenance": provenance.value,
+        }
+        try:
+            self._diff_sink(record)
+        except Exception as exc:
+            # Observability is non-critical: a failed emit must never fail the
+            # write that already succeeded (RFC: emission failure never blocks).
+            log.warning("diff emission failed for %s: %s", path, exc)
