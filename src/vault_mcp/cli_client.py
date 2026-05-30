@@ -162,24 +162,44 @@ class ObsidianIOError(Exception):
     """A vault write/read through the Obsidian CLI failed."""
 
 
+# Returned by write eval so the adapter can confirm the write actually ran.
+# Guards against a binary (e.g. the Obsidian GUI launcher) that exits 0
+# without evaluating the JS — which would otherwise look like a silent success.
+WRITE_OK_SENTINEL = "__vault_mcp_write_ok__"
+
+
+# obsidian-cli's `eval` wraps code in a plain (non-async) function, so
+# top-level `await` is illegal — wrap awaited calls in an async IIFE and let
+# the eval harness resolve the returned promise. (Exact promise-resolution
+# behavior is pending a live smoke test; the sentinel check below fails loudly
+# if it does not resolve, so a misfire can never look like success.)
+
+
 def build_create_js(path: str, content: str) -> str:
     """Build eval JS that creates a new note. Args are JSON-encoded (JS-safe)."""
-    return f"await app.vault.create({json.dumps(path)}, {json.dumps(content)});"
+    return (
+        f"return (async () => {{ "
+        f"await app.vault.create({json.dumps(path)}, {json.dumps(content)}); "
+        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})();"
+    )
 
 
 def build_modify_js(path: str, content: str) -> str:
     """Build eval JS that overwrites an existing note."""
     return (
+        f"return (async () => {{ "
         f"const f = app.vault.getAbstractFileByPath({json.dumps(path)}); "
-        f"await app.vault.modify(f, {json.dumps(content)});"
+        f"await app.vault.modify(f, {json.dumps(content)}); "
+        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})();"
     )
 
 
 def build_read_js(path: str) -> str:
     """Build eval JS that returns an existing note's content."""
     return (
+        f"return (async () => {{ "
         f"const f = app.vault.getAbstractFileByPath({json.dumps(path)}); "
-        f"return await app.vault.read(f);"
+        f"return await app.vault.read(f); }})();"
     )
 
 
@@ -196,10 +216,10 @@ class ObsidianNoteIO:
         self._cli = cli
 
     def create_note(self, path: str, content: str) -> None:
-        self._eval(build_create_js(path, content), path)
+        self._eval_write(build_create_js(path, content), path)
 
     def write_note(self, path: str, content: str) -> None:
-        self._eval(build_modify_js(path, content), path)
+        self._eval_write(build_modify_js(path, content), path)
 
     def read_note(self, path: str) -> str:
         res = self._eval(build_read_js(path), path)
@@ -207,6 +227,14 @@ class ObsidianNoteIO:
         if not isinstance(data, str):
             raise ObsidianIOError(f"unexpected read result for {path}: {data!r}")
         return data
+
+    def _eval_write(self, code: str, path: str) -> None:
+        res = self._eval(code, path)
+        if res.get("data") != WRITE_OK_SENTINEL:
+            raise ObsidianIOError(
+                f"write to {path} not confirmed (got {res.get('data')!r}); "
+                f"is obsidian-cli connected, not the GUI launcher?"
+            )
 
     def _eval(self, code: str, path: str) -> dict[str, Any]:
         res = self._cli.run("eval", code=code)
