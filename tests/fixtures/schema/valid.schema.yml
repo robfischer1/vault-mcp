@@ -31,6 +31,12 @@ write_protection:
   - directory: Artifacts
     rule: fully-immutable
     error: "Artifacts are frozen version-locked summaries"
+  - directory: Atlas
+    rule: compute-only
+    error: "Atlas notes are recomputed by scheduled jobs, not written by sessions"
+  - directory: Outputs/Tao
+    rule: voice-only
+    error: "This is a Rob-only voice project — AI agents cannot draft content here"
 
 provenance:
   levels:
