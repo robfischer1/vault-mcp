@@ -1,0 +1,43 @@
+# Generic vault-mcp schema fixture — no real vault content.
+pillars:
+  - Knowledge
+  - Projects
+  - Records
+
+tags:
+  - status/active
+  - status/done
+  - topic/ai
+
+routes:
+  - note_type: note
+    pillar: Knowledge
+    directory: Knowledge/Notes
+  - note_type: project
+    pillar: Projects
+    directory: Projects
+  - pillar: Records
+    directory: Records
+
+required_frontmatter:
+  - title
+  - created
+  - provenance
+
+write_protection:
+  - directory: Records
+    rule: body-immutable
+    error: "Records are imported primary-source data — body cannot be modified"
+  - directory: Artifacts
+    rule: fully-immutable
+    error: "Artifacts are frozen version-locked summaries"
+
+provenance:
+  levels:
+    - human
+    - human-edited
+    - human-revised
+    - ai-assisted
+    - ai-compiled
+    - ai-metadata
+    - ai-computed

@@ -1,0 +1,22 @@
+# Invalid: `tags` contains a duplicate entry.
+pillars:
+  - Knowledge
+
+tags:
+  - status/active
+  - topic/ai
+  - status/active
+
+routes:
+  - pillar: Knowledge
+    directory: Knowledge/Notes
+
+required_frontmatter:
+  - title
+
+write_protection: []
+
+provenance:
+  levels:
+    - human
+    - ai-computed
