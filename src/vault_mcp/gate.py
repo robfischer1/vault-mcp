@@ -233,6 +233,11 @@ class ConventionGate:
         if new_prov is not current_prov:
             changed.append("provenance")
 
+        if self._schema.updated_field is not None:
+            new_fm[self._schema.updated_field] = _today()
+            if self._schema.updated_field not in changed:
+                changed.append(self._schema.updated_field)
+
         new_body = body if body is not None else current_body
         if touches_body:
             changed.append("body")
@@ -253,11 +258,15 @@ class ConventionGate:
         created: str,
         extra_fields: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        schema = self._schema
         fm: dict[str, Any] = {
-            "title": title,
-            "created": created,
+            schema.label_field: title,
+            schema.created_field: created,
             "provenance": provenance.value,
         }
+        if schema.updated_field is not None:
+            fm[schema.updated_field] = created
+        reserved = {schema.label_field, schema.created_field, "provenance", schema.updated_field}
         if note_type is not None:
             fm["type"] = note_type
         if pillar is not None:
@@ -266,7 +275,7 @@ class ConventionGate:
             fm["tags"] = tags
         if extra_fields is not None:
             for key, value in extra_fields.items():
-                if key in ("title", "created", "provenance"):
+                if key in reserved:
                     continue  # governance fields are Gate-stamped, never caller-set
                 fm[key] = value
 

@@ -26,6 +26,7 @@ from vault_mcp.provenance import Actor, Provenance, WriteMode  # noqa: E402
 from vault_mcp.schema import load_schema  # noqa: E402
 
 VALID = ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
+NAMED = ROOT / "tests" / "fixtures" / "schema" / "named.schema.yml"
 
 
 class FakeVault:
@@ -209,6 +210,33 @@ class TestUpdateNote:
         path = self._seed(gate, vault)  # created by agent -> ai-assisted
         result = gate.update_note(path, fields={"status": "reviewed"}, actor=Actor.HUMAN)
         assert result.provenance is Provenance.HUMAN_EDITED
+
+
+class TestSchemaDrivenFrontmatter:
+    def _named_gate(self) -> tuple[ConventionGate, FakeVault]:
+        vault = FakeVault()
+        return ConventionGate(load_schema(NAMED), vault), vault
+
+    def test_emits_configured_label_and_updated(self):
+        gate, _ = self._named_gate()
+        result = gate.create_note(
+            title="My Note", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        fm = result.frontmatter
+        assert fm["name"] == "My Note"  # label_field, not "title"
+        assert fm["created"] == "2026-05-30"
+        assert fm["updated"] == "2026-05-30"  # auto-stamped on create
+        assert "title" not in fm
+
+    def test_update_restamps_updated(self):
+        gate, vault = self._named_gate()
+        path = gate.create_note(
+            title="My Note", note_type="note", pillar="Knowledge", created="2026-05-30"
+        ).path
+        result = gate.update_note(path, fields={"status": "Active"}, actor=Actor.HUMAN)
+        assert result.frontmatter["name"] == "My Note"
+        assert result.frontmatter["status"] == "Active"
+        assert "updated" in result.frontmatter  # re-stamped
 
 
 class TestObservability:

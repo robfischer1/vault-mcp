@@ -77,6 +77,9 @@ class VaultSchema:
     required_frontmatter: tuple[str, ...]
     write_protection: tuple[WriteProtectionRule, ...]
     provenance_levels: tuple[str, ...]
+    label_field: str = "title"
+    created_field: str = "created"
+    updated_field: str | None = None
     source_path: Path | None = field(default=None, compare=False)
 
     # --- Tag glossary lookup (Feature: Tag glossary lookup) ----------------
@@ -149,6 +152,8 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
 
     provenance = tuple((raw.get("provenance", {}) or {}).get("levels", []) or [])
 
+    fm_cfg = raw.get("frontmatter", {}) or {}
+
     return VaultSchema(
         pillars=pillars,
         tags=frozenset(tag_list),
@@ -156,6 +161,9 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
         required_frontmatter=tuple(raw.get("required_frontmatter", []) or []),
         write_protection=tuple(protection),
         provenance_levels=provenance,
+        label_field=fm_cfg.get("label_field", "title"),
+        created_field=fm_cfg.get("created_field", "created"),
+        updated_field=fm_cfg.get("updated_field"),
         source_path=source,
     )
 
