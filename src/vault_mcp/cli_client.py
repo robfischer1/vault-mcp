@@ -168,39 +168,47 @@ class ObsidianIOError(Exception):
 WRITE_OK_SENTINEL = "__vault_mcp_write_ok__"
 
 
-# obsidian-cli's `eval` wraps code in a plain (non-async) function, so
-# top-level `await` is illegal — wrap awaited calls in an async IIFE and let
-# the eval harness resolve the returned promise. (Exact promise-resolution
-# behavior is pending a live smoke test; the sentinel check below fails loudly
-# if it does not resolve, so a misfire can never look like success.)
+# obsidian-cli's `eval` evaluates code as a plain script and returns the value
+# of the LAST EXPRESSION, prefixed with "=> " on stdout. Top-level `return` and
+# `await` are both illegal, but the harness awaits a returned promise — so each
+# builder is a single async-IIFE expression (no leading `return`), and the
+# adapter strips the "=> " prefix off the result.
+_EVAL_PREFIX = "=> "
 
 
 def build_create_js(path: str, content: str) -> str:
     """Build eval JS that creates a new note. Args are JSON-encoded (JS-safe)."""
     return (
-        f"return (async () => {{ "
+        f"(async () => {{ "
         f"await app.vault.create({json.dumps(path)}, {json.dumps(content)}); "
-        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})();"
+        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})()"
     )
 
 
 def build_modify_js(path: str, content: str) -> str:
     """Build eval JS that overwrites an existing note."""
     return (
-        f"return (async () => {{ "
+        f"(async () => {{ "
         f"const f = app.vault.getAbstractFileByPath({json.dumps(path)}); "
         f"await app.vault.modify(f, {json.dumps(content)}); "
-        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})();"
+        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})()"
     )
 
 
 def build_read_js(path: str) -> str:
     """Build eval JS that returns an existing note's content."""
     return (
-        f"return (async () => {{ "
+        f"(async () => {{ "
         f"const f = app.vault.getAbstractFileByPath({json.dumps(path)}); "
-        f"return await app.vault.read(f); }})();"
+        f"return await app.vault.read(f); }})()"
     )
+
+
+def _eval_value(data: object) -> object:
+    """Strip obsidian-cli's '=> ' result prefix from eval stdout."""
+    if isinstance(data, str) and data.startswith(_EVAL_PREFIX):
+        return data[len(_EVAL_PREFIX) :]
+    return data
 
 
 class ObsidianNoteIO:
@@ -223,17 +231,18 @@ class ObsidianNoteIO:
 
     def read_note(self, path: str) -> str:
         res = self._eval(build_read_js(path), path)
-        data = res.get("data")
+        data = _eval_value(res.get("data"))
         if not isinstance(data, str):
             raise ObsidianIOError(f"unexpected read result for {path}: {data!r}")
         return data
 
     def _eval_write(self, code: str, path: str) -> None:
         res = self._eval(code, path)
-        if res.get("data") != WRITE_OK_SENTINEL:
+        value = _eval_value(res.get("data"))
+        if value != WRITE_OK_SENTINEL:
             raise ObsidianIOError(
-                f"write to {path} not confirmed (got {res.get('data')!r}); "
-                f"is obsidian-cli connected, not the GUI launcher?"
+                f"write to {path} not confirmed (got {value!r}); "
+                f"is obsidian-cli connected and the path's parent folder present?"
             )
 
     def _eval(self, code: str, path: str) -> dict[str, Any]:
