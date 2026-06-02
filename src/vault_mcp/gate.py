@@ -169,7 +169,9 @@ class ConventionGate:
         self._validate_tags(tags)
 
         if directory is None:
-            directory = self._schema.resolve_directory(note_type=note_type, pillar=pillar)
+            directory = self._schema.resolve_directory(
+                note_type=note_type, pillar=pillar, attrs=extra_fields or {}
+            )
         self.check_protection(directory, actor, mode, touches_body=True)
 
         provenance = stamp(actor, mode)
@@ -182,6 +184,7 @@ class ConventionGate:
             created=created if created is not None else _today(),
             extra_fields=extra_fields,
         )
+        self._enforce_type_rules(note_type, frontmatter)
 
         path = f"{directory}/{title}.md"
         self._io.create_note(path, _render_note(frontmatter, body))
@@ -279,10 +282,54 @@ class ConventionGate:
                     continue  # governance fields are Gate-stamped, never caller-set
                 fm[key] = value
 
+        # Pillar visual defaults (nn_color / nn_icon) — stamped only when the
+        # caller did not supply them, so an explicit value always wins.
+        pd = schema.pillar_default(pillar)
+        if pd is not None:
+            if pd.nn_color is not None and "nn_color" not in fm:
+                fm["nn_color"] = pd.nn_color
+            if pd.nn_icon is not None and "nn_icon" not in fm:
+                fm["nn_icon"] = pd.nn_icon
+
         missing = [req for req in self._schema.required_frontmatter if fm.get(req) in (None, "")]
         if len(missing) > 0:
             raise FieldError(f"missing required frontmatter field(s): {missing}")
         return fm
+
+    # --- Per-@type value enforcement (Feature: Type Registry) --------------
+    def _enforce_type_rules(self, note_type: str | None, fm: dict[str, Any]) -> None:
+        """Enforce per-@type required fields, value constraints, and formats.
+
+        Also repairs + validates the global ``status`` value. Raises
+        ``FieldError`` citing the specific type and field on any violation;
+        ``fm`` is mutated in place to carry the repaired ``status``. Unknown
+        types carry no config and pass untouched.
+        """
+        schema = self._schema
+        if "status" in fm:
+            repaired = schema.normalize_status(fm["status"])
+            fm["status"] = repaired
+            if not schema.is_valid_status(repaired):
+                raise FieldError(
+                    f"status {repaired!r} is not one of {sorted(schema.status_values)}"
+                )
+
+        tc = schema.type_config(note_type) if note_type is not None else None
+        if tc is None:
+            return
+        for req in tc.required_fields:
+            if fm.get(req) in (None, ""):
+                raise FieldError(f"{note_type}: missing required field {req!r}")
+        for field_name, allowed in tc.value_constraints:
+            value = fm.get(field_name)
+            if value is not None and str(value) not in allowed:
+                raise FieldError(
+                    f"{note_type}.{field_name}: {value!r} is not one of {list(allowed)}"
+                )
+        for field_name, fmt in tc.formats:
+            value = fm.get(field_name)
+            if value is not None and not schema.is_valid_format(fmt, value):
+                raise FieldError(f"{note_type}.{field_name}: {value!r} is not a valid {fmt}")
 
     # --- Write observability (Feature: Write observability) ----------------
     def _emit_diff(

@@ -141,6 +141,129 @@ class TestValidation:
         assert len(writer.calls) == 0
 
 
+class TestTypeEnforcement:
+    def test_missing_required_field_rejected(self):
+        gate, writer = _gate()
+        with pytest.raises(FieldError) as exc:
+            gate.create_note(
+                title="G", note_type="Gadget", directory="Knowledge", created="2026-05-30"
+            )
+        assert "Gadget" in str(exc.value) and "serial" in str(exc.value)
+        assert len(writer.calls) == 0
+
+    def test_required_field_present_passes(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="G",
+            note_type="Gadget",
+            directory="Knowledge",
+            extra_fields={"serial": "S1"},
+            created="2026-05-30",
+        )
+        assert result.frontmatter["serial"] == "S1"
+
+    def test_off_vocabulary_value_rejected_cites_type_and_field(self):
+        gate, writer = _gate()
+        with pytest.raises(FieldError) as exc:
+            gate.create_note(
+                title="G",
+                note_type="Gadget",
+                directory="Knowledge",
+                extra_fields={"serial": "S1", "condition": "Mint"},
+                created="2026-05-30",
+            )
+        msg = str(exc.value)
+        assert "Gadget" in msg and "condition" in msg and "Mint" in msg
+        assert len(writer.calls) == 0
+
+    def test_in_vocabulary_value_passes(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="G",
+            note_type="Gadget",
+            directory="Knowledge",
+            extra_fields={"serial": "S1", "condition": "Used"},
+            created="2026-05-30",
+        )
+        assert result.frontmatter["condition"] == "Used"
+
+    def test_bad_format_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(FieldError) as exc:
+            gate.create_note(
+                title="P",
+                note_type="Spot",
+                directory="Knowledge",
+                extra_fields={"coords": "not-coords"},
+                created="2026-05-30",
+            )
+        assert "Spot" in str(exc.value) and "geo" in str(exc.value)
+
+    def test_good_format_passes(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="P",
+            note_type="Spot",
+            directory="Knowledge",
+            extra_fields={"coords": "40.7,-74.0"},
+            created="2026-05-30",
+        )
+        assert result.frontmatter["coords"] == "40.7,-74.0"
+
+    def test_status_repaired_on_create(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={"status": "Archive"},
+            created="2026-05-30",
+        )
+        assert result.frontmatter["status"] == "Archived"
+
+    def test_invalid_status_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(FieldError) as exc:
+            gate.create_note(
+                title="X",
+                note_type="note",
+                pillar="Knowledge",
+                extra_fields={"status": "Bogus"},
+                created="2026-05-30",
+            )
+        assert "Bogus" in str(exc.value)
+
+    def test_unknown_type_passes_through(self):
+        gate, _ = _gate()
+        # note_type with no TypeConfig carries no per-type rules
+        result = gate.create_note(
+            title="X", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        assert result.path == "Knowledge/Notes/X.md"
+
+
+class TestPillarAutoStamp:
+    def test_pillar_defaults_stamped(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        assert result.frontmatter["nn_color"] == "#8caaee"
+        assert result.frontmatter["nn_icon"] == "book"
+
+    def test_caller_value_wins_over_default(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={"nn_color": "#000000"},
+            created="2026-05-30",
+        )
+        assert result.frontmatter["nn_color"] == "#000000"
+        assert result.frontmatter["nn_icon"] == "book"  # untouched default still stamped
+
+
 class TestProtection:
     def test_create_into_body_immutable_rejected(self):
         gate, writer = _gate()

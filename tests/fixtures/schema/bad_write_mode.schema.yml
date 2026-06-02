@@ -1,0 +1,24 @@
+# Generic fixture — a type with an invalid write_mode (must be rejected).
+pillars:
+  - Knowledge
+
+tags:
+  - topic/ai
+
+routes:
+  - pillar: Knowledge
+    directory: Knowledge
+
+required_frontmatter:
+  - title
+
+write_protection: []
+
+provenance:
+  levels:
+    - human
+
+types:
+  Note:
+    required: [title]
+    write_mode: telepathy

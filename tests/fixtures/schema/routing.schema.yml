@@ -1,0 +1,47 @@
+# Generic fixture exercising discriminator + most-specific-wins routing.
+pillars:
+  - Shop
+  - Library
+
+tags:
+  - topic/ai
+
+routes:
+  # Bare type route (least specific).
+  - note_type: Widget
+    pillar: Shop
+    directory: Shop
+  # Discriminator routes (more specific — win on overlap).
+  - note_type: Widget
+    pillar: Shop
+    discriminator: { field: category, values: [premium, deluxe] }
+    directory: Shop/Premium
+  - note_type: Widget
+    pillar: Shop
+    discriminator: { field: category, values: [basic] }
+    directory: Shop/Basic
+  # Consumed-media style: each subtype routed explicitly to an index dir.
+  - note_type: Tome
+    pillar: Library
+    directory: Library/Index/Tome
+  - note_type: Scroll
+    pillar: Library
+    directory: Library/Index/Scroll
+  # Two equally-specific discriminators that can both fire -> ambiguous.
+  - note_type: Relic
+    pillar: Library
+    discriminator: { field: era, values: [ancient] }
+    directory: Library/A
+  - note_type: Relic
+    pillar: Library
+    discriminator: { field: dynasty, values: [han] }
+    directory: Library/B
+
+required_frontmatter:
+  - title
+
+write_protection: []
+
+provenance:
+  levels:
+    - human
