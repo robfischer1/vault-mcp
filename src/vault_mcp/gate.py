@@ -18,7 +18,18 @@ from typing import Any, Protocol
 
 import yaml
 
-from .provenance import Actor, Provenance, WriteMode, parse, stamp, transition
+from .provenance import (
+    Actor,
+    AuthorType,
+    Provenance,
+    WriteMode,
+    author_type_for,
+    parse,
+    parse_author_type,
+    stamp,
+    transition,
+    transition_author_type,
+)
 from .schema import VaultSchema, WriteProtectionRule
 
 log = logging.getLogger(__name__)
@@ -53,12 +64,22 @@ class NoteIO(Protocol):
 
 @dataclass
 class WriteResult:
-    """The structured echo returned for every successful write."""
+    """The structured echo returned for every successful write.
+
+    ``provenance`` is retained as a back-compat alias of ``author_level`` (V2D
+    3-property model); ``to_dict`` emits author_type / author_level / ai_model.
+    """
 
     path: str
     frontmatter: dict[str, Any]
-    provenance: Provenance
+    provenance: Provenance  # == author_level (back-compat alias)
+    author_type: AuthorType = AuthorType.AI
+    ai_model: str | None = None
     created: bool = field(default=True)
+
+    @property
+    def author_level(self) -> Provenance:
+        return self.provenance
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -66,7 +87,9 @@ class WriteResult:
             "path": self.path,
             "created": self.created,
             "frontmatter": self.frontmatter,
-            "provenance": self.provenance.value,
+            "author_type": self.author_type.value,
+            "author_level": self.provenance.value,
+            "ai_model": self.ai_model,
         }
 
 
@@ -153,6 +176,8 @@ class ConventionGate:
         created: str | None = None,
         directory: str | None = None,
         extra_fields: dict[str, Any] | None = None,
+        author_type: str | None = None,
+        ai_model: str | None = None,
     ) -> WriteResult:
         """Create a compliant note and write it through the Obsidian writer.
 
@@ -174,13 +199,18 @@ class ConventionGate:
             )
         self.check_protection(directory, actor, mode, touches_body=True)
 
-        provenance = stamp(actor, mode)
+        author_level = stamp(actor, mode)
+        declared = parse_author_type(author_type) if author_type is not None else None
+        resolved_author_type = author_type_for(author_level, declared)
+        model = ai_model if actor is Actor.AGENT else None
         frontmatter = self._build_frontmatter(
             title=title,
             note_type=note_type,
             pillar=pillar,
             tags=tags,
-            provenance=provenance,
+            author_level=author_level,
+            author_type=resolved_author_type,
+            ai_model=model,
             created=created if created is not None else _today(),
             extra_fields=extra_fields,
         )
@@ -188,8 +218,14 @@ class ConventionGate:
 
         path = f"{directory}/{title}.md"
         self._io.create_note(path, _render_note(frontmatter, body))
-        result = WriteResult(path=path, frontmatter=frontmatter, provenance=provenance)
-        self._emit_diff(path, "create", sorted(frontmatter.keys()), provenance)
+        result = WriteResult(
+            path=path,
+            frontmatter=frontmatter,
+            provenance=author_level,
+            author_type=resolved_author_type,
+            ai_model=model,
+        )
+        self._emit_diff(path, "create", sorted(frontmatter.keys()), author_level)
         return result
 
     # --- Note update (Feature: Note update) --------------------------------
@@ -201,6 +237,7 @@ class ConventionGate:
         body: str | None = None,
         tags: list[str] | None = None,
         actor: Actor = Actor.AGENT,
+        ai_model: str | None = None,
     ) -> WriteResult:
         """Update an existing note, preserving untouched content and lineage.
 
@@ -227,14 +264,34 @@ class ConventionGate:
             new_fm["tags"] = tags
             changed.append("tags")
 
-        raw_prov = current_fm.get("provenance")
-        current_prov = (
-            parse(raw_prov) if isinstance(raw_prov, str) and raw_prov else Provenance.HUMAN
+        # Read current author_level, falling back to the legacy single-axis
+        # `provenance:` key so notes that predate the 3-property model keep working.
+        raw_level = current_fm.get("author_level")
+        if not (isinstance(raw_level, str) and raw_level):
+            raw_level = current_fm.get("provenance")
+        current_level = (
+            parse(raw_level) if isinstance(raw_level, str) and raw_level else Provenance.HUMAN
         )
-        new_prov = transition(current_prov, actor)
-        new_fm["provenance"] = new_prov.value
-        if new_prov is not current_prov:
+        raw_at = current_fm.get("author_type")
+        current_at = (
+            parse_author_type(raw_at)
+            if isinstance(raw_at, str) and raw_at
+            else author_type_for(current_level)
+        )
+        new_level = transition(current_level, actor)
+        new_at = transition_author_type(current_at, actor)
+        new_fm["author_level"] = new_level.value
+        new_fm["author_type"] = new_at.value
+        if "provenance" in new_fm:
+            del new_fm["provenance"]  # retire the legacy single-axis key
             changed.append("provenance")
+        if new_level is not current_level:
+            changed.append("author_level")
+        if new_at is not current_at:
+            changed.append("author_type")
+        if ai_model is not None and actor is Actor.AGENT:
+            new_fm["ai_model"] = ai_model
+            changed.append("ai_model")
 
         if self._schema.updated_field is not None:
             new_fm[self._schema.updated_field] = _today()
@@ -246,8 +303,15 @@ class ConventionGate:
             changed.append("body")
 
         self._io.write_note(path, _render_note(new_fm, new_body))
-        result = WriteResult(path=path, frontmatter=new_fm, provenance=new_prov, created=False)
-        self._emit_diff(path, "update", changed, new_prov)
+        result = WriteResult(
+            path=path,
+            frontmatter=new_fm,
+            provenance=new_level,
+            author_type=new_at,
+            ai_model=new_fm.get("ai_model"),
+            created=False,
+        )
+        self._emit_diff(path, "update", changed, new_level)
         return result
 
     def _build_frontmatter(
@@ -257,7 +321,9 @@ class ConventionGate:
         note_type: str | None,
         pillar: str | None,
         tags: list[str],
-        provenance: Provenance,
+        author_level: Provenance,
+        author_type: AuthorType,
+        ai_model: str | None,
         created: str,
         extra_fields: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -265,11 +331,24 @@ class ConventionGate:
         fm: dict[str, Any] = {
             schema.label_field: title,
             schema.created_field: created,
-            "provenance": provenance.value,
+            "author_type": author_type.value,
+            "author_level": author_level.value,
         }
+        if ai_model is not None:
+            fm["ai_model"] = ai_model
         if schema.updated_field is not None:
             fm[schema.updated_field] = created
-        reserved = {schema.label_field, schema.created_field, "provenance", schema.updated_field}
+        # Governance fields are Gate-stamped, never caller-set (legacy `provenance`
+        # stays reserved so a caller cannot reintroduce the retired key).
+        reserved = {
+            schema.label_field,
+            schema.created_field,
+            "author_type",
+            "author_level",
+            "ai_model",
+            "provenance",
+            schema.updated_field,
+        }
         if note_type is not None:
             fm["type"] = note_type
         if pillar is not None:

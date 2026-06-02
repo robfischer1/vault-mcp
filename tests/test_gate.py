@@ -63,8 +63,9 @@ class TestCreateNote:
             tags=["topic/ai"],
             created="2026-05-30",
         )
-        for required in ("title", "created", "provenance"):
+        for required in ("title", "created", "author_type", "author_level"):
             assert required in result.frontmatter
+        assert "provenance" not in result.frontmatter  # retired single-axis key
         assert result.frontmatter["title"] == "My Idea"
         assert len(writer.calls) == 1
 
@@ -94,7 +95,8 @@ class TestCreateNote:
             actor=Actor.AGENT,
             created="2026-05-30",
         )
-        assert result.frontmatter["provenance"] == "ai-assisted"
+        assert result.frontmatter["author_level"] == "ai-assisted"
+        assert result.frontmatter["author_type"] == "ai"
 
     def test_human_create_stamps_human(self):
         gate, _ = _gate()
@@ -105,7 +107,8 @@ class TestCreateNote:
             actor=Actor.HUMAN,
             created="2026-05-30",
         )
-        assert result.frontmatter["provenance"] == "human"
+        assert result.frontmatter["author_level"] == "human"
+        assert result.frontmatter["author_type"] == "human"
 
 
 class TestValidation:
@@ -262,6 +265,68 @@ class TestPillarAutoStamp:
         )
         assert result.frontmatter["nn_color"] == "#000000"
         assert result.frontmatter["nn_icon"] == "book"  # untouched default still stamped
+
+
+class TestProvenanceThreeProperty:
+    def test_ai_model_stamped_for_agent(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            actor=Actor.AGENT,
+            ai_model="claude-opus-4-8",
+            created="2026-05-30",
+        )
+        assert result.frontmatter["ai_model"] == "claude-opus-4-8"
+        assert result.ai_model == "claude-opus-4-8"
+
+    def test_ai_model_omitted_for_human(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            actor=Actor.HUMAN,
+            ai_model="claude-opus-4-8",  # ignored for a human write
+            created="2026-05-30",
+        )
+        assert "ai_model" not in result.frontmatter
+
+    def test_declared_external_author_type(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            author_type="external",
+            created="2026-05-30",
+        )
+        assert result.frontmatter["author_type"] == "external"
+
+    def test_to_dict_carries_three_properties(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        d = result.to_dict()
+        assert d["author_type"] == "ai"
+        assert d["author_level"] == "ai-assisted"
+        assert "ai_model" in d
+        assert "provenance" not in d
+
+    def test_legacy_provenance_note_migrated_on_update(self):
+        gate, vault = _gate()
+        # a note that predates the 3-property model carries only `provenance:`
+        vault.store["Knowledge/Notes/old.md"] = (
+            "---\ntitle: old\nprovenance: human\n---\n\nbody\n"
+        )
+        result = gate.update_note(
+            "Knowledge/Notes/old.md", fields={"status": "Active"}, actor=Actor.AGENT
+        )
+        assert "provenance" not in result.frontmatter  # legacy key retired
+        assert result.frontmatter["author_level"] == "ai-assisted"  # human + agent edit
+        assert result.frontmatter["author_type"] == "ai"  # no-downgrade
 
 
 class TestProtection:

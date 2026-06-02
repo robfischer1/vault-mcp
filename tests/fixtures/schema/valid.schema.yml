@@ -22,7 +22,8 @@ routes:
 required_frontmatter:
   - title
   - created
-  - provenance
+  - author_type
+  - author_level
 
 write_protection:
   - directory: Records

@@ -19,7 +19,8 @@ required_frontmatter:
   - name
   - created
   - updated
-  - provenance
+  - author_type
+  - author_level
 
 write_protection: []
 
