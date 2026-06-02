@@ -267,6 +267,88 @@ class TestPillarAutoStamp:
         assert result.frontmatter["nn_icon"] == "book"  # untouched default still stamped
 
 
+class TestFrontmatterStamping:
+    def test_identifier_autogen(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="My Big Idea", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        assert result.frontmatter["identifier"] == "my-big-idea"
+
+    def test_identifier_caller_override(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="My Big Idea",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={"identifier": "custom-id"},
+            created="2026-05-30",
+        )
+        assert result.frontmatter["identifier"] == "custom-id"
+
+    def test_status_defaults_pending(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        assert result.frontmatter["status"] == "Pending"
+
+    def test_invalid_status_suggests_nearest(self):
+        gate, _ = _gate()
+        with pytest.raises(FieldError) as exc:
+            gate.create_note(
+                title="X",
+                note_type="note",
+                pillar="Knowledge",
+                extra_fields={"status": "Activ"},
+                created="2026-05-30",
+            )
+        assert "did you mean 'Active'" in str(exc.value)
+
+    def test_note_type_title_cased(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X", note_type="note", directory="Knowledge", created="2026-05-30"
+        )
+        assert result.frontmatter["note_type"] == "Note"
+
+    def test_note_type_preserves_existing_caps(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X", note_type="TVSeries", directory="Knowledge", created="2026-05-30"
+        )
+        assert result.frontmatter["note_type"] == "TVSeries"
+
+    def test_at_key_double_quoted_in_render(self):
+        gate, vault = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={"@type": "Person"},
+            created="2026-05-30",
+        )
+        content = vault.store[result.path]
+        assert '"@type":' in content
+
+    def test_forensic_keys_pass_through(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={
+                "origin_date": "2026-01-01",
+                "date_precision": "day",
+                "source": "import",
+                "predicate": "knows",
+            },
+            created="2026-05-30",
+        )
+        for key in ("origin_date", "date_precision", "source", "predicate"):
+            assert key in result.frontmatter
+
+
 class TestProvenanceThreeProperty:
     def test_ai_model_stamped_for_agent(self):
         gate, _ = _gate()

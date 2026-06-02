@@ -10,7 +10,9 @@ they cannot violate them.
 
 from __future__ import annotations
 
+import difflib
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -97,6 +99,22 @@ def _today() -> str:
     return datetime.now(UTC).date().isoformat()
 
 
+def _slugify(text: str) -> str:
+    """Kebab-case slug of ``text`` for identifier autogen (lower, alnum + hyphens)."""
+    return re.sub(r"[^a-z0-9]+", "-", text.strip().lower()).strip("-")
+
+
+def _title_case_note_type(value: str) -> str:
+    """Ensure a leading uppercase without lowercasing the rest (``plan`` -> ``Plan``,
+    ``TVSeries`` preserved)."""
+    return value[:1].upper() + value[1:] if value else value
+
+
+# Keys beginning with '@' are YAML-reserved; PyYAML single-quotes them. FR-7 wants
+# them double-quoted in emitted frontmatter.
+_AT_KEY_RE = re.compile(r"(?m)^(\s*)'(@[^']+)':")
+
+
 def _split_note(text: str) -> tuple[dict[str, Any], str]:
     """Split a note into (frontmatter dict, body). Body excludes the fences."""
     if not text.startswith("---"):
@@ -113,6 +131,7 @@ def _split_note(text: str) -> tuple[dict[str, Any], str]:
 def _render_note(frontmatter: dict[str, Any], body: str) -> str:
     """Serialize frontmatter + body into a markdown note."""
     fm_yaml = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).rstrip("\n")
+    fm_yaml = _AT_KEY_RE.sub(r'\1"\2":', fm_yaml)  # FR-7: '@type' -> "@type"
     return f"---\n{fm_yaml}\n---\n\n{body}\n"
 
 
@@ -343,6 +362,7 @@ class ConventionGate:
         reserved = {
             schema.label_field,
             schema.created_field,
+            "note_type",
             "author_type",
             "author_level",
             "ai_model",
@@ -350,7 +370,7 @@ class ConventionGate:
             schema.updated_field,
         }
         if note_type is not None:
-            fm["type"] = note_type
+            fm["note_type"] = _title_case_note_type(note_type)  # FR: Title-Case note_type
         if pillar is not None:
             fm["pillar"] = pillar
         if len(tags) > 0:
@@ -360,6 +380,13 @@ class ConventionGate:
                 if key in reserved:
                     continue  # governance fields are Gate-stamped, never caller-set
                 fm[key] = value
+
+        # identifier defaults to a kebab slug of the label; caller override wins.
+        if fm.get("identifier") in (None, ""):
+            fm["identifier"] = _slugify(title)
+        # status defaults to the schema default on create when a vocabulary exists.
+        if "status" not in fm and len(schema.status_values) > 0:
+            fm["status"] = schema.status_default
 
         # Pillar visual defaults (nn_color / nn_icon) — stamped only when the
         # caller did not supply them, so an explicit value always wins.
@@ -389,8 +416,11 @@ class ConventionGate:
             repaired = schema.normalize_status(fm["status"])
             fm["status"] = repaired
             if not schema.is_valid_status(repaired):
+                near = difflib.get_close_matches(repaired, schema.status_values, n=1)
+                suggestion = f" (did you mean {near[0]!r}?)" if len(near) > 0 else ""
                 raise FieldError(
-                    f"status {repaired!r} is not one of {sorted(schema.status_values)}"
+                    f"status {repaired!r} is not one of "
+                    f"{sorted(schema.status_values)}{suggestion}"
                 )
 
         tc = schema.type_config(note_type) if note_type is not None else None
