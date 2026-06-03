@@ -1,0 +1,117 @@
+"""dissolve / materialize orchestration (VDV F3).
+
+The verbs that sequence the translator (F2) and phdb's typed-write HTTP routes
+(F1) into the vault-DB lifecycle. vault-mcp owns orchestration because it owns
+note-shape and the local filesystem (the delete is a local op); phdb is reached
+only as a note-ignorant sink over plain HTTP.
+
+dissolve ordering is **write -> verify -> declare -> delete**, deliberately:
+the vault original is removed only after every typed write and the dissolution
+declaration have succeeded. A mid-transaction failure therefore leaves the file
+in place (content never lost) and, because the writes dedup on
+(source_file_id, raw_hash), a re-run is idempotent — the same class of bug that
+produced the historical drift rows is structurally impossible here.
+
+Both functions are dependency-injected (the HTTP poster, the file reader, the
+deleter, the gate writer are passed in) so the logic is unit-testable with fakes
+and the MCP layer wires the real adapters.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Callable, Protocol
+
+from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
+from vault_mcp.translator import (
+    PLAN_ENDPOINT,
+    note_to_payloads,
+    row_to_create_args,
+    target_tables,
+)
+
+
+class Poster(Protocol):
+    def __call__(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+
+def _target_schemas(payloads: list[dict[str, Any]]) -> list[str]:
+    """Distinct Schema.org @types a payload set lands as — for the wave's
+    target_schemas. Document payloads carry schema_type; a plan payload adds Plan."""
+    schemas: list[str] = []
+    for p in payloads:
+        if p["endpoint"] == PLAN_ENDPOINT:
+            st = "Plan"
+        else:
+            st = p["payload"].get("schema_type", "DigitalDocument")
+        if st not in schemas:
+            schemas.append(st)
+    return schemas
+
+
+def dissolve_note(
+    *,
+    source_path: str,
+    raw_text: str,
+    file_path: str | None,
+    plan_slug: str,
+    rationale: str,
+    post: Poster,
+    delete_file: Callable[[], None],
+    declared_by: str = "code",
+    repo: str = "vault",
+) -> dict[str, Any]:
+    """Dissolve one note: write its content to phdb, declare the wave, then
+    delete the original — in that order.
+
+    Returns {ok, written: [...], dissolution_id, deleted}. On any write/declare
+    failure returns {ok: False, error, stage, written} WITHOUT deleting the file.
+    """
+    frontmatter = parse_frontmatter(raw_text)
+    body = strip_frontmatter(raw_text)
+    payloads = note_to_payloads(frontmatter, body, source_path, file_path=file_path)
+
+    # 1. Write every payload; verify each. Stop before delete on any failure.
+    written: list[dict[str, Any]] = []
+    for p in payloads:
+        res = post(p["endpoint"], p["payload"])
+        if not res.get("ok"):
+            return {"ok": False, "stage": "write", "endpoint": p["endpoint"],
+                    "error": res.get("error", "write failed"), "written": written}
+        written.append({"table": res.get("table"), "id": res.get("id"),
+                        "deduped": res.get("deduped")})
+
+    # 2. Declare the dissolution wave.
+    declare = post("/dissolution/declare", {
+        "plan_slug": plan_slug,
+        "target_schemas": _target_schemas(payloads),
+        "target_tables": target_tables(payloads),
+        "rationale": rationale,
+        "declared_by": declared_by,
+        "repo": repo,
+    })
+    if not declare.get("ok"):
+        return {"ok": False, "stage": "declare",
+                "error": declare.get("error", "declare failed"), "written": written}
+
+    # 3. Only now remove the vault original.
+    delete_file()
+    return {"ok": True, "written": written,
+            "dissolution_id": declare.get("dissolution_id"), "deleted": True}
+
+
+def materialize_row(
+    *,
+    row: dict[str, Any],
+    table: str,
+    gate_create: Callable[..., dict[str, Any]],
+    paired_body: str | None = None,
+) -> dict[str, Any]:
+    """Materialize one typed phdb row back into a Convention-Gate-valid note.
+
+    ``plans`` rows are metadata-only; pass the paired ``documents`` body via
+    ``paired_body``. Returns the gate's create result.
+    """
+    args = row_to_create_args(row, table)
+    if table == "plans" and paired_body is not None:
+        args["body"] = paired_body
+    return gate_create(**args)

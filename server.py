@@ -1140,7 +1140,31 @@ if not REST_DISABLE:
 # ---------------------------------------------------------------------------
 
 PHDB_DB_PATH = os.environ.get("PHDB_DB_PATH", "")
+# phdb's plain-HTTP base URL — the dissolve verb POSTs typed writes here (VDV F3
+# transport decision: writes go over HTTP, not the legacy direct-DB seam). Reads
+# still use the direct _get_phdb_conn below.
+PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip("/")
 _phdb_conn = None
+
+
+def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """POST a typed-write/declare payload to phdb's HTTP route; structured result.
+
+    Never raises across the verb boundary — an unreachable phdb or a non-200
+    becomes {"ok": False, "error": ...} so dissolve halts before deleting.
+    """
+    import httpx
+    try:
+        resp = httpx.post(f"{PHDB_HTTP_URL}{endpoint}", json=payload, timeout=30.0)
+    except httpx.HTTPError as e:
+        return {"ok": False, "error": f"phdb unreachable: {e}"}
+    if resp.status_code != 200:
+        try:
+            detail = resp.json().get("error", resp.text)
+        except (ValueError, KeyError, AttributeError):
+            detail = resp.text
+        return {"ok": False, "error": f"phdb HTTP {resp.status_code}: {detail}"}
+    return resp.json()
 
 
 def _get_phdb_conn():
@@ -1707,6 +1731,105 @@ def create_note(
 
 
 @mcp.tool()
+def dissolve(
+    path: str,
+    plan_slug: str,
+    rationale: str,
+    declared_by: str = "code",
+    repo: str = "vault",
+) -> dict[str, Any]:
+    """Dissolve a vault note into phdb and remove the original (VDV F3).
+
+    Writes the note's full prose verbatim to phdb's documents table (and, for a
+    ``note_type: Plan``, its metadata to plans) over HTTP, declares a dissolution
+    wave, then deletes the vault file — ordering is write -> verify -> declare ->
+    delete, so a failure never deletes the file and a re-run is idempotent (phdb
+    dedups on content). The body is passed through verbatim (no fence-extraction).
+
+    Args:
+        path: Vault-relative path to the note (e.g. 'System/Plans/Foo.md').
+        plan_slug: The dissolution wave's driving plan identifier.
+        rationale: Why this content is dissolved (recorded on the wave).
+        declared_by: 'code' / 'cowork' / 'backfill'.
+        repo: Registry repo scope (default 'vault').
+
+    Returns:
+        {"ok": True, "written": [...], "dissolution_id", "deleted": True}, or a
+        structured error naming the failing stage (the file is left in place).
+    """
+    from vault_mcp.lifecycle_verbs import dissolve_note
+
+    abs_path = (VAULT_PATH / path).resolve()
+    try:
+        abs_path.relative_to(VAULT_PATH.resolve())
+    except ValueError:
+        return {"ok": False, "error": "outside_vault", "detail": path}
+    if not abs_path.is_file():
+        return {"ok": False, "error": "not_found", "detail": str(abs_path)}
+
+    raw_text = abs_path.read_text(encoding="utf-8")
+    return dissolve_note(
+        source_path=str(abs_path), raw_text=raw_text, file_path=abs_path.name,
+        plan_slug=plan_slug, rationale=rationale, post=_phdb_post,
+        delete_file=abs_path.unlink, declared_by=declared_by, repo=repo,
+    )
+
+
+@mcp.tool()
+def materialize(table: str, row_id: int, actor: str = "agent") -> dict[str, Any]:
+    """Materialize a dissolved phdb row back into a Convention-Gate note (VDV F3).
+
+    The inverse of ``dissolve``: reads a typed row (documents or plans) from phdb
+    and recreates a note through the Gate. Plan rows are metadata-only; their
+    prose is pulled from the paired documents row when available. (Restoring plan
+    metadata into frontmatter is a known follow-on.) Returns the Gate create
+    result, or a structured error.
+
+    Distinct from ``compute_receiver`` (which materializes a fresh compute payload,
+    not a previously-dissolved row).
+    """
+    from vault_mcp.lifecycle_verbs import materialize_row
+    from vault_mcp.provenance import Actor
+
+    if table not in ("documents", "plans"):
+        return {"ok": False, "error": "bad_table", "detail": table}
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+
+    cur = conn.execute(f"SELECT * FROM {table} WHERE id = ?", (row_id,))  # noqa: S608 - table is enum-guarded
+    fetched = cur.fetchone()
+    if fetched is None:
+        return {"ok": False, "error": "row_not_found", "detail": f"{table}#{row_id}"}
+    cols = [c[0] for c in cur.description]
+    row = dict(zip(cols, fetched))
+
+    paired_body: str | None = None
+    if table == "plans":
+        d = conn.execute(
+            "SELECT body_text FROM documents WHERE source_file_id = ? LIMIT 1",
+            (row.get("source_file_id"),),
+        ).fetchone()
+        if d is not None:
+            paired_body = d[0]
+
+    _actor = Actor.HUMAN if actor == "human" else Actor.AGENT
+
+    def _gate_create(**kw: Any) -> dict[str, Any]:
+        return _get_gate().create_note(
+            title=kw["title"], note_type=kw.get("note_type"),
+            body=kw.get("body", ""), actor=_actor,
+        ).to_dict()
+
+    try:
+        return materialize_row(
+            row=row, table=table, gate_create=_gate_create, paired_body=paired_body,
+        )
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
 def update_note(
     path: str,
     fields: dict[str, Any] | None = None,
@@ -1762,14 +1885,17 @@ def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict
 
 
 @mcp.tool()
-def materialize(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
-    """Materialize a durable note from a structured payload (lifecycle verb).
+def compute_receiver(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
+    """Receive a compute result and write it as a durable note (Compute Receiver).
 
-    Accepts a payload (title, note_type, directory, body, frontmatter,
+    Accepts a structured payload (title, note_type, directory, body, frontmatter,
     optional template/data) and writes it through the Gate with mode=COMPUTE —
     the sanctioned path for materialize-only @types, which the ordinary
     agent-create path rejects. Rendering is deterministic (no LLM): the same
     payload yields a byte-identical note.
+
+    (Renamed from ``materialize`` — that verb now belongs to the VDV dissolve
+    inverse, which rehydrates a dissolved phdb row back into a note.)
 
     Returns:
         {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
