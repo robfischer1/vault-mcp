@@ -38,6 +38,34 @@ invoke the Gate is already inside the user's machine."
 Surfaced in `WriteResult.warnings`, never block the write: reserved-tag use by an
 agent (#todo/#starred/…), and missing recommended links (`isBasedOn`, `up:`).
 
+## phdb write surface (lifecycle verbs — V2D #134)
+
+Beyond the vault, two lifecycle verbs write into the sibling
+`personal-history-db` (phdb) SQLite store. This widens vault-mcp's write
+surface from "the vault" to "the vault + phdb"; both are local, single-user
+datastores, so the trust boundary is unchanged ("any caller inside the
+machine"), but the integrity discipline is recorded here.
+
+| Surface | What it writes | Discipline | Source |
+|---|---|---|---|
+| **Atom emit** | one `session_events` row per AI-observed atom (decision / reversal / tension / pushback) | **write-only**; per-type payload contract validated, **unknown fields rejected** (typo guard); stored as a deterministic JSON blob | `phdb_client.py` (#139/#140) |
+| **Predicate triples** | `ai-emitted` edges in phdb's `triples` store from a note's `up`/`links`/`keywords`/`tags` + `predicate:` frontmatter | phdb-side (file_revisions walker); replaces only the note's **own** prior `ai-emitted` edges (scoped by `source_ref`) — never human/extraction edges | phdb `_emit_current_triples` (#142) |
+
+Boundary obligations:
+
+- **Write-only / least surface.** The client only inserts `session_events`;
+  all reads, identity resolution, and graph logic stay in phdb (vault-mcp does
+  not reimplement phdb's node/predicate layer).
+- **Lock-coordinated.** Atom emit acquires phdb's *own* `write_lock` (not a
+  reimplementation) so it mutually excludes with phdb's ingest/embed writers;
+  contention surfaces as a structured `phdb_busy`, never a corrupting
+  half-write.
+- **Graceful degradation.** When `PHDB_DB_PATH` is unset or the DB is missing,
+  the verb returns a structured `phdb_unavailable` error and the rest of the
+  server is unaffected (mirrors the REST-optional posture, Constitution II).
+- **Provenance.** Triple edges are stamped `ai-emitted`; the replace step is
+  scoped by `source_ref` so it can only retract edges vault-mcp authored.
+
 ## Obligations / notes
 
 - All deny rules are deterministic and unit-tested against single-file fixtures
@@ -46,3 +74,6 @@ agent (#todo/#starred/…), and missing recommended links (`isBasedOn`, `up:`).
   (`vault-mcp.schema.yml`), so the policy is auditable as config, not buried in code.
 - COMPUTE mode is the sole bypass for materialize-only — it is reachable only via
   the Compute Receiver / materialize verb, not the agent create path.
+- The phdb write surface is unit-tested against a temp/in-memory SQLite, never a
+  live phdb instance (`tests/test_phdb_client.py`; phdb-side
+  `tests/test_file_revisions_triples.py`).
