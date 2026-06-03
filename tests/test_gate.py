@@ -350,6 +350,71 @@ class TestFrontmatterStamping:
             assert key in result.frontmatter
 
 
+class TestTagEnhancements:
+    def test_reserved_tag_warns_not_rejects(self):
+        gate, vault = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            tags=["todo"],
+            actor=Actor.AGENT,
+            created="2026-05-30",
+        )
+        assert len(result.warnings) == 1
+        assert "todo" in result.warnings[0]
+        assert len(vault.calls) == 1  # write still happened
+
+    def test_reserved_tag_no_warn_for_human(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            tags=["todo"],
+            actor=Actor.HUMAN,
+            created="2026-05-30",
+        )
+        assert result.warnings == []
+
+    def test_inline_tags_escaped_in_references(self):
+        gate, vault = _gate()
+        result = gate.create_note(
+            title="imp",
+            note_type="note",
+            directory="References/Imports",
+            body="I like #cooking and #fitness here.",
+            created="2026-05-30",
+        )
+        content = vault.store[result.path]
+        assert "\\#cooking" in content and "\\#fitness" in content
+
+    def test_inline_tag_exemptions(self):
+        gate, vault = _gate()
+        result = gate.create_note(
+            title="imp2",
+            note_type="note",
+            directory="References/Imports",
+            body="done #activity/processed see http://x.com#frag and `#code`",
+            created="2026-05-30",
+        )
+        content = vault.store[result.path]
+        assert "#activity/processed" in content and "\\#activity/processed" not in content
+        assert "x.com#frag" in content  # URL fragment not escaped
+
+    def test_no_escaping_outside_imported_dirs(self):
+        gate, vault = _gate()
+        result = gate.create_note(
+            title="k",
+            note_type="note",
+            pillar="Knowledge",
+            body="A #realtag stays bare in Knowledge.",
+            created="2026-05-30",
+        )
+        content = vault.store[result.path]
+        assert "#realtag" in content and "\\#realtag" not in content
+
+
 class TestBodyValidation:
     def test_angle_bracket_placeholder_rejected(self):
         gate, _ = _gate()

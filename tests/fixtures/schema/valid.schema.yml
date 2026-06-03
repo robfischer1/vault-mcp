@@ -8,6 +8,12 @@ tags:
   - status/active
   - status/done
   - topic/ai
+  - todo
+  - starred
+
+reserved_tags:
+  - todo
+  - starred
 
 routes:
   - note_type: note

@@ -82,6 +82,7 @@ class WriteResult:
     author_type: AuthorType = AuthorType.AI
     ai_model: str | None = None
     created: bool = field(default=True)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def author_level(self) -> Provenance:
@@ -96,6 +97,7 @@ class WriteResult:
             "author_type": self.author_type.value,
             "author_level": self.provenance.value,
             "ai_model": self.ai_model,
+            "warnings": self.warnings,
         }
 
 
@@ -128,6 +130,27 @@ _ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z][A-Za-z0-9]*>")
 def _strip_code(text: str) -> str:
     """Remove fenced blocks and inline code spans so body scans ignore code."""
     return _INLINE_CODE_RE.sub("", _FENCE_RE.sub("", text))
+
+
+# Inline-tag escaping for imported bodies (FR-15): a '#tag' at a word boundary
+# (so URL fragments like 'x#frag' are skipped). #activity/processed is exempt.
+_INLINE_TAG_RE = re.compile(r"(?<!\S)#([A-Za-z][\w/-]*)")
+_TAG_ESCAPE_EXEMPT = ("activity/processed",)
+
+
+def _escape_inline_tags(body: str) -> str:
+    """Escape bare ``#tag`` to ``\\#tag`` in imported body text, outside fenced code."""
+
+    def repl(m: re.Match[str]) -> str:
+        tag = m.group(1)
+        if tag.startswith(_TAG_ESCAPE_EXEMPT):
+            return m.group(0)
+        return "\\#" + tag
+
+    parts = re.split(r"(```.*?```)", body, flags=re.DOTALL)
+    for i in range(0, len(parts), 2):  # even indices are outside fenced code
+        parts[i] = _INLINE_TAG_RE.sub(repl, parts[i])
+    return "".join(parts)
 
 
 def _split_note(text: str) -> tuple[dict[str, Any], str]:
@@ -249,6 +272,7 @@ class ConventionGate:
             extra_fields=extra_fields,
         )
         self._enforce_type_rules(note_type, frontmatter)
+        body = self._maybe_escape_body(directory, body)
         self._validate_body(note_type, directory, body)
 
         path = f"{directory}/{title}.md"
@@ -259,9 +283,26 @@ class ConventionGate:
             provenance=author_level,
             author_type=resolved_author_type,
             ai_model=model,
+            warnings=self._tag_warnings(tags, actor),
         )
         self._emit_diff(path, "create", sorted(frontmatter.keys()), author_level)
         return result
+
+    # --- Tag enhancements (Feature: Tag Enhancements) ----------------------
+    def _tag_warnings(self, tags: list[str], actor: Actor) -> list[str]:
+        """Advisory (non-blocking) warnings when an agent uses reserved tags (FR-13)."""
+        if actor is not Actor.AGENT:
+            return []
+        hits = [t for t in tags if t in self._schema.reserved_tags]
+        if len(hits) == 0:
+            return []
+        return [f"reserved tag(s) {hits} are normally set by Rob, not agents"]
+
+    def _maybe_escape_body(self, directory: str, body: str) -> str:
+        """Escape bare inline #tags in imported bodies (References/, Records/) — FR-15."""
+        if directory.startswith("References") or directory.startswith("Records"):
+            return _escape_inline_tags(body)
+        return body
 
     # --- Note update (Feature: Note update) --------------------------------
     def update_note(
@@ -337,8 +378,9 @@ class ConventionGate:
 
         new_body = body if body is not None else current_body
         if touches_body:
-            changed.append("body")
+            new_body = self._maybe_escape_body(directory, new_body)
             self._validate_body(current_fm.get("note_type"), directory, new_body)
+            changed.append("body")
 
         self._io.write_note(path, _render_note(new_fm, new_body))
         result = WriteResult(
@@ -348,6 +390,7 @@ class ConventionGate:
             author_type=new_at,
             ai_model=new_fm.get("ai_model"),
             created=False,
+            warnings=self._tag_warnings(tags if tags is not None else [], actor),
         )
         self._emit_diff(path, "update", changed, new_level)
         return result
