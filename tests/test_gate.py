@@ -23,6 +23,7 @@ from vault_mcp.gate import (  # noqa: E402
     LinkError,
     ProtectionError,
     TagError,
+    WriteModeError,
 )
 from vault_mcp.provenance import Actor, Provenance, WriteMode  # noqa: E402
 from vault_mcp.schema import load_schema  # noqa: E402
@@ -349,6 +350,48 @@ class TestFrontmatterStamping:
         )
         for key in ("origin_date", "date_precision", "source", "predicate"):
             assert key in result.frontmatter
+
+
+class TestWriteModeEnforcement:
+    def test_agent_create_materialize_only_rejected(self):
+        gate, writer = _gate()
+        with pytest.raises(WriteModeError) as exc:
+            gate.create_note(
+                title="H", note_type="Dossier", directory="Knowledge", created="2026-05-30"
+            )
+        assert "materialize-only" in str(exc.value)
+        assert len(writer.calls) == 0
+
+    def test_compute_mode_materialize_only_allowed(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="H",
+            note_type="Dossier",
+            directory="Knowledge",
+            mode=WriteMode.COMPUTE,
+            created="2026-05-30",
+        )
+        assert result.path.endswith("H.md")
+
+    def test_pure_db_type_rejected(self):
+        gate, writer = _gate()
+        with pytest.raises(WriteModeError) as exc:
+            gate.create_note(
+                title="d", note_type="signal", directory="Knowledge", created="2026-05-30"
+            )
+        assert "pure-DB" in str(exc.value)
+        assert len(writer.calls) == 0
+
+    def test_pure_db_rejected_even_in_compute(self):
+        gate, _ = _gate()
+        with pytest.raises(WriteModeError):
+            gate.create_note(
+                title="d",
+                note_type="signal",
+                directory="Knowledge",
+                mode=WriteMode.COMPUTE,
+                created="2026-05-30",
+            )
 
 
 class TestLinkValidation:

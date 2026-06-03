@@ -6,6 +6,9 @@ the schema-resolved directory, enforces per-directory write-protection, and
 stamps provenance — then hands the finished note to a writer (the Obsidian
 CLI in production, a fake in tests). Agents need not know the rules because
 they cannot violate them.
+
+The full deny/protection surface is documented in
+``docs/security/write-protections.md``.
 """
 
 from __future__ import annotations
@@ -62,6 +65,10 @@ class BodyError(GateError):
 
 class LinkError(GateError):
     """A frontmatter link (prev/next) does not resolve to an existing note."""
+
+
+class WriteModeError(GateError):
+    """The note's @type write-mode forbids this write path (materialize-only / pure-DB)."""
 
 
 class NoteIO(Protocol):
@@ -212,6 +219,25 @@ class ConventionGate:
         if rule.rule == "voice-only" and actor is not Actor.HUMAN:
             raise ProtectionError(rule.error)
 
+    # --- Write-mode enforcement (Feature: Write-Mode Enforcement) ----------
+    def _check_write_mode(self, note_type: str | None, mode: WriteMode) -> None:
+        """Enforce the @type write-mode (FR — materialize-only / pure-DB).
+
+        pure-DB types are never vault files; materialize-only types may only be
+        written by the materialize/compute path (mode=COMPUTE), not agent-create.
+        """
+        tc = self._schema.type_config(note_type) if note_type is not None else None
+        if tc is None:
+            return
+        if tc.write_mode == "pure-DB":
+            raise WriteModeError(
+                f"{note_type} is pure-DB; use atom emit or phdb directly, not a vault write"
+            )
+        if tc.write_mode == "materialize-only" and mode is not WriteMode.COMPUTE:
+            raise WriteModeError(
+                f"{note_type} is materialize-only; use the materialize verb, not agent-create"
+            )
+
     # --- Tag validation (Feature: Write validation & rejection) ------------
     def _validate_tags(self, tags: list[str]) -> None:
         unknown = [t for t in tags if not self._schema.is_valid_tag(t)]
@@ -252,6 +278,7 @@ class ConventionGate:
         if title.strip() == "":
             raise FieldError("title is required and must be non-empty")
 
+        self._check_write_mode(note_type, mode)
         self._validate_tags(tags)
 
         if directory is None:
