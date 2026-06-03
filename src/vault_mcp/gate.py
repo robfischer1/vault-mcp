@@ -422,6 +422,23 @@ class ConventionGate:
             if isinstance(raw_at, str) and raw_at
             else author_type_for(current_level)
         )
+
+        # Provenance-based body protection (FR-29): an AI agent may not rewrite the
+        # body of human/external-authored content (metadata edits stay OK). Exception:
+        # Outputs/ Articles (@type=Article) remain AI-body-mutable.
+        if touches_body and actor is Actor.AGENT and current_at in (
+            AuthorType.HUMAN,
+            AuthorType.EXTERNAL,
+        ):
+            is_outputs_article = directory.startswith("Outputs") and (
+                current_fm.get("@type") == "Article" or current_fm.get("note_type") == "Article"
+            )
+            if not is_outputs_article:
+                raise ProtectionError(
+                    f"{path} is {current_at.value}-authored; an AI agent may edit metadata "
+                    f"only, not the body"
+                )
+
         new_level = transition(current_level, actor)
         new_at = transition_author_type(current_at, actor)
         new_fm["author_level"] = new_level.value

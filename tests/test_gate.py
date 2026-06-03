@@ -352,6 +352,49 @@ class TestFrontmatterStamping:
             assert key in result.frontmatter
 
 
+class TestProvenanceBodyProtection:
+    def _seed(self, vault, path, author_type, note_type="note", at_type=None):
+        at = f'"@type": {at_type}\n' if at_type else ""
+        vault.store[path] = (
+            f"---\ntitle: t\nnote_type: {note_type}\nauthor_type: {author_type}\n"
+            f"author_level: human\n{at}---\n\noriginal\n"
+        )
+
+    def test_agent_body_edit_human_note_rejected(self):
+        gate, vault = _gate()
+        self._seed(vault, "Knowledge/Notes/h.md", "human")
+        with pytest.raises(ProtectionError) as exc:
+            gate.update_note("Knowledge/Notes/h.md", body="rewritten", actor=Actor.AGENT)
+        assert "metadata" in str(exc.value)
+
+    def test_agent_metadata_edit_human_note_allowed(self):
+        gate, vault = _gate()
+        self._seed(vault, "Knowledge/Notes/h.md", "human")
+        result = gate.update_note(
+            "Knowledge/Notes/h.md", fields={"status": "Active"}, actor=Actor.AGENT
+        )
+        assert result.frontmatter["status"] == "Active"
+
+    def test_agent_body_edit_external_note_rejected(self):
+        gate, vault = _gate()
+        self._seed(vault, "Knowledge/Notes/e.md", "external")
+        with pytest.raises(ProtectionError):
+            gate.update_note("Knowledge/Notes/e.md", body="rewritten", actor=Actor.AGENT)
+
+    def test_outputs_article_exception_allows_ai_body(self):
+        gate, vault = _gate()
+        self._seed(vault, "Outputs/Articles/a.md", "human", note_type="Article")
+        result = gate.update_note("Outputs/Articles/a.md", body="new draft", actor=Actor.AGENT)
+        assert "new draft" in vault.store["Outputs/Articles/a.md"]
+        assert result is not None
+
+    def test_human_body_edit_human_note_allowed(self):
+        gate, vault = _gate()
+        self._seed(vault, "Knowledge/Notes/h.md", "human")
+        gate.update_note("Knowledge/Notes/h.md", body="rewritten", actor=Actor.HUMAN)
+        assert "rewritten" in vault.store["Knowledge/Notes/h.md"]
+
+
 class TestWriteModeEnforcement:
     def test_agent_create_materialize_only_rejected(self):
         gate, writer = _gate()
