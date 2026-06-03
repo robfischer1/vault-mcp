@@ -20,6 +20,7 @@ from vault_mcp.gate import (  # noqa: E402
     BodyError,
     ConventionGate,
     FieldError,
+    FilenameError,
     LinkError,
     ProtectionError,
     TagError,
@@ -350,6 +351,47 @@ class TestFrontmatterStamping:
         )
         for key in ("origin_date", "date_precision", "source", "predicate"):
             assert key in result.frontmatter
+
+
+class TestFilenameConventions:
+    def test_atom_slug_filename(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="A fleeting idea",
+            note_type="atom",
+            directory="Knowledge",
+            created="2026-05-30",
+        )
+        assert result.path == "Knowledge/2026-05-30-atom.0.md"
+
+    def test_atom_slug_increments(self):
+        gate, vault = _gate()
+        first = gate.create_note(
+            title="one", note_type="atom", directory="Knowledge", created="2026-05-30"
+        )
+        second = gate.create_note(
+            title="two", note_type="atom", directory="Knowledge", created="2026-05-30"
+        )
+        assert first.path.endswith("-atom.0.md")
+        assert second.path.endswith("-atom.1.md")
+
+    def test_numeric_folder_prefix_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(FilenameError) as exc:
+            gate.create_note(
+                title="X", note_type="note", directory="01 Foo", created="2026-05-30"
+            )
+        assert "numeric folder prefix" in str(exc.value)
+
+    def test_pillar_dash_prefix_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(FilenameError):
+            gate.create_note(
+                title="Knowledge -- My Note",
+                note_type="note",
+                directory="Knowledge",
+                created="2026-05-30",
+            )
 
 
 class TestProvenanceBodyProtection:

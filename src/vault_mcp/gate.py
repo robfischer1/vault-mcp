@@ -71,6 +71,10 @@ class WriteModeError(GateError):
     """The note's @type write-mode forbids this write path (materialize-only / pure-DB)."""
 
 
+class FilenameError(GateError):
+    """The target filename or path uses a forbidden convention."""
+
+
 class NoteIO(Protocol):
     """The vault IO surface the Gate depends on (Obsidian CLI implements it)."""
 
@@ -307,7 +311,13 @@ class ConventionGate:
         self._validate_body(note_type, directory, body)
         self._validate_links(frontmatter)
 
-        path = f"{directory}/{title}.md"
+        tc = self._schema.type_config(note_type) if note_type is not None else None
+        if tc is not None and tc.atom_slug and note_type is not None:
+            filename = self._atom_filename(created if created is not None else _today(), note_type, directory)
+        else:
+            filename = title
+        self._check_filename(directory, filename)
+        path = f"{directory}/{filename}.md"
         self._io.create_note(path, _render_note(frontmatter, body))
         result = WriteResult(
             path=path,
@@ -320,6 +330,29 @@ class ConventionGate:
         )
         self._emit_diff(path, "create", sorted(frontmatter.keys()), author_level)
         return result
+
+    # --- Filename conventions (Feature: Filename Conventions) --------------
+    def _atom_filename(self, created: str, note_type: str, directory: str) -> str:
+        """Dated atom slug YYYY-MM-DD-{type}.{seq}; seq probes for the next free name."""
+        base = f"{created}-{note_type}"
+        seq = 0
+        while True:
+            candidate = f"{base}.{seq}"
+            try:
+                self._io.read_note(f"{directory}/{candidate}.md")
+            except (KeyError, OSError):
+                return candidate
+            seq += 1
+
+    def _check_filename(self, directory: str, filename: str) -> None:
+        """Reject numeric folder prefixes and ``Pillar -- `` filename prefixes (FR-25)."""
+        for segment in directory.split("/"):
+            if re.match(r"^\d+[\s_-]", segment):
+                raise FilenameError(f"numeric folder prefix is not allowed: {segment!r}")
+        if re.search(r"\s--\s", filename):
+            raise FilenameError(
+                f"' -- ' prefix is not allowed (retired 'Pillar -- ' convention): {filename!r}"
+            )
 
     # --- Tag enhancements (Feature: Tag Enhancements) ----------------------
     def _tag_warnings(self, tags: list[str], actor: Actor) -> list[str]:

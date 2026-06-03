@@ -81,6 +81,10 @@ types:
     required: [title]
     body_empty: true
     write_mode: agent
+  atom:
+    required: [title]
+    atom_slug: true
+    write_mode: agent
 
 pillar_defaults:
   Knowledge:

@@ -143,6 +143,7 @@ class TypeConfig:
     freeform_fields: tuple[str, ...] = ()
     write_mode: str = "agent"
     body_empty: bool = False
+    atom_slug: bool = False
     value_constraints: tuple[tuple[str, tuple[str, ...]], ...] = ()
     formats: tuple[tuple[str, str], ...] = ()
 
@@ -333,6 +334,7 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
                 freeform_fields=tuple(cfg.get("freeform", []) or []),
                 write_mode=cfg.get("write_mode", "agent"),
                 body_empty=bool(cfg.get("body_empty", False)),
+                atom_slug=bool(cfg.get("atom_slug", False)),
                 value_constraints=constraints,
                 formats=formats,
             )
