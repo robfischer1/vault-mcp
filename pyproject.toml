@@ -55,6 +55,13 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
+# phdb is an optional sibling package resolved on sys.path at runtime (atom
+# emit / triple tools), never a declared dependency of this publish-track
+# server. It ships no type stubs, so its imports are untyped here.
+[[tool.mypy.overrides]]
+module = "phdb.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

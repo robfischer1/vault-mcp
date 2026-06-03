@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
+    from vault_mcp.lifecycle import Materializer
     from vault_mcp.rest_client import ObsidianRESTClient
 
 _src = Path(__file__).resolve().parent / "src"
@@ -1632,6 +1633,18 @@ def _get_compute_receiver() -> ComputeReceiver:
     return _compute_receiver
 
 
+_materializer: Materializer | None = None
+
+
+def _get_materializer() -> Materializer:
+    global _materializer
+    if _materializer is None:
+        from vault_mcp.lifecycle import Materializer
+
+        _materializer = Materializer(_get_gate(), _load_templates())
+    return _materializer
+
+
 def _gate_error_envelope(exc: Exception) -> dict[str, Any]:
     """Map Gate/schema/IO exceptions to a structured tool error."""
     from vault_mcp.cli_client import ObsidianIOError
@@ -1746,6 +1759,74 @@ def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def materialize(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
+    """Materialize a durable note from a structured payload (lifecycle verb).
+
+    Accepts a payload (title, note_type, directory, body, frontmatter,
+    optional template/data) and writes it through the Gate with mode=COMPUTE —
+    the sanctioned path for materialize-only @types, which the ordinary
+    agent-create path rejects. Rendering is deterministic (no LLM): the same
+    payload yields a byte-identical note.
+
+    Returns:
+        {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
+    """
+    from vault_mcp.lifecycle import MaterializePayloadError
+
+    try:
+        result = _get_materializer().materialize(payload, created=created)
+        return result.to_dict()
+    except MaterializePayloadError as exc:
+        return {"ok": False, "error": "bad_payload", "detail": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def atom(
+    atom_type: str,
+    payload: dict[str, Any],
+    ts: str | None = None,
+) -> dict[str, Any]:
+    """Emit an AI-observed atom (decision/reversal/tension/pushback) to phdb.
+
+    Records the atom directly into phdb's session_events table, skipping the
+    vault filesystem entirely (lifecycle verb). The payload contract is
+    per-type. When phdb is not configured (PHDB_DB_PATH unset or the DB file is
+    missing), returns a structured 'phdb_unavailable' error rather than failing.
+
+    Args:
+        atom_type: One of 'decision', 'reversal', 'tension', 'pushback'.
+        payload: Type-specific fields — decision: {polarity, reversed_by?};
+            reversal: {reverses, position_before, position_after, trigger?,
+            captured_when?}; tension: {position_a, position_b, held_since?,
+            resolution?, captured_when?}; pushback: {from, challenge, response,
+            position_changed?, captured_when?}.
+        ts: Optional ISO-8601 event time; defaults to the payload's
+            captured_when when present.
+
+    Returns:
+        {"ok": True, "atom_type", "event_id", "ts"} or a structured error.
+    """
+    from vault_mcp.phdb_client import (
+        AtomError,
+        PhdbBusyError,
+        PhdbUnavailableError,
+        emit_atom,
+    )
+
+    try:
+        result = emit_atom(atom_type, payload, ts=ts)
+        return result.to_dict()
+    except AtomError as exc:
+        return {"ok": False, "error": "bad_payload", "detail": str(exc)}
+    except PhdbBusyError as exc:
+        return {"ok": False, "error": "phdb_busy", "detail": str(exc)}
+    except PhdbUnavailableError as exc:
+        return {"ok": False, "error": "phdb_unavailable", "detail": str(exc)}
 
 
 def main() -> None:
