@@ -60,6 +60,10 @@ class BodyError(GateError):
     """The note body violates a content rule (placeholder / stub / template)."""
 
 
+class LinkError(GateError):
+    """A frontmatter link (prev/next) does not resolve to an existing note."""
+
+
 class NoteIO(Protocol):
     """The vault IO surface the Gate depends on (Obsidian CLI implements it)."""
 
@@ -274,6 +278,7 @@ class ConventionGate:
         self._enforce_type_rules(note_type, frontmatter)
         body = self._maybe_escape_body(directory, body)
         self._validate_body(note_type, directory, body)
+        self._validate_links(frontmatter)
 
         path = f"{directory}/{title}.md"
         self._io.create_note(path, _render_note(frontmatter, body))
@@ -283,7 +288,8 @@ class ConventionGate:
             provenance=author_level,
             author_type=resolved_author_type,
             ai_model=model,
-            warnings=self._tag_warnings(tags, actor),
+            warnings=self._tag_warnings(tags, actor)
+            + self._link_warnings(directory, title, frontmatter),
         )
         self._emit_diff(path, "create", sorted(frontmatter.keys()), author_level)
         return result
@@ -303,6 +309,39 @@ class ConventionGate:
         if directory.startswith("References") or directory.startswith("Records"):
             return _escape_inline_tags(body)
         return body
+
+    # --- Link validation (Feature: Link Validation) ------------------------
+    def _link_resolves(self, value: object) -> bool:
+        """True if a prev/next link value resolves to an existing note via the IO."""
+        target = str(value).strip().strip("[]").strip()
+        if target == "":
+            return False
+        if not target.endswith(".md"):
+            target = target + ".md"
+        try:
+            self._io.read_note(target)
+        except (KeyError, OSError):  # not found in the fake store / on disk
+            return False
+        return True
+
+    def _validate_links(self, fm: dict[str, Any]) -> None:
+        """Reject prev/next frontmatter that doesn't resolve to a file (FR-35)."""
+        for key in ("prev", "next"):
+            value = fm.get(key)
+            if value is not None and not self._link_resolves(value):
+                raise LinkError(f"{key} -> {value!r} does not resolve to an existing note")
+
+    def _link_warnings(self, directory: str, title: str, fm: dict[str, Any]) -> list[str]:
+        """Advisory (non-blocking) warnings for missing recommended links (FR-36)."""
+        warns: list[str] = []
+        derived = directory.startswith("Artifacts") or directory.startswith("Records")
+        if derived and "isBasedOn" not in fm:
+            warns.append("isBasedOn missing for an Artifacts/Records-derived note")
+        last = directory.rsplit("/", 1)[-1] if directory else ""
+        is_folder_note = title == last  # folder-note / pillar-root exception
+        if "up" not in fm and not is_folder_note:
+            warns.append("up: missing — consider linking this note to its parent")
+        return warns
 
     # --- Note update (Feature: Note update) --------------------------------
     def update_note(
@@ -382,6 +421,8 @@ class ConventionGate:
             self._validate_body(current_fm.get("note_type"), directory, new_body)
             changed.append("body")
 
+        self._validate_links(new_fm)
+        title = path.rsplit("/", 1)[-1].removesuffix(".md")
         self._io.write_note(path, _render_note(new_fm, new_body))
         result = WriteResult(
             path=path,
@@ -390,7 +431,8 @@ class ConventionGate:
             author_type=new_at,
             ai_model=new_fm.get("ai_model"),
             created=False,
-            warnings=self._tag_warnings(tags if tags is not None else [], actor),
+            warnings=self._tag_warnings(tags if tags is not None else [], actor)
+            + self._link_warnings(directory, title, new_fm),
         )
         self._emit_diff(path, "update", changed, new_level)
         return result

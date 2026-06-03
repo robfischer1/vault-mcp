@@ -20,6 +20,7 @@ from vault_mcp.gate import (  # noqa: E402
     BodyError,
     ConventionGate,
     FieldError,
+    LinkError,
     ProtectionError,
     TagError,
 )
@@ -350,6 +351,55 @@ class TestFrontmatterStamping:
             assert key in result.frontmatter
 
 
+class TestLinkValidation:
+    def test_unresolvable_prev_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(LinkError) as exc:
+            gate.create_note(
+                title="X",
+                note_type="note",
+                pillar="Knowledge",
+                extra_fields={"prev": "[[Nonexistent]]"},
+                created="2026-05-30",
+            )
+        assert "prev" in str(exc.value)
+
+    def test_resolvable_next_passes(self):
+        gate, vault = _gate()
+        vault.store["Knowledge/Notes/Target.md"] = "---\ntitle: t\n---\n\nbody\n"
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={"next": "Knowledge/Notes/Target"},
+            created="2026-05-30",
+        )
+        assert result.frontmatter["next"] == "Knowledge/Notes/Target"
+
+    def test_missing_isbasedon_warns_in_records(self):
+        gate, vault = _gate()
+        # update path (Records create is protected) to exercise the advisory
+        vault.store["Records/r.md"] = (
+            "---\ntitle: r\nauthor_type: human\nauthor_level: human\nup: '[[Records]]'\n---\n\nb\n"
+        )
+        result = gate.update_note("Records/r.md", fields={"status": "Active"})
+        assert any("isBasedOn" in w for w in result.warnings)
+
+    def test_missing_up_warns(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="Child", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        assert any("up:" in w for w in result.warnings)
+
+    def test_folder_note_no_up_warning(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="Knowledge", note_type="note", directory="Knowledge", created="2026-05-30"
+        )
+        assert not any("up:" in w for w in result.warnings)
+
+
 class TestTagEnhancements:
     def test_reserved_tag_warns_not_rejects(self):
         gate, vault = _gate()
@@ -361,8 +411,7 @@ class TestTagEnhancements:
             actor=Actor.AGENT,
             created="2026-05-30",
         )
-        assert len(result.warnings) == 1
-        assert "todo" in result.warnings[0]
+        assert any("todo" in w for w in result.warnings)
         assert len(vault.calls) == 1  # write still happened
 
     def test_reserved_tag_no_warn_for_human(self):
@@ -375,7 +424,7 @@ class TestTagEnhancements:
             actor=Actor.HUMAN,
             created="2026-05-30",
         )
-        assert result.warnings == []
+        assert not any("reserved" in w for w in result.warnings)
 
     def test_inline_tags_escaped_in_references(self):
         gate, vault = _gate()
