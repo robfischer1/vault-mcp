@@ -71,6 +71,10 @@ types:
     formats:
       coords: geo
     write_mode: agent
+  Stub:
+    required: [title]
+    body_empty: true
+    write_mode: agent
 
 pillar_defaults:
   Knowledge:

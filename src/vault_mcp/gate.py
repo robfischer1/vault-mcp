@@ -56,6 +56,10 @@ class ProtectionError(GateError):
     """The target directory is write-protected for this write."""
 
 
+class BodyError(GateError):
+    """The note body violates a content rule (placeholder / stub / template)."""
+
+
 class NoteIO(Protocol):
     """The vault IO surface the Gate depends on (Obsidian CLI implements it)."""
 
@@ -113,6 +117,17 @@ def _title_case_note_type(value: str) -> str:
 # Keys beginning with '@' are YAML-reserved; PyYAML single-quotes them. FR-7 wants
 # them double-quoted in emitted frontmatter.
 _AT_KEY_RE = re.compile(r"(?m)^(\s*)'(@[^']+)':")
+
+# Body-validation regexes: strip code spans/fences before scanning for bare
+# angle-bracket placeholders (which break Obsidian rendering — FR-33).
+_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`]*`")
+_ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z][A-Za-z0-9]*>")
+
+
+def _strip_code(text: str) -> str:
+    """Remove fenced blocks and inline code spans so body scans ignore code."""
+    return _INLINE_CODE_RE.sub("", _FENCE_RE.sub("", text))
 
 
 def _split_note(text: str) -> tuple[dict[str, Any], str]:
@@ -234,6 +249,7 @@ class ConventionGate:
             extra_fields=extra_fields,
         )
         self._enforce_type_rules(note_type, frontmatter)
+        self._validate_body(note_type, directory, body)
 
         path = f"{directory}/{title}.md"
         self._io.create_note(path, _render_note(frontmatter, body))
@@ -322,6 +338,7 @@ class ConventionGate:
         new_body = body if body is not None else current_body
         if touches_body:
             changed.append("body")
+            self._validate_body(current_fm.get("note_type"), directory, new_body)
 
         self._io.write_note(path, _render_note(new_fm, new_body))
         result = WriteResult(
@@ -420,6 +437,31 @@ class ConventionGate:
                 del fm[old]
         for dead in self._schema.dead_keys:
             fm.pop(dead, None)
+
+    # --- Body validation (Feature: Body Validation) ------------------------
+    def _validate_body(self, note_type: str | None, directory: str, body: str) -> None:
+        """Reject body-content rule violations (FR-30/31/33).
+
+        Stub types must be body-empty; System/Templates files must use a
+        Templater fence (not a literal ``---``); bare ``<Name>`` placeholders
+        outside code break Obsidian rendering and are rejected.
+        """
+        tc = self._schema.type_config(note_type) if note_type is not None else None
+        if tc is not None and tc.body_empty and body.strip() != "":
+            raise BodyError(
+                f"{note_type} is a DB-canonical redirect stub; its body must be empty"
+            )
+        if directory.startswith("System/Templates") and body.lstrip().startswith("---"):
+            raise BodyError(
+                "System/Templates files must use a Templater fence, not a literal '---' block"
+            )
+        match = _ANGLE_PLACEHOLDER_RE.search(_strip_code(body))
+        if match is not None:
+            token = match.group(0)
+            name = token[1:-1]
+            raise BodyError(
+                f"bare placeholder {token!r} breaks Obsidian rendering — use {{{name}}} instead"
+            )
 
     # --- Per-@type value enforcement (Feature: Type Registry) --------------
     def _enforce_type_rules(self, note_type: str | None, fm: dict[str, Any]) -> None:

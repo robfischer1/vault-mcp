@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from vault_mcp.gate import (  # noqa: E402
+    BodyError,
     ConventionGate,
     FieldError,
     ProtectionError,
@@ -347,6 +348,62 @@ class TestFrontmatterStamping:
         )
         for key in ("origin_date", "date_precision", "source", "predicate"):
             assert key in result.frontmatter
+
+
+class TestBodyValidation:
+    def test_angle_bracket_placeholder_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(BodyError) as exc:
+            gate.create_note(
+                title="X",
+                note_type="note",
+                pillar="Knowledge",
+                body="Hello <Name>, welcome.",
+                created="2026-05-30",
+            )
+        assert "<Name>" in str(exc.value) and "{Name}" in str(exc.value)
+
+    def test_angle_bracket_inside_code_allowed(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            body="Use the `<Name>` token, or:\n```\n<topic>\n```\n",
+            created="2026-05-30",
+        )
+        assert result.path.endswith("X.md")
+
+    def test_consumed_media_body_must_be_empty(self):
+        gate, _ = _gate()
+        with pytest.raises(BodyError) as exc:
+            gate.create_note(
+                title="Dune",
+                note_type="Stub",
+                directory="Knowledge",
+                body="A novel about spice.",
+                created="2026-05-30",
+            )
+        assert "body must be empty" in str(exc.value)
+
+    def test_stub_empty_body_allowed(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="Dune", note_type="Stub", directory="Knowledge", body="  \n", created="2026-05-30"
+        )
+        assert result.path.endswith("Dune.md")
+
+    def test_template_literal_fence_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(BodyError) as exc:
+            gate.create_note(
+                title="tmpl",
+                note_type="note",
+                directory="System/Templates",
+                body="---\nfoo: bar\n---\nbody\n",
+                created="2026-05-30",
+            )
+        assert "Templater fence" in str(exc.value)
 
 
 class TestDeprecatedKeyMigration:
