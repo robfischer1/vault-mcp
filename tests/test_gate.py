@@ -349,6 +349,48 @@ class TestFrontmatterStamping:
             assert key in result.frontmatter
 
 
+class TestDeprecatedKeyMigration:
+    def test_rename_preserves_value(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={"id": "abc-123", "published": "2020-01-01"},
+            created="2026-05-30",
+        )
+        fm = result.frontmatter
+        assert fm["identifier"] == "abc-123"  # id -> identifier (before autogen)
+        assert fm["datePublished"] == "2020-01-01"  # published -> datePublished
+        assert "id" not in fm
+        assert "published" not in fm
+
+    def test_dead_keys_dropped_project_preserved(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X",
+            note_type="note",
+            pillar="Knowledge",
+            extra_fields={"sub_type": "junk", "legacy_type": "old", "project": "keepme"},
+            created="2026-05-30",
+        )
+        fm = result.frontmatter
+        assert "sub_type" not in fm
+        assert "legacy_type" not in fm
+        assert fm["project"] == "keepme"  # project is NOT deprecated
+
+    def test_migration_on_update(self):
+        gate, vault = _gate()
+        vault.store["Knowledge/Notes/n.md"] = (
+            "---\ntitle: n\nauthor_type: human\nauthor_level: human\nid: old-id\nsub_type: x\n---\n\nbody\n"
+        )
+        result = gate.update_note("Knowledge/Notes/n.md", fields={"status": "Active"})
+        fm = result.frontmatter
+        assert fm["identifier"] == "old-id"
+        assert "id" not in fm
+        assert "sub_type" not in fm
+
+
 class TestProvenanceThreeProperty:
     def test_ai_model_stamped_for_agent(self):
         gate, _ = _gate()

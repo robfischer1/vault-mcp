@@ -87,3 +87,11 @@ value_vocabularies:
     repairs:
       Archive: Archived
       done: Completed
+
+deprecated_keys:
+  rename:
+    id: identifier
+    published: datePublished
+  dead:
+    - sub_type
+    - legacy_type

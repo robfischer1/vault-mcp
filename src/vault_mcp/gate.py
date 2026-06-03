@@ -283,6 +283,8 @@ class ConventionGate:
             new_fm["tags"] = tags
             changed.append("tags")
 
+        self._migrate_keys(new_fm)  # clean deprecated/dead keys on every write
+
         # Read current author_level, falling back to the legacy single-axis
         # `provenance:` key so notes that predate the 3-property model keep working.
         raw_level = current_fm.get("author_level")
@@ -381,6 +383,8 @@ class ConventionGate:
                     continue  # governance fields are Gate-stamped, never caller-set
                 fm[key] = value
 
+        self._migrate_keys(fm)  # rename deprecated keys + drop dead keys (before defaults)
+
         # identifier defaults to a kebab slug of the label; caller override wins.
         if fm.get("identifier") in (None, ""):
             fm["identifier"] = _slugify(title)
@@ -401,6 +405,21 @@ class ConventionGate:
         if len(missing) > 0:
             raise FieldError(f"missing required frontmatter field(s): {missing}")
         return fm
+
+    # --- Deprecated key migration (Feature: Deprecated Key Migration) ------
+    def _migrate_keys(self, fm: dict[str, Any]) -> None:
+        """Rename deprecated keys (preserving value) and drop dead keys, in place.
+
+        Renames never clobber an existing canonical key; dead keys are removed
+        unconditionally. Driven by the schema so the maps stay config, not code.
+        """
+        for old, new in self._schema.deprecated_renames:
+            if old in fm:
+                if new not in fm:
+                    fm[new] = fm[old]
+                del fm[old]
+        for dead in self._schema.dead_keys:
+            fm.pop(dead, None)
 
     # --- Per-@type value enforcement (Feature: Type Registry) --------------
     def _enforce_type_rules(self, note_type: str | None, fm: dict[str, Any]) -> None:

@@ -175,6 +175,8 @@ class VaultSchema:
     status_values: tuple[str, ...] = ()
     status_default: str = "Pending"
     status_repairs: tuple[tuple[str, str], ...] = ()
+    deprecated_renames: tuple[tuple[str, str], ...] = ()
+    dead_keys: frozenset[str] = frozenset()
     label_field: str = "title"
     created_field: str = "created"
     updated_field: str | None = None
@@ -344,6 +346,10 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
     status_default = status_cfg.get("default", "Pending")
     status_repairs = tuple((frm, to) for frm, to in (status_cfg.get("repairs", {}) or {}).items())
 
+    dep = raw.get("deprecated_keys", {}) or {}
+    deprecated_renames = tuple((o, n) for o, n in (dep.get("rename", {}) or {}).items())
+    dead_keys = frozenset(dep.get("dead", []) or [])
+
     fm_cfg = raw.get("frontmatter", {}) or {}
 
     return VaultSchema(
@@ -358,6 +364,8 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
         status_values=status_values,
         status_default=status_default,
         status_repairs=status_repairs,
+        deprecated_renames=deprecated_renames,
+        dead_keys=dead_keys,
         label_field=fm_cfg.get("label_field", "title"),
         created_field=fm_cfg.get("created_field", "created"),
         updated_field=fm_cfg.get("updated_field"),
