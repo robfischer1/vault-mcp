@@ -353,6 +353,31 @@ class TestFrontmatterStamping:
             assert key in result.frontmatter
 
 
+class TestNonPillarGuard:
+    def test_attachments_dir_rejected(self):
+        gate, writer = _gate()
+        with pytest.raises(ProtectionError) as exc:
+            gate.create_note(
+                title="X", note_type="note", directory="attachments/sub", created="2026-05-30"
+            )
+        assert "non-pillar" in str(exc.value)
+        assert len(writer.calls) == 0
+
+    def test_dotfile_dir_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(ProtectionError):
+            gate.create_note(
+                title="X", note_type="note", directory=".obsidian", created="2026-05-30"
+            )
+
+    def test_pillar_dir_allowed(self):
+        gate, _ = _gate()
+        result = gate.create_note(
+            title="X", note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        assert result.path.startswith("Knowledge/")
+
+
 class TestFilenameConventions:
     def test_atom_slug_filename(self):
         gate, _ = _gate()

@@ -180,6 +180,7 @@ class VaultSchema:
     deprecated_renames: tuple[tuple[str, str], ...] = ()
     dead_keys: frozenset[str] = frozenset()
     reserved_tags: frozenset[str] = frozenset()
+    forbidden_dirs: frozenset[str] = frozenset()
     label_field: str = "title"
     created_field: str = "created"
     updated_field: str | None = None
@@ -355,6 +356,7 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
     deprecated_renames = tuple((o, n) for o, n in (dep.get("rename", {}) or {}).items())
     dead_keys = frozenset(dep.get("dead", []) or [])
     reserved_tags = frozenset(raw.get("reserved_tags", []) or [])
+    forbidden_dirs = frozenset(raw.get("forbidden_dirs", []) or [])
 
     fm_cfg = raw.get("frontmatter", {}) or {}
 
@@ -373,6 +375,7 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
         deprecated_renames=deprecated_renames,
         dead_keys=dead_keys,
         reserved_tags=reserved_tags,
+        forbidden_dirs=forbidden_dirs,
         label_field=fm_cfg.get("label_field", "title"),
         created_field=fm_cfg.get("created_field", "created"),
         updated_field=fm_cfg.get("updated_field"),

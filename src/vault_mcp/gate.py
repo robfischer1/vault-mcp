@@ -223,6 +223,16 @@ class ConventionGate:
         if rule.rule == "voice-only" and actor is not Actor.HUMAN:
             raise ProtectionError(rule.error)
 
+    # --- Non-pillar write guard (Feature: Non-Pillar Write Rejection) ------
+    def _check_directory(self, directory: str) -> None:
+        """Reject writes into forbidden (non-pillar) directories (FR-22)."""
+        top = directory.split("/", 1)[0]
+        for forbidden in self._schema.forbidden_dirs:
+            if directory == forbidden or top == forbidden or directory.startswith(forbidden + "/"):
+                raise ProtectionError(
+                    f"writes are not allowed in non-pillar directory {directory!r}"
+                )
+
     # --- Write-mode enforcement (Feature: Write-Mode Enforcement) ----------
     def _check_write_mode(self, note_type: str | None, mode: WriteMode) -> None:
         """Enforce the @type write-mode (FR — materialize-only / pure-DB).
@@ -290,6 +300,7 @@ class ConventionGate:
                 note_type=note_type, pillar=pillar, attrs=extra_fields or {}
             )
         self.check_protection(directory, actor, mode, touches_body=True)
+        self._check_directory(directory)
 
         author_level = stamp(actor, mode)
         declared = parse_author_type(author_type) if author_type is not None else None

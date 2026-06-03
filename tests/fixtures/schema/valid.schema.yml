@@ -15,6 +15,10 @@ reserved_tags:
   - todo
   - starred
 
+forbidden_dirs:
+  - attachments
+  - .obsidian
+
 routes:
   - note_type: note
     pillar: Knowledge
