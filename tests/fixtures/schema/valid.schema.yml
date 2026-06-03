@@ -8,6 +8,16 @@ tags:
   - status/active
   - status/done
   - topic/ai
+  - todo
+  - starred
+
+reserved_tags:
+  - todo
+  - starred
+
+forbidden_dirs:
+  - attachments
+  - .obsidian
 
 routes:
   - note_type: note
@@ -22,7 +32,8 @@ routes:
 required_frontmatter:
   - title
   - created
-  - provenance
+  - author_type
+  - author_level
 
 write_protection:
   - directory: Records
@@ -47,3 +58,58 @@ provenance:
     - ai-compiled
     - ai-metadata
     - ai-computed
+
+# Per-@type governance config (generic — no real vault types).
+types:
+  Note:
+    required: [title]
+    freeform: [description, keywords]
+    write_mode: agent
+  Gadget:
+    required: [title, serial]
+    freeform: [vendor]
+    constraints:
+      condition: [New, Used, Broken]
+    write_mode: agent
+  Dossier:
+    required: [title]
+    write_mode: materialize-only
+  signal:
+    write_mode: pure-DB
+  Spot:
+    required: [title]
+    formats:
+      coords: geo
+    write_mode: agent
+  Stub:
+    required: [title]
+    body_empty: true
+    write_mode: agent
+  atom:
+    required: [title]
+    atom_slug: true
+    write_mode: agent
+
+pillar_defaults:
+  Knowledge:
+    nn_color: "#8caaee"
+    nn_icon: book
+  Projects:
+    nn_color: "#a6d189"
+    nn_icon: target
+
+value_vocabularies:
+  status:
+    values: [Active, Completed, Archived, Abandoned, Stub, Pending]
+    default: Pending
+    repairs:
+      Archive: Archived
+      done: Completed
+
+deprecated_keys:
+  rename:
+    id: identifier
+    published: datePublished
+  dead:
+    - sub_type
+    - legacy_type

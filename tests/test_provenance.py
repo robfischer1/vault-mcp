@@ -17,14 +17,52 @@ sys.path.insert(0, str(ROOT / "src"))
 from vault_mcp.provenance import (  # noqa: E402
     SPECTRUM,
     Actor,
+    AuthorType,
     Provenance,
     ProvenanceError,
     WriteMode,
+    author_type_for,
     parse,
+    parse_author_type,
     stamp,
     transition,
+    transition_author_type,
     validate_schema_levels,
 )
+
+
+class TestAuthorType:
+    def test_categories(self):
+        assert {a.value for a in AuthorType} == {"human", "ai", "external"}
+
+    def test_derive_human_from_pristine(self):
+        assert author_type_for(Provenance.HUMAN) is AuthorType.HUMAN
+
+    def test_derive_ai_from_any_ai_touched_level(self):
+        assert author_type_for(Provenance.AI_ASSISTED) is AuthorType.AI
+        assert author_type_for(Provenance.HUMAN_EDITED) is AuthorType.AI
+
+    def test_declared_external_wins(self):
+        assert author_type_for(Provenance.HUMAN, AuthorType.EXTERNAL) is AuthorType.EXTERNAL
+
+    def test_parse_author_type(self):
+        assert parse_author_type("external") is AuthorType.EXTERNAL
+
+    def test_parse_rejects_unknown(self):
+        with pytest.raises(ProvenanceError):
+            parse_author_type("robot")
+
+    def test_no_downgrade_agent_promotes_human(self):
+        assert transition_author_type(AuthorType.HUMAN, Actor.AGENT) is AuthorType.AI
+
+    def test_no_downgrade_ai_stays_ai(self):
+        assert transition_author_type(AuthorType.AI, Actor.HUMAN) is AuthorType.AI
+
+    def test_external_is_sticky(self):
+        assert transition_author_type(AuthorType.EXTERNAL, Actor.AGENT) is AuthorType.EXTERNAL
+
+    def test_human_human_stays_human(self):
+        assert transition_author_type(AuthorType.HUMAN, Actor.HUMAN) is AuthorType.HUMAN
 
 
 class TestTaxonomy:

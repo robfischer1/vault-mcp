@@ -98,7 +98,8 @@ class TestRendering:
         rcv, _, _ = _receiver()
         result = rcv.receive(_payload(), created="2026-05-30")
         assert result.provenance is Provenance.AI_COMPUTED
-        assert result.frontmatter["provenance"] == "ai-computed"
+        assert result.frontmatter["author_level"] == "ai-computed"
+        assert result.frontmatter["author_type"] == "ai"
 
 
 class TestComputeOnlyPath:

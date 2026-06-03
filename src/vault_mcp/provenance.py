@@ -56,6 +56,44 @@ _AI_LEVELS: frozenset[Provenance] = frozenset(
 )
 
 
+class AuthorType(StrEnum):
+    """The provenance *category* (V2D 3-property model): who authored a note.
+
+    Coarser than the ``author_level`` gradient — ``human`` (Rob), ``ai`` (any
+    AI-touched content), ``external`` (3rd-party origin, caller-declared, e.g.
+    SoftwareApplication or imported Web Content).
+    """
+
+    HUMAN = "human"
+    AI = "ai"
+    EXTERNAL = "external"
+
+
+def author_type_for(level: Provenance, declared: AuthorType | None = None) -> AuthorType:
+    """Derive the author_type category from an author_level.
+
+    A caller-declared ``external`` always wins (3rd-party origin can't be
+    inferred from the level). Otherwise pristine ``human`` maps to ``human``;
+    every AI-touched level maps to ``ai``.
+    """
+    if declared is AuthorType.EXTERNAL:
+        return AuthorType.EXTERNAL
+    if level is Provenance.HUMAN:
+        return AuthorType.HUMAN
+    return AuthorType.AI
+
+
+def parse_author_type(value: str) -> AuthorType:
+    """Parse a string into an AuthorType, rejecting anything off-category."""
+    try:
+        return AuthorType(value)
+    except ValueError as exc:
+        raise ProvenanceError(
+            f"{value!r} is not a valid author_type; "
+            f"expected one of {[a.value for a in AuthorType]}"
+        ) from exc
+
+
 class Actor(Enum):
     """Who is performing a write."""
 
@@ -107,6 +145,18 @@ def transition(current: Provenance, editor: Actor) -> Provenance:
     # editor is an agent
     if current in _HUMAN_LEVELS:
         return Provenance.AI_ASSISTED
+    return current
+
+
+def transition_author_type(current: AuthorType, editor: Actor) -> AuthorType:
+    """Advance author_type when an existing note is modified (monotonic).
+
+    Mirrors the level no-downgrade rule: a human authoring atop human content
+    stays ``human``; an agent touching human content makes it ``ai``; ``ai``
+    and ``external`` never silently revert to ``human``.
+    """
+    if current is AuthorType.HUMAN and editor is Actor.AGENT:
+        return AuthorType.AI
     return current
 
 
