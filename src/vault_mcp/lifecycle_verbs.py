@@ -19,7 +19,8 @@ and the MCP layer wires the real adapters.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
 from vault_mcp.translator import (
