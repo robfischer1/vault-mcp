@@ -67,8 +67,13 @@ class GitCommitter:
 
     # -- subprocess plumbing ------------------------------------------------
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
+        # ``safe.directory=*`` defuses git's dubious-ownership guard: the service
+        # runs as LocalSystem while the vault repo is owned by the interactive
+        # user, which otherwise blocks every command. It is scoped by
+        # construction — every invocation also passes ``-C repo_root``, so git
+        # only ever operates on the one trusted repo.
         return subprocess.run(
-            [self._git, "-C", str(self.repo_root), *args],
+            [self._git, "-C", str(self.repo_root), "-c", "safe.directory=*", *args],
             capture_output=True,
             text=True,
             encoding="utf-8",
