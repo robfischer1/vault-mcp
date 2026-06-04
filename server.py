@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
+    from vault_mcp.gitops import GitCommitter
     from vault_mcp.lifecycle import Materializer
     from vault_mcp.rest_client import ObsidianRESTClient
 
@@ -1643,6 +1644,91 @@ def _get_gate() -> ConventionGate:
     return _gate
 
 
+# ---------------------------------------------------------------------------
+# Single-writer git committer (VG initiative — vault-mcp owns vault git)
+# ---------------------------------------------------------------------------
+_committer: GitCommitter | None = None
+
+
+def _get_committer() -> GitCommitter:
+    """Lazily build the git committer from VAULT_MCP_GIT_* env, rooted at the vault.
+
+    Commit + push default OFF (flip VAULT_MCP_GIT_COMMIT=1 / VAULT_MCP_GIT_PUSH=1
+    once proven), so this code is inert until the flag is set.
+    """
+    global _committer
+    if _committer is None:
+        from vault_mcp.gitops import committer_from_env
+
+        _committer = committer_from_env(VAULT_PATH)
+    return _committer
+
+
+def _commit_write(
+    result: dict[str, Any],
+    op: str,
+    commit_message: str | None = None,
+    *,
+    is_delete: bool = False,
+) -> dict[str, Any]:
+    """Commit a successful Gate write and attach ``commit_sha`` (the checkpoint
+    handshake). Fail-safe: a commit failure leaves the write intact, sha None.
+
+    A caller-supplied ``commit_message`` is used verbatim; otherwise a
+    ``vault: {op} {path}`` fallback is generated. The in-flight markers let the
+    scheduled sweep defer rather than race this per-transaction commit.
+    """
+    if not result.get("ok"):
+        return result
+    path = result.get("path")
+    if not isinstance(path, str) or not path:
+        return result
+    committer = _get_committer()
+    message = commit_message or f"vault: {op} {path}"
+    committer.begin_write()
+    try:
+        result["commit_sha"] = committer.commit_paths(
+            [path], message, wait_for_create=not is_delete
+        )
+    finally:
+        committer.end_write()
+    return result
+
+
+def _start_sweep_scheduler() -> None:
+    """Start the whole-tree sweep daemon (captures human Obsidian edits).
+
+    No-op unless VAULT_MCP_GIT_COMMIT=1. Interval via VAULT_MCP_GIT_SWEEP_SECONDS
+    (default 3600s). Sweep commits are checkpoint-silent by design.
+    """
+    import time as _time
+    from datetime import datetime
+
+    log = logging.getLogger(__name__)
+    committer = _get_committer()
+    if not committer.enabled:
+        print("vault-mcp: git sweep disabled (VAULT_MCP_GIT_COMMIT != 1)", file=sys.stderr)
+        return
+    interval = int(os.environ.get("VAULT_MCP_GIT_SWEEP_SECONDS", "3600"))
+
+    def _loop() -> None:
+        while True:
+            _time.sleep(interval)
+            try:
+                stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                res = committer.sweep_commit(f"vault: periodic sweep {stamp}")
+                if res.get("committed"):
+                    log.info(
+                        "git sweep committed %s (pushed=%s)", res.get("sha"), res.get("pushed")
+                    )
+            except Exception:
+                log.exception("git sweep tick failed")
+
+    threading.Thread(target=_loop, name="vault-git-sweep", daemon=True).start()
+    push_state = "on" if committer.push_enabled else "off"
+    print(f"vault-mcp: git sweep every {interval}s (push={push_state})", file=sys.stderr)
+
+
 def _load_templates() -> dict[str, str]:
     d = os.environ.get("VAULT_MCP_TEMPLATES")
     if not d:
@@ -1699,6 +1785,7 @@ def create_note(
     body: str = "",
     tags: list[str] | None = None,
     actor: str = "agent",
+    commit_message: str | None = None,
 ) -> dict[str, Any]:
     """Create a convention-compliant vault note through the Convention Gate.
 
@@ -1730,7 +1817,7 @@ def create_note(
             tags=tags or [],
             actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
         )
-        return result.to_dict()
+        return _commit_write(result.to_dict(), "create", commit_message)
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
 
@@ -1773,11 +1860,23 @@ def dissolve(
         return {"ok": False, "error": "not_found", "detail": str(abs_path)}
 
     raw_text = abs_path.read_text(encoding="utf-8")
-    return dissolve_note(
+    res = dissolve_note(
         source_path=str(abs_path), raw_text=raw_text, file_path=abs_path.name,
         plan_slug=plan_slug, rationale=rationale, post=_phdb_post,
         delete_file=abs_path.unlink, declared_by=declared_by, repo=repo,
     )
+    # Commit the deletion through the single writer (the file is already gone, so
+    # skip the disk-landing poll); attach the sha for the checkpoint handshake.
+    if res.get("ok"):
+        committer = _get_committer()
+        committer.begin_write()
+        try:
+            res["commit_sha"] = committer.commit_paths(
+                [path], f"vault: dissolve {path}", wait_for_create=False
+            )
+        finally:
+            committer.end_write()
+    return res
 
 
 @mcp.tool()
@@ -1824,7 +1923,7 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
         # 3. Build the Materializer payload and write via mode=COMPUTE.
         payload = row_to_payload(row, table, directory=directory, paired_body=paired_body)
         result = _get_materializer().materialize(payload)
-        return result.to_dict()
+        return _commit_write(result.to_dict(), "materialize")
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes
         return _gate_error_envelope(exc)
 
@@ -1836,6 +1935,7 @@ def update_note(
     body: str | None = None,
     tags: list[str] | None = None,
     actor: str = "agent",
+    commit_message: str | None = None,
 ) -> dict[str, Any]:
     """Update an existing vault note through the Convention Gate.
 
@@ -1857,7 +1957,7 @@ def update_note(
             tags=tags,
             actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
         )
-        return result.to_dict()
+        return _commit_write(result.to_dict(), "update", commit_message)
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
 
@@ -1877,7 +1977,7 @@ def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict
 
     try:
         result = _get_compute_receiver().receive(payload, created=created)
-        return result.to_dict()
+        return _commit_write(result.to_dict(), "compute")
     except ComputePayloadError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
@@ -1904,7 +2004,7 @@ def compute_receiver(payload: dict[str, Any], created: str | None = None) -> dic
 
     try:
         result = _get_materializer().materialize(payload, created=created)
-        return result.to_dict()
+        return _commit_write(result.to_dict(), "compute")
     except MaterializePayloadError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
@@ -1998,6 +2098,7 @@ def main() -> None:
         )
         print(f"vault-mcp: listening on {args.host}:{args.port}", file=sys.stderr)
 
+    _start_sweep_scheduler()
     mcp.run(transport=args.transport)
 
 
