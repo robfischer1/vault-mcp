@@ -1778,46 +1778,77 @@ def _gate_error_envelope(exc: Exception) -> dict[str, Any]:
 
 
 @mcp.tool()
-def create_note(
+def write_note(
     title: str,
     note_type: str | None = None,
     pillar: str | None = None,
-    body: str = "",
+    body: str | None = None,
     tags: list[str] | None = None,
+    fields: dict[str, Any] | None = None,
     actor: str = "agent",
+    mode: str = "upsert",
     commit_message: str | None = None,
 ) -> dict[str, Any]:
-    """Create a convention-compliant vault note through the Convention Gate.
+    """Create-or-update a vault note through the Convention Gate — the write surface.
 
-    The Gate generates correct frontmatter, validates tags against the closed
-    glossary, routes to the schema-resolved pillar directory, enforces
-    write-protection, and stamps provenance. Invalid writes are rejected with a
-    structured error and no file is created.
+    Resolves the target path from title + routing, then creates a missing note or
+    updates an existing one (the caller need not know which). The Gate generates
+    correct frontmatter, validates against the closed tag glossary and per-type
+    rules, enforces write-protection, and stamps provenance. On update, body/tags/
+    fields left null are untouched; a pre-existing invalid value in a field this
+    write does not touch surfaces as a warning, not a rejection.
 
     Args:
         title: Note title (also the filename).
         note_type: Schema note type used for routing (e.g., 'note').
         pillar: Schema pillar used for routing (e.g., 'Knowledge').
-        body: Markdown body.
-        tags: Tags; each must be in the closed glossary.
+        body: Markdown body. Null on update leaves the existing body untouched.
+        tags: Tags; each must be in the closed glossary. Null on update = untouched.
+        fields: Extra frontmatter fields (required / constrained values, etc.).
         actor: 'agent' (default) or 'human' — drives the provenance stamp.
+        mode: 'upsert' (default), 'create' (refuse if exists), 'update' (refuse if missing).
 
     Returns:
-        {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
+        {"ok": True, "path", "frontmatter", "created", "warnings", ...} or a structured error.
     """
     from vault_mcp.provenance import Actor
 
     try:
         gate = _get_gate()
-        result = gate.create_note(
+        result = gate.write_note(
             title=title,
             note_type=note_type,
             pillar=pillar,
             body=body,
-            tags=tags or [],
+            tags=tags,
+            fields=fields,
             actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
+            mode=mode,
         )
-        return _commit_write(result.to_dict(), "create", commit_message)
+        return _commit_write(result.to_dict(), "create" if result.created else "update", commit_message)
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def delete(
+    path: str, actor: str = "agent", commit_message: str | None = None
+) -> dict[str, Any]:
+    """Move a vault note to Obsidian's .trash/ (reversible) through the Gate.
+
+    Enforces the same write-protection as a write — an agent cannot trash a
+    voice-only, compute-only, fully-immutable, or body-immutable note. The note
+    remains recoverable from Obsidian's trash.
+
+    Returns:
+        {"ok": True, "path", "deleted": True} or a structured error.
+    """
+    from vault_mcp.provenance import Actor
+
+    try:
+        gate = _get_gate()
+        result = gate.delete(path, actor=Actor.HUMAN if actor == "human" else Actor.AGENT)
+        return _commit_write(result, "delete", commit_message, is_delete=True)
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
 
@@ -1971,40 +2002,6 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
         result = _get_materializer().materialize(payload)
         return _commit_write(result.to_dict(), "materialize")
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes
-        return _gate_error_envelope(exc)
-
-
-@mcp.tool()
-def update_note(
-    path: str,
-    fields: dict[str, Any] | None = None,
-    body: str | None = None,
-    tags: list[str] | None = None,
-    actor: str = "agent",
-    commit_message: str | None = None,
-) -> dict[str, Any]:
-    """Update an existing vault note through the Convention Gate.
-
-    Changes only the requested fields, preserves untouched content, advances
-    provenance per the transition rules, and enforces write-protection (a body
-    edit on a body-immutable directory is rejected; metadata-only may pass).
-
-    Returns:
-        {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
-    """
-    from vault_mcp.provenance import Actor
-
-    try:
-        gate = _get_gate()
-        result = gate.update_note(
-            path,
-            fields=fields,
-            body=body,
-            tags=tags,
-            actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
-        )
-        return _commit_write(result.to_dict(), "update", commit_message)
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
 
 

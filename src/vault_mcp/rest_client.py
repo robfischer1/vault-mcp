@@ -235,6 +235,10 @@ class ObsidianRESTClient:
             "PUT", path, content=content, content_type=content_type, accept=accept,
         )
 
+    def delete(self, path: str, *, accept: str = "application/json") -> dict[str, Any]:
+        """DELETE a note. ``DELETE /vault/{path}`` removes the file."""
+        return self._request("DELETE", path, accept=accept)
+
 
 class RestNoteIO:
     """Convention Gate ``NoteIO`` over the Obsidian Local REST API.
@@ -273,4 +277,19 @@ class RestNoteIO:
         if not res.get("ok"):
             raise ObsidianIOError(
                 f"REST write {path}: {res.get('error')}: {res.get('detail')}"
+            )
+
+    def delete_note(self, path: str) -> None:
+        """Move a note to the vault-local ``.trash/`` (read -> copy -> remove origin).
+
+        The content is re-PUT under ``.trash/{path}`` and only then is the
+        original removed, so a failed delete never loses the note and the file
+        stays recoverable from inside Obsidian.
+        """
+        content = self.read_note(path)  # raises ObsidianIOError if absent
+        self._put(f".trash/{path}", content)
+        res = self._client.delete(f"/vault/{path}")
+        if not res.get("ok"):
+            raise ObsidianIOError(
+                f"REST delete {path}: {res.get('error')}: {res.get('detail')}"
             )

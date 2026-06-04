@@ -39,6 +39,7 @@ class FakeVault:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
         self.store: dict[str, str] = {}
+        self.deleted: list[str] = []
 
     def create_note(self, path: str, content: str) -> None:
         self.calls.append((path, content))
@@ -49,6 +50,10 @@ class FakeVault:
 
     def write_note(self, path: str, content: str) -> None:
         self.store[path] = content
+
+    def delete_note(self, path: str) -> None:
+        self.deleted.append(path)
+        self.store.pop(path, None)
 
 
 def _gate(diff_sink=None) -> tuple[ConventionGate, FakeVault]:
@@ -896,3 +901,76 @@ class TestObservability:
         # write still succeeded despite the sink raising
         assert len(vault.calls) == 1
         assert result.path == "Knowledge/Notes/X.md"
+
+
+class TestWriteNote:
+    def test_creates_when_absent(self):
+        gate, vault = _gate()
+        result = gate.write_note(
+            title="W", note_type="note", pillar="Knowledge", body="hi", created="2026-05-30"
+        )
+        assert result.created is True
+        assert result.path == "Knowledge/Notes/W.md"
+        assert len(vault.calls) == 1
+
+    def test_updates_when_present(self):
+        gate, vault = _gate()
+        gate.write_note(title="W", note_type="note", pillar="Knowledge", created="2026-05-30")
+        result = gate.write_note(
+            title="W", note_type="note", pillar="Knowledge", fields={"status": "Active"}
+        )
+        assert result.created is False
+        assert result.frontmatter["status"] == "Active"
+
+    def test_mode_create_refuses_existing(self):
+        gate, _ = _gate()
+        gate.write_note(title="W", note_type="note", pillar="Knowledge", created="2026-05-30")
+        with pytest.raises(FieldError):
+            gate.write_note(title="W", note_type="note", pillar="Knowledge", mode="create")
+
+    def test_mode_update_refuses_missing(self):
+        gate, _ = _gate()
+        with pytest.raises(FieldError):
+            gate.write_note(title="Nope", note_type="note", pillar="Knowledge", mode="update")
+
+    def test_update_leaves_body_untouched_when_null(self):
+        gate, vault = _gate()
+        gate.write_note(
+            title="W", note_type="note", pillar="Knowledge", body="original", created="2026-05-30"
+        )
+        gate.write_note(title="W", note_type="note", pillar="Knowledge", fields={"status": "Active"})
+        assert "original" in vault.store["Knowledge/Notes/W.md"]
+
+
+class TestDelete:
+    def _seed(self, gate) -> str:
+        return gate.create_note(
+            title="Doomed", note_type="note", pillar="Knowledge", created="2026-05-30"
+        ).path
+
+    def test_delete_removes_and_records(self):
+        gate, vault = _gate()
+        path = self._seed(gate)
+        result = gate.delete(path)
+        assert result["ok"] is True and result["deleted"] is True
+        assert path not in vault.store
+        assert path in vault.deleted
+
+    def test_delete_missing_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(FieldError):
+            gate.delete("Knowledge/Notes/ghost.md")
+
+    def test_delete_blocked_on_voice_only_for_agent(self):
+        gate, vault = _gate()
+        vault.store["Outputs/Tao/t.md"] = "---\ntitle: t\n---\n\nbody\n"
+        with pytest.raises(ProtectionError):
+            gate.delete("Outputs/Tao/t.md", actor=Actor.AGENT)
+        assert "Outputs/Tao/t.md" in vault.store  # not trashed
+
+    def test_delete_allowed_on_voice_only_for_human(self):
+        gate, vault = _gate()
+        vault.store["Outputs/Tao/t.md"] = "---\ntitle: t\n---\n\nbody\n"
+        result = gate.delete("Outputs/Tao/t.md", actor=Actor.HUMAN)
+        assert result["deleted"] is True
+        assert "Outputs/Tao/t.md" not in vault.store

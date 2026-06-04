@@ -14,6 +14,7 @@ The full deny/protection surface is documented in
 from __future__ import annotations
 
 import logging
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -95,6 +96,7 @@ class NoteIO(Protocol):
     def create_note(self, path: str, content: str) -> None: ...
     def read_note(self, path: str) -> str: ...
     def write_note(self, path: str, content: str) -> None: ...
+    def delete_note(self, path: str) -> None: ...
 
 
 @dataclass
@@ -198,6 +200,22 @@ class ConventionGate:
         self._io = io
         self._diff_sink = diff_sink
         self._linter = Linter(schema, self._note_exists)
+        # Materialize/compute writes come from a trusted DB source; lint them
+        # anyway by default (the safety net during DB drift), off-able via the
+        # env flag once the DB stabilizes — no code change to flip it.
+        self._lint_on_compute = os.environ.get("VAULT_MCP_MATERIALIZE_LINT", "1") != "0"
+
+    # --- Single internal write layer (Feature: Write Pipeline) -------------
+    def _write(self, path: str, content: str, *, created: bool) -> None:
+        """The one disk-write chokepoint — the only Gate code that issues a write.
+
+        create_note, update_note, write_note, and the materialize/compute path
+        all converge here, so there is exactly one place a note reaches disk.
+        """
+        if created:
+            self._io.create_note(path, content)
+        else:
+            self._io.write_note(path, content)
 
     # --- Linter integration (Feature: Linter Core) -------------------------
     def _note_exists(self, target: str) -> bool:
@@ -317,11 +335,14 @@ class ConventionGate:
             touches_body=True,
             touched_fields=None,  # create: every fault is an error
         )
-        lint_result = self._linter.lint(candidate)
-        self._raise_first_error(lint_result)
+        if candidate.mode is WriteMode.COMPUTE and not self._lint_on_compute:
+            lint_result = LintResult()  # trusted DB source: lint disabled by flag
+        else:
+            lint_result = self._linter.lint(candidate)
+            self._raise_first_error(lint_result)
 
         path = f"{directory}/{filename}.md"
-        self._io.create_note(path, _render_note(frontmatter, body))
+        self._write(path, _render_note(frontmatter, body), created=True)
         result = WriteResult(
             path=path,
             frontmatter=frontmatter,
@@ -500,7 +521,7 @@ class ConventionGate:
         lint_result = self._linter.lint(candidate)
         self._raise_first_error(lint_result)
 
-        self._io.write_note(path, _render_note(new_fm, new_body))
+        self._write(path, _render_note(new_fm, new_body), created=False)
         result = WriteResult(
             path=path,
             frontmatter=new_fm,
@@ -514,6 +535,89 @@ class ConventionGate:
         )
         self._emit_diff(path, "update", changed, new_level)
         return result
+
+    # --- Unified write surface (Feature: write_note) -----------------------
+    def write_note(
+        self,
+        *,
+        title: str,
+        note_type: str | None = None,
+        pillar: str | None = None,
+        body: str | None = None,
+        tags: list[str] | None = None,
+        actor: Actor = Actor.AGENT,
+        fields: dict[str, Any] | None = None,
+        ai_model: str | None = None,
+        author_type: str | None = None,
+        created: str | None = None,
+        directory: str | None = None,
+        mode: str = "upsert",
+    ) -> WriteResult:
+        """Create-or-update a note by its routed path — the single write surface.
+
+        Resolves the target path from ``title`` + routing (or ``directory``),
+        then dispatches: an existing note is *updated* (merge ``fields``/``body``/
+        ``tags``, advance provenance), a missing one is *created*. The caller need
+        not know which. ``mode`` guards accidental clobber: ``upsert`` (default)
+        does either, ``create`` refuses an existing path, ``update`` refuses a
+        missing one.
+
+        On update, ``body``/``tags``/``fields`` left ``None`` stay untouched (a
+        metadata-only edit); ``note_type``/``pillar`` are fixed at create and
+        ignored on update (re-routing an existing note is not a write).
+        """
+        if mode not in ("upsert", "create", "update"):
+            raise FieldError(f"mode must be 'upsert', 'create', or 'update', not {mode!r}")
+
+        tc = self._schema.type_config(note_type) if note_type is not None else None
+        if tc is not None and tc.atom_slug:
+            # Dated atom slugs are append-only — always a fresh create.
+            if mode == "update":
+                raise FieldError("atom-slug types are create-only; mode='update' is invalid")
+            return self.create_note(
+                title=title, note_type=note_type, pillar=pillar, body=body or "",
+                tags=tags, actor=actor, created=created, directory=directory,
+                extra_fields=fields, author_type=author_type, ai_model=ai_model,
+            )
+
+        target_dir = directory
+        if target_dir is None:
+            target_dir = self._schema.resolve_directory(
+                note_type=note_type, pillar=pillar, attrs=fields or {}
+            )
+        path = f"{target_dir}/{title}.md"
+        exists = self._note_exists(path)
+
+        if exists and mode == "create":
+            raise FieldError(f"{path} already exists (mode='create' forbids overwrite)")
+        if not exists and mode == "update":
+            raise FieldError(f"{path} does not exist (mode='update' requires it)")
+
+        if exists:
+            return self.update_note(
+                path, fields=fields, body=body, tags=tags, actor=actor, ai_model=ai_model
+            )
+        return self.create_note(
+            title=title, note_type=note_type, pillar=pillar, body=body or "",
+            tags=tags, actor=actor, created=created, directory=directory,
+            extra_fields=fields, author_type=author_type, ai_model=ai_model,
+        )
+
+    # --- Delete to trash (Feature: delete) ---------------------------------
+    def delete(self, path: str, *, actor: Actor = Actor.AGENT) -> dict[str, Any]:
+        """Move a note to Obsidian's ``.trash/`` (reversible), if permitted.
+
+        Runs the same write-protection rules as a write — an agent cannot trash a
+        voice-only, compute-only, fully-immutable, or body-immutable note — then
+        delegates to the IO's trash move. No lint (there is no payload).
+        """
+        if not self._note_exists(path):
+            raise FieldError(f"{path} does not exist")
+        directory = path.rsplit("/", 1)[0] if "/" in path else ""
+        self.check_protection(directory, actor, WriteMode.CREATE, touches_body=True)
+        self._io.delete_note(path)
+        self._emit_diff(path, "delete", [], stamp(actor, WriteMode.METADATA))
+        return {"ok": True, "path": path, "deleted": True}
 
     # --- Dry-run validation (Feature: lint() tool) -------------------------
     def lint_payload(

@@ -213,6 +213,21 @@ def build_read_js(path: str) -> str:
     )
 
 
+def build_delete_js(path: str) -> str:
+    """Build eval JS that moves a note to Obsidian's local ``.trash/`` folder.
+
+    ``app.vault.trash(f, false)`` uses Obsidian's own ``.trash/`` (the ``false``
+    selects the vault-local trash over the OS trash), so a mistaken delete is
+    recoverable from inside Obsidian.
+    """
+    return (
+        f"(async () => {{ "
+        f"const f = app.vault.getAbstractFileByPath({json.dumps(path)}); "
+        f"await app.vault.trash(f, false); "
+        f"return {json.dumps(WRITE_OK_SENTINEL)}; }})()"
+    )
+
+
 def _eval_value(data: object) -> object:
     """Strip obsidian-cli's '=> ' result prefix from eval stdout."""
     if isinstance(data, str) and data.startswith(_EVAL_PREFIX):
@@ -244,6 +259,9 @@ class ObsidianNoteIO:
         if not isinstance(data, str):
             raise ObsidianIOError(f"unexpected read result for {path}: {data!r}")
         return data
+
+    def delete_note(self, path: str) -> None:
+        self._eval_write(build_delete_js(path), path)
 
     def _eval_write(self, code: str, path: str) -> None:
         res = self._eval(code, path)
