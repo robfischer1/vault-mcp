@@ -1823,6 +1823,52 @@ def create_note(
 
 
 @mcp.tool()
+def lint(
+    title: str = "",
+    note_type: str | None = None,
+    pillar: str | None = None,
+    body: str = "",
+    tags: list[str] | None = None,
+    fields: dict[str, Any] | None = None,
+    actor: str = "agent",
+) -> dict[str, Any]:
+    """Dry-run a note payload through the Convention Gate's validator — no write.
+
+    Runs the full validation pipeline and returns every finding at once
+    (collect-all), so a caller can assemble -> lint -> fix -> write without
+    touching disk. Each finding carries a code, the offending field/value, a
+    message, and a severity ('error' blocks a write; 'warning' is advisory).
+
+    Args:
+        title: Note title (also the filename).
+        note_type: Schema note type used for routing.
+        pillar: Schema pillar used for routing.
+        body: Markdown body.
+        tags: Tags to validate against the closed glossary.
+        fields: Extra frontmatter fields (e.g. required/constrained values).
+        actor: 'agent' (default) or 'human'.
+
+    Returns:
+        {"ok": bool, "errors": [...], "warnings": [...]} or a structured error.
+    """
+    from vault_mcp.provenance import Actor
+
+    try:
+        gate = _get_gate()
+        return gate.lint_payload(
+            title=title,
+            note_type=note_type,
+            pillar=pillar,
+            body=body,
+            tags=tags or [],
+            fields=fields,
+            actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
+        )
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
 def dissolve(
     path: str,
     plan_slug: str,

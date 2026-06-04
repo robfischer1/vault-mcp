@@ -13,7 +13,6 @@ The full deny/protection surface is documented in
 
 from __future__ import annotations
 
-import difflib
 import logging
 import re
 from collections.abc import Callable
@@ -23,6 +22,8 @@ from typing import Any, Protocol
 
 import yaml
 
+from .cli_client import ObsidianIOError
+from .lint import Code, LintCandidate, Linter, LintResult
 from .provenance import (
     Actor,
     AuthorType,
@@ -73,6 +74,19 @@ class WriteModeError(GateError):
 
 class FilenameError(GateError):
     """The target filename or path uses a forbidden convention."""
+
+
+# Finding codes map 1:1 onto the GateError subclasses above, so the write path
+# can reconstruct the historical exception + message from a linter Finding.
+_CODE_TO_EXC: dict[Code, type[GateError]] = {
+    Code.TAG: TagError,
+    Code.FIELD: FieldError,
+    Code.PROTECTION: ProtectionError,
+    Code.BODY: BodyError,
+    Code.LINK: LinkError,
+    Code.WRITE_MODE: WriteModeError,
+    Code.FILENAME: FilenameError,
+}
 
 
 class NoteIO(Protocol):
@@ -135,18 +149,6 @@ def _title_case_note_type(value: str) -> str:
 # them double-quoted in emitted frontmatter.
 _AT_KEY_RE = re.compile(r"(?m)^(\s*)'(@[^']+)':")
 
-# Body-validation regexes: strip code spans/fences before scanning for bare
-# angle-bracket placeholders (which break Obsidian rendering — FR-33).
-_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
-_INLINE_CODE_RE = re.compile(r"`[^`]*`")
-_ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z][A-Za-z0-9]*>")
-
-
-def _strip_code(text: str) -> str:
-    """Remove fenced blocks and inline code spans so body scans ignore code."""
-    return _INLINE_CODE_RE.sub("", _FENCE_RE.sub("", text))
-
-
 # Inline-tag escaping for imported bodies (FR-15): a '#tag' at a word boundary
 # (so URL fragments like 'x#frag' are skipped). #activity/processed is exempt.
 _INLINE_TAG_RE = re.compile(r"(?<!\S)#([A-Za-z][\w/-]*)")
@@ -195,6 +197,27 @@ class ConventionGate:
         self._schema = schema
         self._io = io
         self._diff_sink = diff_sink
+        self._linter = Linter(schema, self._note_exists)
+
+    # --- Linter integration (Feature: Linter Core) -------------------------
+    def _note_exists(self, target: str) -> bool:
+        """Link-resolution predicate for the linter, backed by the injected IO."""
+        try:
+            self._io.read_note(target)
+        except (KeyError, OSError, ObsidianIOError):
+            return False
+        return True
+
+    def _raise_first_error(self, result: LintResult) -> None:
+        """Reconstruct the legacy GateError for the first blocking finding.
+
+        Preserves the historical exception type + message so existing callers
+        and tests that catch a specific GateError subclass keep working, while
+        ``lint()`` / ``audit`` consume the full structured ``result``.
+        """
+        finding = result.first_error()
+        if finding is not None:
+            raise _CODE_TO_EXC[finding.code](finding.message)
 
     # --- Write-protection (Feature: Write-protection enforcement) ----------
     def _protection_for(self, directory: str) -> WriteProtectionRule | None:
@@ -222,46 +245,6 @@ class ConventionGate:
             raise ProtectionError(rule.error)
         if rule.rule == "voice-only" and actor is not Actor.HUMAN:
             raise ProtectionError(rule.error)
-
-    # --- Non-pillar write guard (Feature: Non-Pillar Write Rejection) ------
-    def _check_directory(self, directory: str) -> None:
-        """Reject writes into forbidden (non-pillar) directories (FR-22)."""
-        top = directory.split("/", 1)[0]
-        for forbidden in self._schema.forbidden_dirs:
-            if directory == forbidden or top == forbidden or directory.startswith(forbidden + "/"):
-                raise ProtectionError(
-                    f"writes are not allowed in non-pillar directory {directory!r}"
-                )
-
-    # --- Write-mode enforcement (Feature: Write-Mode Enforcement) ----------
-    def _check_write_mode(self, note_type: str | None, mode: WriteMode) -> None:
-        """Enforce the @type write-mode (FR — materialize-only / pure-DB).
-
-        pure-DB types are never vault files; materialize-only types may only be
-        written by the materialize/compute path (mode=COMPUTE), not agent-create.
-        """
-        tc = self._schema.type_config(note_type) if note_type is not None else None
-        if tc is None:
-            return
-        if tc.write_mode == "pure-DB":
-            raise WriteModeError(
-                f"{note_type} is pure-DB; use atom emit or phdb directly, not a vault write"
-            )
-        if tc.write_mode == "materialize-only" and mode is not WriteMode.COMPUTE:
-            raise WriteModeError(
-                f"{note_type} is materialize-only; use the materialize verb, not agent-create"
-            )
-
-    # --- Tag validation (Feature: Write validation & rejection) ------------
-    def _validate_tags(self, tags: list[str]) -> None:
-        unknown = [t for t in tags if not self._schema.is_valid_tag(t)]
-        if not unknown:
-            return
-        hints = []
-        for tag in unknown:
-            near = self._schema.nearest_tags(tag)
-            hints.append(f"{tag!r} (did you mean: {', '.join(near) or 'no close match'})")
-        raise TagError("unknown tag(s): " + "; ".join(hints))
 
     # --- Note creation (Feature: Note creation) ----------------------------
     def create_note(
@@ -292,15 +275,10 @@ class ConventionGate:
         if title.strip() == "":
             raise FieldError("title is required and must be non-empty")
 
-        self._check_write_mode(note_type, mode)
-        self._validate_tags(tags)
-
         if directory is None:
             directory = self._schema.resolve_directory(
                 note_type=note_type, pillar=pillar, attrs=extra_fields or {}
             )
-        self.check_protection(directory, actor, mode, touches_body=True)
-        self._check_directory(directory)
 
         author_level = stamp(actor, mode)
         declared = parse_author_type(author_type) if author_type is not None else None
@@ -317,17 +295,31 @@ class ConventionGate:
             created=created if created is not None else _today(),
             extra_fields=extra_fields,
         )
-        self._enforce_type_rules(note_type, frontmatter)
         body = self._maybe_escape_body(directory, body)
-        self._validate_body(note_type, directory, body)
-        self._validate_links(frontmatter)
 
         tc = self._schema.type_config(note_type) if note_type is not None else None
         if tc is not None and tc.atom_slug and note_type is not None:
             filename = self._atom_filename(created if created is not None else _today(), note_type, directory)
         else:
             filename = title
-        self._check_filename(directory, filename)
+
+        # One validation pass through the shared linter; reconstruct the legacy
+        # exception for the first blocking finding (back-compat).
+        candidate = LintCandidate(
+            frontmatter=frontmatter,
+            body=body,
+            directory=directory,
+            filename=filename,
+            note_type=note_type,
+            tags=tags,
+            actor=actor,
+            mode=mode,
+            touches_body=True,
+            touched_fields=None,  # create: every fault is an error
+        )
+        lint_result = self._linter.lint(candidate)
+        self._raise_first_error(lint_result)
+
         path = f"{directory}/{filename}.md"
         self._io.create_note(path, _render_note(frontmatter, body))
         result = WriteResult(
@@ -337,7 +329,8 @@ class ConventionGate:
             author_type=resolved_author_type,
             ai_model=model,
             warnings=self._tag_warnings(tags, actor)
-            + self._link_warnings(directory, title, frontmatter),
+            + self._link_warnings(directory, title, frontmatter)
+            + [f.message for f in lint_result.warnings],
         )
         self._emit_diff(path, "create", sorted(frontmatter.keys()), author_level)
         return result
@@ -355,16 +348,6 @@ class ConventionGate:
                 return candidate
             seq += 1
 
-    def _check_filename(self, directory: str, filename: str) -> None:
-        """Reject numeric folder prefixes and ``Pillar -- `` filename prefixes (FR-25)."""
-        for segment in directory.split("/"):
-            if re.match(r"^\d+[\s_-]", segment):
-                raise FilenameError(f"numeric folder prefix is not allowed: {segment!r}")
-        if re.search(r"\s--\s", filename):
-            raise FilenameError(
-                f"' -- ' prefix is not allowed (retired 'Pillar -- ' convention): {filename!r}"
-            )
-
     # --- Tag enhancements (Feature: Tag Enhancements) ----------------------
     def _tag_warnings(self, tags: list[str], actor: Actor) -> list[str]:
         """Advisory (non-blocking) warnings when an agent uses reserved tags (FR-13)."""
@@ -380,27 +363,6 @@ class ConventionGate:
         if directory.startswith("References") or directory.startswith("Records"):
             return _escape_inline_tags(body)
         return body
-
-    # --- Link validation (Feature: Link Validation) ------------------------
-    def _link_resolves(self, value: object) -> bool:
-        """True if a prev/next link value resolves to an existing note via the IO."""
-        target = str(value).strip().strip("[]").strip()
-        if target == "":
-            return False
-        if not target.endswith(".md"):
-            target = target + ".md"
-        try:
-            self._io.read_note(target)
-        except (KeyError, OSError):  # not found in the fake store / on disk
-            return False
-        return True
-
-    def _validate_links(self, fm: dict[str, Any]) -> None:
-        """Reject prev/next frontmatter that doesn't resolve to a file (FR-35)."""
-        for key in ("prev", "next"):
-            value = fm.get(key)
-            if value is not None and not self._link_resolves(value):
-                raise LinkError(f"{key} -> {value!r} does not resolve to an existing note")
 
     def _link_warnings(self, directory: str, title: str, fm: dict[str, Any]) -> list[str]:
         """Advisory (non-blocking) warnings for missing recommended links (FR-36)."""
@@ -435,9 +397,6 @@ class ConventionGate:
         mode = WriteMode.CREATE if touches_body else WriteMode.METADATA
         directory = path.rsplit("/", 1)[0] if "/" in path else ""
         self.check_protection(directory, actor, mode, touches_body=touches_body)
-
-        if tags is not None:
-            self._validate_tags(tags)
 
         current_fm, current_body = _split_note(self._io.read_note(path))
 
@@ -503,14 +462,44 @@ class ConventionGate:
             if self._schema.updated_field not in changed:
                 changed.append(self._schema.updated_field)
 
+        if "status" in new_fm:
+            new_fm["status"] = self._schema.normalize_status(new_fm["status"])
+
         new_body = body if body is not None else current_body
         if touches_body:
             new_body = self._maybe_escape_body(directory, new_body)
-            self._validate_body(current_fm.get("note_type"), directory, new_body)
             changed.append("body")
 
-        self._validate_links(new_fm)
         title = path.rsplit("/", 1)[-1].removesuffix(".md")
+        tags_val = new_fm.get("tags")
+        if isinstance(tags_val, list):
+            tags_list = tags_val
+        elif tags_val in (None, ""):
+            tags_list = []
+        else:
+            tags_list = [tags_val]
+        touched = set(changed)
+        if touches_body:
+            touched.add("body")
+
+        # Lint the merged target state; faults on fields this write did not
+        # touch are pre-existing drift and surface as warnings, not blocks — so
+        # an unrelated edit is never rejected by a note's existing bad value.
+        candidate = LintCandidate(
+            frontmatter=new_fm,
+            body=new_body,
+            directory=directory,
+            filename=title,
+            note_type=current_fm.get("note_type"),
+            tags=tags_list,
+            actor=actor,
+            mode=mode,
+            touches_body=touches_body,
+            touched_fields=touched,
+        )
+        lint_result = self._linter.lint(candidate)
+        self._raise_first_error(lint_result)
+
         self._io.write_note(path, _render_note(new_fm, new_body))
         result = WriteResult(
             path=path,
@@ -520,10 +509,62 @@ class ConventionGate:
             ai_model=new_fm.get("ai_model"),
             created=False,
             warnings=self._tag_warnings(tags if tags is not None else [], actor)
-            + self._link_warnings(directory, title, new_fm),
+            + self._link_warnings(directory, title, new_fm)
+            + [f.message for f in lint_result.warnings],
         )
         self._emit_diff(path, "update", changed, new_level)
         return result
+
+    # --- Dry-run validation (Feature: lint() tool) -------------------------
+    def lint_payload(
+        self,
+        *,
+        title: str = "",
+        note_type: str | None = None,
+        pillar: str | None = None,
+        body: str = "",
+        tags: list[str] | None = None,
+        fields: dict[str, Any] | None = None,
+        actor: Actor = Actor.AGENT,
+    ) -> dict[str, Any]:
+        """Validate the note this payload would create, writing nothing.
+
+        Returns the structured lint result (``ok`` + ``errors`` + ``warnings``)
+        so a caller can assemble -> lint -> fix -> write without touching disk.
+        This is the create-shaped dry run; update-shaped linting arrives with
+        ``write_note`` (create-or-update).
+        """
+        tags = tags or []
+        directory = self._schema.resolve_directory(
+            note_type=note_type, pillar=pillar, attrs=fields or {}
+        )
+        author_level = stamp(actor, WriteMode.CREATE)
+        resolved_at = author_type_for(author_level, None)
+        frontmatter = self._build_frontmatter(
+            title=title,
+            note_type=note_type,
+            pillar=pillar,
+            tags=tags,
+            author_level=author_level,
+            author_type=resolved_at,
+            ai_model=None,
+            created=_today(),
+            extra_fields=fields,
+        )
+        body = self._maybe_escape_body(directory, body)
+        candidate = LintCandidate(
+            frontmatter=frontmatter,
+            body=body,
+            directory=directory,
+            filename=title,
+            note_type=note_type,
+            tags=tags,
+            actor=actor,
+            mode=WriteMode.CREATE,
+            touches_body=True,
+            touched_fields=None,
+        )
+        return self._linter.lint(candidate).to_dict()
 
     def _build_frontmatter(
         self,
@@ -578,9 +619,12 @@ class ConventionGate:
         # identifier defaults to a kebab slug of the label; caller override wins.
         if fm.get("identifier") in (None, ""):
             fm["identifier"] = _slugify(title)
-        # status defaults to the schema default on create when a vocabulary exists.
+        # status defaults to the schema default on create when a vocabulary exists,
+        # then normalizes (repairs) so the linter validates the stored value.
         if "status" not in fm and len(schema.status_values) > 0:
             fm["status"] = schema.status_default
+        if "status" in fm:
+            fm["status"] = schema.normalize_status(fm["status"])
 
         # Pillar visual defaults (nn_color / nn_icon) — stamped only when the
         # caller did not supply them, so an explicit value always wins.
@@ -591,9 +635,8 @@ class ConventionGate:
             if pd.nn_icon is not None and "nn_icon" not in fm:
                 fm["nn_icon"] = pd.nn_icon
 
-        missing = [req for req in self._schema.required_frontmatter if fm.get(req) in (None, "")]
-        if len(missing) > 0:
-            raise FieldError(f"missing required frontmatter field(s): {missing}")
+        # Required-frontmatter / type / value enforcement now lives in the Linter,
+        # which validates this finished frontmatter as part of the candidate.
         return fm
 
     # --- Deprecated key migration (Feature: Deprecated Key Migration) ------
@@ -610,69 +653,6 @@ class ConventionGate:
                 del fm[old]
         for dead in self._schema.dead_keys:
             fm.pop(dead, None)
-
-    # --- Body validation (Feature: Body Validation) ------------------------
-    def _validate_body(self, note_type: str | None, directory: str, body: str) -> None:
-        """Reject body-content rule violations (FR-30/31/33).
-
-        Stub types must be body-empty; System/Templates files must use a
-        Templater fence (not a literal ``---``); bare ``<Name>`` placeholders
-        outside code break Obsidian rendering and are rejected.
-        """
-        tc = self._schema.type_config(note_type) if note_type is not None else None
-        if tc is not None and tc.body_empty and body.strip() != "":
-            raise BodyError(
-                f"{note_type} is a DB-canonical redirect stub; its body must be empty"
-            )
-        if directory.startswith("System/Templates") and body.lstrip().startswith("---"):
-            raise BodyError(
-                "System/Templates files must use a Templater fence, not a literal '---' block"
-            )
-        match = _ANGLE_PLACEHOLDER_RE.search(_strip_code(body))
-        if match is not None:
-            token = match.group(0)
-            name = token[1:-1]
-            raise BodyError(
-                f"bare placeholder {token!r} breaks Obsidian rendering — use {{{name}}} instead"
-            )
-
-    # --- Per-@type value enforcement (Feature: Type Registry) --------------
-    def _enforce_type_rules(self, note_type: str | None, fm: dict[str, Any]) -> None:
-        """Enforce per-@type required fields, value constraints, and formats.
-
-        Also repairs + validates the global ``status`` value. Raises
-        ``FieldError`` citing the specific type and field on any violation;
-        ``fm`` is mutated in place to carry the repaired ``status``. Unknown
-        types carry no config and pass untouched.
-        """
-        schema = self._schema
-        if "status" in fm:
-            repaired = schema.normalize_status(fm["status"])
-            fm["status"] = repaired
-            if not schema.is_valid_status(repaired):
-                near = difflib.get_close_matches(repaired, schema.status_values, n=1)
-                suggestion = f" (did you mean {near[0]!r}?)" if len(near) > 0 else ""
-                raise FieldError(
-                    f"status {repaired!r} is not one of "
-                    f"{sorted(schema.status_values)}{suggestion}"
-                )
-
-        tc = schema.type_config(note_type) if note_type is not None else None
-        if tc is None:
-            return
-        for req in tc.required_fields:
-            if fm.get(req) in (None, ""):
-                raise FieldError(f"{note_type}: missing required field {req!r}")
-        for field_name, allowed in tc.value_constraints:
-            value = fm.get(field_name)
-            if value is not None and str(value) not in allowed:
-                raise FieldError(
-                    f"{note_type}.{field_name}: {value!r} is not one of {list(allowed)}"
-                )
-        for field_name, fmt in tc.formats:
-            value = fm.get(field_name)
-            if value is not None and not schema.is_valid_format(fmt, value):
-                raise FieldError(f"{note_type}.{field_name}: {value!r} is not a valid {fmt}")
 
     # --- Write observability (Feature: Write observability) ----------------
     def _emit_diff(

@@ -823,8 +823,8 @@ class TestUpdateNote:
     def test_changes_only_requested_fields(self):
         gate, vault = _gate()
         path = self._seed(gate, vault)
-        result = gate.update_note(path, fields={"status": "reviewed"})
-        assert result.frontmatter["status"] == "reviewed"
+        result = gate.update_note(path, fields={"status": "Completed"})
+        assert result.frontmatter["status"] == "Completed"
         assert result.frontmatter["title"] == "Idea"  # untouched field preserved
         assert "Original body." in vault.store[path]  # body preserved
 
@@ -832,8 +832,8 @@ class TestUpdateNote:
         gate, vault = _gate()
         vault.store["Records/r.md"] = "---\ntitle: r\nprovenance: human\n---\n\nbody\n"
         # metadata-only (no body) update is permitted on a body-immutable dir
-        gate.update_note("Records/r.md", fields={"status": "filed"})
-        assert "status: filed" in vault.store["Records/r.md"]
+        gate.update_note("Records/r.md", fields={"status": "Active"})
+        assert "status: Active" in vault.store["Records/r.md"]
 
     def test_body_update_on_records_rejected(self):
         gate, vault = _gate()
@@ -844,7 +844,7 @@ class TestUpdateNote:
     def test_human_edit_transitions_ai_assisted_to_human_edited(self):
         gate, vault = _gate()
         path = self._seed(gate, vault)  # created by agent -> ai-assisted
-        result = gate.update_note(path, fields={"status": "reviewed"}, actor=Actor.HUMAN)
+        result = gate.update_note(path, fields={"status": "Completed"}, actor=Actor.HUMAN)
         assert result.provenance is Provenance.HUMAN_EDITED
 
 
