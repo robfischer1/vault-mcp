@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 from typing import Any
@@ -32,7 +33,14 @@ class ObsidianCLI:
     """Wrapper for the 'obsidian' binary."""
 
     def __init__(self, binary_path: str | None = None):
-        self._binary = binary_path or shutil.which("obsidian")
+        # Explicit arg wins; else VAULT_MCP_OBSIDIAN_BIN (so a service that does
+        # not inherit the user PATH can be pointed at the binary directly); else
+        # discover on PATH.
+        self._binary = (
+            binary_path
+            or os.environ.get("VAULT_MCP_OBSIDIAN_BIN")
+            or shutil.which("obsidian")
+        )
         self._available: bool | None = None
         self._version: str | None = None
 
@@ -44,7 +52,8 @@ class ObsidianCLI:
                 "available": False,
                 "version": None,
                 "error": "cli_not_found",
-                "detail": "The 'obsidian' binary was not found in the system PATH.",
+                "detail": "The 'obsidian' binary was not found. Set VAULT_MCP_OBSIDIAN_BIN "
+                          "to its full path, or put it on the service PATH.",
             }
 
         try:
