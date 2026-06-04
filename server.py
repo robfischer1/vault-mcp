@@ -1900,6 +1900,75 @@ def lint(
 
 
 @mcp.tool()
+def list_types() -> dict[str, Any]:
+    """List every schema @type with its write-mode and required-field summary.
+
+    Returns:
+        {"ok": True, "types": [{"name", "write_mode", "required", "body_empty", "atom_slug"}, ...]}
+    """
+    try:
+        return {"ok": True, "types": _get_gate()._schema.list_types()}
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def list_tags() -> dict[str, Any]:
+    """List the closed tag glossary, grouped by prefix.
+
+    Returns:
+        {"ok": True, "tags": {"<prefix>": ["<prefix>/<leaf>", ...], ...}}
+    """
+    try:
+        return {"ok": True, "tags": _get_gate()._schema.list_tags()}
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def list_keys() -> dict[str, Any]:
+    """List the global union of frontmatter property keys across all @types.
+
+    Returns:
+        {"ok": True, "keys": ["<key>", ...]}
+    """
+    try:
+        return {"ok": True, "keys": _get_gate()._schema.list_keys()}
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
+def query(note_type: str) -> dict[str, Any]:
+    """Describe a note type's authoring contract — the spec sheet for a @type.
+
+    Returns the fields a caller may set, their value constraints and formats,
+    freeform fields, where the type routes (including discriminators), and body
+    guidance (schema ``body_guidance`` plus a Templater template pointer when one
+    exists). Use it to assemble a compliant note without reading governance prose.
+
+    Args:
+        note_type: The schema @type to describe (e.g., 'Person').
+
+    Returns:
+        {"ok": True, ...spec...} or {"ok": False, "error": "unknown_type"}.
+    """
+    try:
+        spec = _get_gate()._schema.describe_type(note_type)
+        if spec is None:
+            return {
+                "ok": False,
+                "error": "unknown_type",
+                "detail": f"no @type {note_type!r} in the schema",
+            }
+        templates = _load_templates()  # the one vault-read: locate a matching template
+        spec["body_template"] = note_type if note_type in templates else None
+        return {"ok": True, **spec}
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
 def dissolve(
     path: str,
     plan_slug: str,

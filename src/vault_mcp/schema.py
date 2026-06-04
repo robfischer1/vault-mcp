@@ -146,6 +146,7 @@ class TypeConfig:
     atom_slug: bool = False
     value_constraints: tuple[tuple[str, tuple[str, ...]], ...] = ()
     formats: tuple[tuple[str, str], ...] = ()
+    body_guidance: str | None = None
 
     def allowed_values(self, field_name: str) -> tuple[str, ...] | None:
         """Return the closed value set for ``field_name``, or None if unconstrained."""
@@ -270,6 +271,99 @@ class VaultSchema:
             f"ambiguous routing for note_type={note_type!r} pillar={pillar!r}: {dirs}"
         )
 
+    # --- Introspection (Feature: Schema Introspection) ---------------------
+    def _managed_fields(self) -> set[str]:
+        """Frontmatter keys the Gate stamps — never the caller's to set."""
+        managed = {
+            self.label_field,
+            self.created_field,
+            "note_type",
+            "author_type",
+            "author_level",
+            "ai_model",
+            "identifier",
+            "nn_color",
+            "nn_icon",
+            "provenance",
+        }
+        if self.updated_field is not None:
+            managed.add(self.updated_field)
+        return managed
+
+    def list_types(self) -> list[dict[str, Any]]:
+        """Every registered @type with its write-mode and required-field summary."""
+        return [
+            {
+                "name": tc.type_name,
+                "write_mode": tc.write_mode,
+                "required": list(tc.required_fields),
+                "body_empty": tc.body_empty,
+                "atom_slug": tc.atom_slug,
+            }
+            for tc in self.types
+        ]
+
+    def list_tags(self) -> dict[str, list[str]]:
+        """The closed tag glossary grouped by prefix (text before the first '/')."""
+        grouped: dict[str, list[str]] = {}
+        for tag in sorted(self.tags):
+            prefix = tag.split("/", 1)[0] if "/" in tag else "_root"
+            grouped.setdefault(prefix, []).append(tag)
+        return grouped
+
+    def list_keys(self) -> list[str]:
+        """The global union of frontmatter property keys across all @types (sorted)."""
+        keys: set[str] = set(self.required_frontmatter)
+        for tc in self.types:
+            keys.update(tc.required_fields)
+            keys.update(tc.freeform_fields)
+            keys.update(field for field, _ in tc.value_constraints)
+            keys.update(field for field, _ in tc.formats)
+        if len(self.status_values) > 0:
+            keys.add("status")
+        return sorted(keys)
+
+    def describe_type(self, note_type: str) -> dict[str, Any] | None:
+        """The per-type spec sheet: caller-settable fields, value constraints,
+        formats, freeform fields, routing (with discriminators), and body
+        guidance. Returns None when ``note_type`` is unknown."""
+        tc = self.type_config(note_type)
+        if tc is None:
+            return None
+        managed = self._managed_fields()
+        caller_settable = [
+            f for f in (*tc.required_fields, *tc.freeform_fields) if f not in managed
+        ]
+        routing = [
+            {
+                "directory": r.directory,
+                "pillar": r.pillar,
+                "discriminator": (
+                    {"field": r.discriminator[0], "values": list(r.discriminator[1])}
+                    if r.discriminator is not None
+                    else None
+                ),
+            }
+            for r in self.routes
+            # routes key on the raw note_type ('note'); type configs are
+            # Title-Cased ('Note') — match case-insensitively across the split.
+            if r.note_type is not None and r.note_type.lower() == note_type.lower()
+        ]
+        return {
+            "note_type": note_type,
+            "write_mode": tc.write_mode,
+            "required": list(tc.required_fields),
+            "caller_settable": caller_settable,
+            "constraints": {field: list(vals) for field, vals in tc.value_constraints},
+            "formats": {field: fmt for field, fmt in tc.formats},
+            "freeform": list(tc.freeform_fields),
+            "status_values": list(self.status_values),
+            "body_empty": tc.body_empty,
+            "atom_slug": tc.atom_slug,
+            "routing": routing,
+            "body_guidance": tc.body_guidance,
+        }
+
 
 def _resolve_path(path: str | Path | None) -> Path:
     """Resolve the schema path from an explicit arg or the env var.
@@ -338,6 +432,7 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
                 atom_slug=bool(cfg.get("atom_slug", False)),
                 value_constraints=constraints,
                 formats=formats,
+                body_guidance=cfg.get("body_guidance"),
             )
         )
 

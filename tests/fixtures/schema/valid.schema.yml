@@ -65,6 +65,7 @@ types:
     required: [title]
     freeform: [description, keywords]
     write_mode: agent
+    body_guidance: "A short narrative note; lead with the idea, link related notes with [[wikilinks]]."
   Gadget:
     required: [title, serial]
     freeform: [vendor]
