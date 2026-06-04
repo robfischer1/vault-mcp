@@ -1627,14 +1627,19 @@ _compute_receiver: ComputeReceiver | None = None
 
 
 def _get_gate() -> ConventionGate:
-    """Lazily build the Convention Gate from VAULT_MCP_SCHEMA + the Obsidian CLI."""
+    """Lazily build the Convention Gate from VAULT_MCP_SCHEMA + the Obsidian REST API.
+
+    Writes go through the REST API (HTTP on loopback) rather than the CLI: as a
+    session-0 service vault-mcp cannot reach the desktop (session-1) Obsidian via
+    the CLI's same-session IPC, but the REST API crosses that boundary.
+    """
     global _gate
     if _gate is None:
-        from vault_mcp.cli_client import ObsidianNoteIO
         from vault_mcp.gate import ConventionGate
+        from vault_mcp.rest_client import RestNoteIO
         from vault_mcp.schema import load_schema
 
-        _gate = ConventionGate(load_schema(), ObsidianNoteIO(_get_cli_client()))
+        _gate = ConventionGate(load_schema(), RestNoteIO(_get_rest_client()))
     return _gate
 
 

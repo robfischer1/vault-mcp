@@ -21,6 +21,8 @@ from typing import Any
 
 import httpx
 
+from vault_mcp.cli_client import ObsidianIOError
+
 log = logging.getLogger(__name__)
 
 DEFAULT_REST_URL = "http://127.0.0.1:27123"
@@ -219,3 +221,56 @@ class ObsidianRESTClient:
             content=content, content_type=content_type,
             accept=accept,
         )
+
+    def put(
+        self,
+        path: str,
+        *,
+        content: str,
+        content_type: str = "text/markdown",
+        accept: str = "application/json",
+    ) -> dict[str, Any]:
+        """PUT a note body. ``PUT /vault/{path}`` creates or overwrites the file."""
+        return self._request(
+            "PUT", path, content=content, content_type=content_type, accept=accept,
+        )
+
+
+class RestNoteIO:
+    """Convention Gate ``NoteIO`` over the Obsidian Local REST API.
+
+    The session-0 alternative to the CLI-backed ``ObsidianNoteIO``: the CLI talks
+    to Obsidian over same-session IPC and cannot reach a desktop (session-1)
+    instance, but the REST API is HTTP on loopback and crosses the session
+    boundary. ``PUT /vault/{path}`` creates/overwrites and ``GET /vault/{path}``
+    reads — writes still go through Obsidian, so its indexing fires. Raises
+    ``ObsidianIOError`` (the shared NoteIO error the Gate's envelope maps) on any
+    non-ok REST response.
+    """
+
+    def __init__(self, client: ObsidianRESTClient) -> None:
+        self._client = client
+
+    def create_note(self, path: str, content: str) -> None:
+        self._put(path, content)
+
+    def write_note(self, path: str, content: str) -> None:
+        self._put(path, content)
+
+    def read_note(self, path: str) -> str:
+        res = self._client.get(f"/vault/{path}", accept="text/markdown")
+        if not res.get("ok"):
+            raise ObsidianIOError(
+                f"REST read {path}: {res.get('error')}: {res.get('detail')}"
+            )
+        data = res.get("data")
+        if not isinstance(data, str):
+            raise ObsidianIOError(f"REST read {path}: unexpected result {data!r}")
+        return data
+
+    def _put(self, path: str, content: str) -> None:
+        res = self._client.put(f"/vault/{path}", content=content)
+        if not res.get("ok"):
+            raise ObsidianIOError(
+                f"REST write {path}: {res.get('error')}: {res.get('detail')}"
+            )
