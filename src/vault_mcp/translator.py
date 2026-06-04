@@ -20,11 +20,13 @@ from __future__ import annotations
 
 from typing import Any
 
-# Schema.org @types the documents table accepts (mirrors phdb's staged_md
-# _VALID_TYPES); anything else falls back to DigitalDocument.
+# Schema.org @types preserved verbatim as documents.schema_type; anything else
+# falls back to DigitalDocument. Dataset + CollectionPage were added for the
+# Records pillar (source-material manifests and collection manifests).
 _DOC_SCHEMA_TYPES = frozenset({
     "DigitalDocument", "CreativeWork", "Article", "Message",
     "SocialMediaPosting", "EmailMessage", "Book", "Observation",
+    "Dataset", "CollectionPage",
 })
 
 DOC_ENDPOINT = "/write/document"

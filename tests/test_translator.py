@@ -66,6 +66,13 @@ def test_title_used_when_name_absent() -> None:
     assert payloads[0]["payload"]["schema_type"] == "CreativeWork"
 
 
+def test_records_types_preserved() -> None:
+    # Records manifests carry @type Dataset / CollectionPage — must survive.
+    for t in ("Dataset", "CollectionPage"):
+        p = note_to_payloads({"@type": t, "name": "X"}, "b", "/vault/x.md")
+        assert p[0]["payload"]["schema_type"] == t
+
+
 def test_target_tables_derivation() -> None:
     payloads = note_to_payloads(PLAN_FM, "b", "/vault/p.md")
     assert target_tables(payloads) == ["documents", "plans"]
