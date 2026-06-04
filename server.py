@@ -1969,6 +1969,35 @@ def query(note_type: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def audit(
+    directory: str = "", resolve: bool = False, all_dirs: bool = False
+) -> dict[str, Any]:
+    """Scan a vault directory for schema drift; optionally auto-correct it.
+
+    resolve=False reports every drifted note (missing required fields, unknown
+    tags, deprecated/dead keys, off-vocabulary values, routing misplacement,
+    untyped notes) and writes nothing. resolve=True applies deterministic
+    corrections (key renames, dead-key drops, status repairs, routing
+    relocation), re-lints the corrected note, and rewrites it only when clean —
+    uncorrectable faults are reported for manual handling, never guessed.
+    Healed writes land through the Gate (Obsidian) and are captured by the
+    git-sweep daemon.
+
+    Args:
+        directory: Pillar/directory to scan (e.g., 'Inbox'). Ignored if all_dirs.
+        resolve: False = report only; True = heal what is deterministically fixable.
+        all_dirs: Scan the whole vault instead of a single directory.
+
+    Returns:
+        {"ok": True, "scanned", "drifted", "corrected", "notes": [...]} or an error.
+    """
+    try:
+        return _get_gate().audit(directory, resolve=resolve, all_dirs=all_dirs)
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
 def dissolve(
     path: str,
     plan_slug: str,

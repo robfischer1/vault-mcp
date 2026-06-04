@@ -213,6 +213,17 @@ def build_read_js(path: str) -> str:
     )
 
 
+def build_list_js(directory: str) -> str:
+    """Build eval JS returning markdown note paths under ``directory`` (recursive)."""
+    return (
+        f"(async () => {{ "
+        f"const pre = {json.dumps(directory)}; "
+        f"return app.vault.getMarkdownFiles().map(f => f.path)"
+        f".filter(p => !p.startsWith('.trash') && "
+        f"(pre === '' || p === pre || p.startsWith(pre + '/'))); }})()"
+    )
+
+
 def build_delete_js(path: str) -> str:
     """Build eval JS that moves a note to Obsidian's local ``.trash/`` folder.
 
@@ -262,6 +273,17 @@ class ObsidianNoteIO:
 
     def delete_note(self, path: str) -> None:
         self._eval_write(build_delete_js(path), path)
+
+    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
+        res = self._eval(build_list_js(directory.strip("/")), directory or "<root>")
+        data = _eval_value(res.get("data"))
+        paths = [p for p in data if isinstance(p, str)] if isinstance(data, list) else []
+        if recursive:
+            return paths
+        # immediate children only: no '/' beyond the directory prefix
+        pre = directory.strip("/")
+        depth = pre.count("/") + 1 if pre else 0
+        return [p for p in paths if p.count("/") == depth]
 
     def _eval_write(self, code: str, path: str) -> None:
         res = self._eval(code, path)

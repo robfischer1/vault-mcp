@@ -293,3 +293,30 @@ class RestNoteIO:
             raise ObsidianIOError(
                 f"REST delete {path}: {res.get('error')}: {res.get('detail')}"
             )
+
+    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
+        """List ``.md`` note paths under ``directory`` (recursive by default).
+
+        Uses the REST directory listing (``GET /vault/{dir}/`` -> ``{files: [...]}``,
+        subfolders carry a trailing ``/``). Skips Obsidian's ``.trash/``. Returns
+        an empty list when the directory is unreachable rather than raising — a
+        scan over a missing subtree is empty, not an error.
+        """
+        prefix = directory.strip("/")
+        listing = f"/vault/{prefix}/" if prefix else "/vault/"
+        res = self._client.get(listing, accept="application/json")
+        if not res.get("ok"):
+            return []
+        data = res.get("data")
+        files = data.get("files", []) if isinstance(data, dict) else []
+        out: list[str] = []
+        for entry in files:
+            if entry.startswith(".trash"):
+                continue
+            full = f"{prefix}/{entry}" if prefix else entry
+            if entry.endswith("/"):
+                if recursive:
+                    out.extend(self.list_notes(full.rstrip("/"), recursive=True))
+            elif entry.endswith(".md"):
+                out.append(full)
+        return out
