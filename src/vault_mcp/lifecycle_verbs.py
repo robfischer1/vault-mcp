@@ -25,7 +25,6 @@ from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
 from vault_mcp.translator import (
     PLAN_ENDPOINT,
     note_to_payloads,
-    row_to_create_args,
     target_tables,
 )
 
@@ -97,21 +96,3 @@ def dissolve_note(
     delete_file()
     return {"ok": True, "written": written,
             "dissolution_id": declare.get("dissolution_id"), "deleted": True}
-
-
-def materialize_row(
-    *,
-    row: dict[str, Any],
-    table: str,
-    gate_create: Callable[..., dict[str, Any]],
-    paired_body: str | None = None,
-) -> dict[str, Any]:
-    """Materialize one typed phdb row back into a Convention-Gate-valid note.
-
-    ``plans`` rows are metadata-only; pass the paired ``documents`` body via
-    ``paired_body``. Returns the gate's create result.
-    """
-    args = row_to_create_args(row, table)
-    if table == "plans" and paired_body is not None:
-        args["body"] = paired_body
-    return gate_create(**args)

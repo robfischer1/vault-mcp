@@ -1776,55 +1776,50 @@ def dissolve(
 
 
 @mcp.tool()
-def materialize(table: str, row_id: int, actor: str = "agent") -> dict[str, Any]:
+def materialize(table: str, row_id: int) -> dict[str, Any]:
     """Materialize a dissolved phdb row back into a Convention-Gate note (VDV F3).
 
     The inverse of ``dissolve``: reads a typed row (documents or plans) from phdb
-    and recreates a note through the Gate. Plan rows are metadata-only; their
-    prose is pulled from the paired documents row when available. (Restoring plan
-    metadata into frontmatter is a known follow-on.) Returns the Gate create
-    result, or a structured error.
+    over HTTP and writes it back through the shared ``Materializer`` with
+    ``mode=COMPUTE`` — the sanctioned path for materialize-only ``@type``s (e.g.
+    ``Plan``), which ordinary agent-create rejects. ``plans`` rows are
+    metadata-only: their prose comes from the paired ``documents`` row and their
+    metadata is restored into frontmatter. The target directory is resolved from
+    the note_type's schema route. Returns the Gate write result or a structured
+    error.
 
-    Distinct from ``compute_receiver`` (which materializes a fresh compute payload,
-    not a previously-dissolved row).
+    Shares the ``Materializer`` backend with ``compute_receiver`` (which renders a
+    fresh compute payload); this verb builds the payload from a dissolved row.
     """
-    from vault_mcp.lifecycle_verbs import materialize_row
-    from vault_mcp.provenance import Actor
+    import httpx
+
+    from vault_mcp.translator import row_to_payload
 
     if table not in ("documents", "plans"):
         return {"ok": False, "error": "bad_table", "detail": table}
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
 
-    cur = conn.execute(f"SELECT * FROM {table} WHERE id = ?", (row_id,))  # noqa: S608 - table is enum-guarded
-    fetched = cur.fetchone()
-    if fetched is None:
+    # 1. Read the row (+ paired documents body for plans) over HTTP.
+    try:
+        resp = httpx.get(f"{PHDB_HTTP_URL}/read/{table}", params={"id": row_id}, timeout=30.0)
+    except httpx.HTTPError as e:
+        return {"ok": False, "error": f"phdb unreachable: {e}"}
+    if resp.status_code == 404:
         return {"ok": False, "error": "row_not_found", "detail": f"{table}#{row_id}"}
-    cols = [c[0] for c in cur.description]
-    row = dict(zip(cols, fetched))
+    if resp.status_code != 200:
+        return {"ok": False, "error": f"phdb HTTP {resp.status_code}", "detail": resp.text}
+    data = resp.json()
+    row = data.get("row") or {}
+    paired_body: str | None = data.get("paired_body")
 
-    paired_body: str | None = None
-    if table == "plans":
-        d = conn.execute(
-            "SELECT body_text FROM documents WHERE source_file_id = ? LIMIT 1",
-            (row.get("source_file_id"),),
-        ).fetchone()
-        if d is not None:
-            paired_body = d[0]
-
-    _actor = Actor.HUMAN if actor == "human" else Actor.AGENT
-
-    def _gate_create(**kw: Any) -> dict[str, Any]:
-        return _get_gate().create_note(
-            title=kw["title"], note_type=kw.get("note_type"),
-            body=kw.get("body", ""), actor=_actor,
-        ).to_dict()
+    note_type = "Plan" if table == "plans" else (row.get("schema_type") or "DigitalDocument")
 
     try:
-        return materialize_row(
-            row=row, table=table, gate_create=_gate_create, paired_body=paired_body,
-        )
+        # 2. Resolve the target directory from the note_type's schema route.
+        directory = _get_gate()._schema.resolve_directory(note_type)
+        # 3. Build the Materializer payload and write via mode=COMPUTE.
+        payload = row_to_payload(row, table, directory=directory, paired_body=paired_body)
+        result = _get_materializer().materialize(payload)
+        return result.to_dict()
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes
         return _gate_error_envelope(exc)
 

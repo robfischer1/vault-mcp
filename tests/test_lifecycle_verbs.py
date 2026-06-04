@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vault_mcp.lifecycle_verbs import dissolve_note, materialize_row
+from vault_mcp.lifecycle_verbs import dissolve_note
 
 PLAN_NOTE = """---
 "@type": DigitalDocument
@@ -103,18 +103,3 @@ def test_non_plan_note_writes_one_document() -> None:
     assert res["ok"] is True
     assert poster.calls == ["/write/document", "/dissolution/declare"]
     assert [w["table"] for w in res["written"]] == ["documents"]
-
-
-def test_materialize_document_calls_gate() -> None:
-    captured: dict[str, Any] = {}
-
-    def fake_gate(**kwargs: Any) -> dict[str, Any]:
-        captured.update(kwargs)
-        return {"ok": True, "path": "Garden/My Doc.md"}
-
-    row = {"subject": "My Doc", "schema_type": "Article", "body_text": "the body"}
-    res = materialize_row(row=row, table="documents", gate_create=fake_gate)
-    assert res["ok"] is True
-    assert captured["title"] == "My Doc"
-    assert captured["note_type"] == "Article"
-    assert captured["body"] == "the body"

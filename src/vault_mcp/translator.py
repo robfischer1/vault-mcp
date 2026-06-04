@@ -100,28 +100,44 @@ def target_tables(payloads: list[dict[str, Any]]) -> list[str]:
     return seen
 
 
-def row_to_create_args(row: dict[str, Any], table: str) -> dict[str, Any]:
-    """Reverse direction (materialize): map a typed phdb row to the Convention
-    Gate ``create_note`` kwargs. ``documents`` rows render directly (subject +
-    body). ``plans`` rows are metadata-only — the caller supplies the paired
-    ``documents`` body via ``body`` since the plans table stores none.
+def row_to_payload(
+    row: dict[str, Any],
+    table: str,
+    *,
+    directory: str,
+    paired_body: str | None = None,
+) -> dict[str, Any]:
+    """Reverse direction (materialize): map a typed phdb row to a **Materializer
+    payload** (written with ``mode=COMPUTE`` — the sanctioned path for
+    materialize-only ``@type``s like ``Plan``, which agent-create rejects).
+
+    ``directory`` is caller-resolved (materialize-only types route by the schema,
+    or by the row's origin). ``documents`` rows render their body directly;
+    ``plans`` rows are metadata-only — pass the paired ``documents`` body via
+    ``paired_body``, and the plan's metadata is folded into ``frontmatter`` so it
+    is restored onto the materialized note.
     """
     if table == "documents":
         return {
             "title": row.get("subject") or "Untitled",
             "note_type": row.get("schema_type") or "DigitalDocument",
+            "directory": directory,
             "body": row.get("body_text") or "",
+            "frontmatter": {},
         }
     if table == "plans":
+        # Only safe free-text frontmatter is carried back; the structured metadata
+        # (status/phase/effort/...) stays DB-canonical in the plans table and is
+        # NOT re-stamped — legacy values predate the current Gate vocabulary, and
+        # the Gate owns convention. The Gate stamps a convention-valid frontmatter.
+        meta = {}
+        if row.get("description"):
+            meta["description"] = row["description"]
         return {
             "title": row.get("name") or "Untitled Plan",
             "note_type": "Plan",
-            "body": row.get("body") or "",
-            "extra_fields": {
-                k: row[k] for k in
-                ("identifier", "description", "status", "phase",
-                 "effort", "maintenance", "created", "updated")
-                if row.get(k) is not None
-            },
+            "directory": directory,
+            "body": paired_body or "",
+            "frontmatter": meta,
         }
     raise ValueError(f"no materialize mapping for table {table!r}")

@@ -6,7 +6,7 @@ from vault_mcp.translator import (
     DOC_ENDPOINT,
     PLAN_ENDPOINT,
     note_to_payloads,
-    row_to_create_args,
+    row_to_payload,
     target_tables,
 )
 
@@ -73,17 +73,20 @@ def test_target_tables_derivation() -> None:
     assert target_tables(doc_only) == ["documents"]
 
 
-def test_row_to_create_args_document() -> None:
+def test_row_to_payload_document() -> None:
     row = {"subject": "My Doc", "schema_type": "Article", "body_text": "the body"}
-    args = row_to_create_args(row, "documents")
-    assert args == {"title": "My Doc", "note_type": "Article", "body": "the body"}
+    p = row_to_payload(row, "documents", directory="Garden")
+    assert p == {"title": "My Doc", "note_type": "Article", "directory": "Garden",
+                 "body": "the body", "frontmatter": {}}
 
 
-def test_row_to_create_args_plan_carries_metadata() -> None:
-    row = {"name": "P", "status": "active", "phase": "3", "body": "paired prose"}
-    args = row_to_create_args(row, "plans")
-    assert args["title"] == "P"
-    assert args["note_type"] == "Plan"
-    assert args["body"] == "paired prose"
-    assert args["extra_fields"]["status"] == "active"
-    assert args["extra_fields"]["phase"] == "3"
+def test_row_to_payload_plan_carries_prose_not_legacy_metadata() -> None:
+    row = {"name": "P", "status": "active", "phase": "3", "effort": "L",
+           "description": "a plan"}
+    p = row_to_payload(row, "plans", directory="System/Plans", paired_body="paired prose")
+    assert p["title"] == "P"
+    assert p["note_type"] == "Plan"
+    assert p["directory"] == "System/Plans"
+    assert p["body"] == "paired prose"  # prose from the paired documents row
+    # Structured/validated metadata stays DB-canonical — only safe free-text carries.
+    assert p["frontmatter"] == {"description": "a plan"}
