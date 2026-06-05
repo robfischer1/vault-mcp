@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+mcp = pytest.importorskip("mcp", reason="requires the 'server' extra (mcp)")
+
 os.environ["VAULT_MCP_PATH"] = "."
 from server import SubscriptionManager
 from vault_mcp.index import VaultIndex
