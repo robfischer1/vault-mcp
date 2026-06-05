@@ -144,6 +144,11 @@ class TestDiscriminatorRouting:
             )
         assert "ambiguous" in str(exc.value)
 
+    def test_same_directory_from_multiple_routes_not_ambiguous(self):
+        schema = load_schema(self.ROUTING)
+        got = schema.resolve_directory(note_type="Artifact", pillar="Shop")
+        assert got == "Shop/Display"
+
 
 class TestTypeConfig:
     def test_type_config_parsed(self):

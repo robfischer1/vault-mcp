@@ -264,9 +264,10 @@ class VaultSchema:
             raise RouteError(f"no route matches note_type={note_type!r} pillar={pillar!r}")
         best = max(r.specificity() for r in hits)
         top = [r for r in hits if r.specificity() == best]
-        if len(top) == 1:
+        unique_dirs = {r.directory for r in top}
+        if len(unique_dirs) == 1:
             return top[0].directory
-        dirs = ", ".join(r.directory for r in top)
+        dirs = ", ".join(sorted(unique_dirs))
         raise RouteError(
             f"ambiguous routing for note_type={note_type!r} pillar={pillar!r}: {dirs}"
         )

@@ -36,6 +36,11 @@ routes:
     pillar: Library
     discriminator: { field: dynasty, values: [han] }
     directory: Library/B
+  # Two routes that resolve to the SAME directory — not ambiguous.
+  - note_type: Artifact
+    directory: Shop/Display
+  - pillar: Shop
+    directory: Shop/Display
 
 required_frontmatter:
   - title
