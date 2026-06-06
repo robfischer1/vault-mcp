@@ -173,3 +173,17 @@ def test_entity_target_tables_resolves_table_name() -> None:
     fm = {"@type": "VideoGame", "name": "FFXIV"}
     payloads = note_to_payloads(fm, "", "/vault/g.md")
     assert target_tables(payloads) == ["games"]
+
+
+def test_restaurant_preserves_schema_type() -> None:
+    fm = {"@type": "Restaurant", "name": "Casa Bella"}
+    payloads = note_to_payloads(fm, "Open until 10", "/vault/r.md")
+    assert payloads[0]["endpoint"] == DOC_ENDPOINT
+    assert payloads[0]["payload"]["schema_type"] == "Restaurant"
+
+
+def test_software_application_preserves_schema_type() -> None:
+    fm = {"@type": "SoftwareApplication", "name": "Discord"}
+    payloads = note_to_payloads(fm, "Chat app.", "/vault/s.md")
+    assert payloads[0]["endpoint"] == DOC_ENDPOINT
+    assert payloads[0]["payload"]["schema_type"] == "SoftwareApplication"

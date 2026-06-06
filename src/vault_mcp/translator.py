@@ -27,6 +27,7 @@ _DOC_SCHEMA_TYPES = frozenset({
     "DigitalDocument", "CreativeWork", "Article", "Message",
     "SocialMediaPosting", "EmailMessage", "Book", "Observation",
     "Dataset", "CollectionPage",
+    "Restaurant", "CafeOrCoffeeShop", "SoftwareApplication",
 })
 
 # Entity @types that route to phdb's typed entity tables instead of documents.
