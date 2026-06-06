@@ -24,6 +24,7 @@ from typing import Any, Protocol
 
 from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
 from vault_mcp.translator import (
+    ENTITY_ENDPOINT,
     PLAN_ENDPOINT,
     note_to_payloads,
     target_tables,
@@ -36,11 +37,14 @@ class Poster(Protocol):
 
 def _target_schemas(payloads: list[dict[str, Any]]) -> list[str]:
     """Distinct Schema.org @types a payload set lands as — for the wave's
-    target_schemas. Document payloads carry schema_type; a plan payload adds Plan."""
+    target_schemas. Document payloads carry schema_type; a plan payload adds Plan;
+    entity payloads carry schema_type directly."""
     schemas: list[str] = []
     for p in payloads:
         if p["endpoint"] == PLAN_ENDPOINT:
             st = "Plan"
+        elif p["endpoint"] == ENTITY_ENDPOINT:
+            st = p["payload"].get("schema_type", "Entity")
         else:
             st = p["payload"].get("schema_type", "DigitalDocument")
         if st not in schemas:
@@ -53,6 +57,7 @@ def dissolve_note(
     source_path: str,
     raw_text: str,
     file_path: str | None,
+    vault_rel_path: str | None = None,
     plan_slug: str,
     rationale: str,
     post: Poster,
@@ -80,7 +85,7 @@ def dissolve_note(
         written.append({"table": res.get("table"), "id": res.get("id"),
                         "deduped": res.get("deduped")})
 
-    # 2. Declare the dissolution wave.
+    # 2. Declare the dissolution wave (with file provenance).
     declare = post("/dissolution/declare", {
         "plan_slug": plan_slug,
         "target_schemas": _target_schemas(payloads),
@@ -88,6 +93,7 @@ def dissolve_note(
         "rationale": rationale,
         "declared_by": declared_by,
         "repo": repo,
+        "dissolved_paths": [vault_rel_path] if vault_rel_path else None,
     })
     if not declare.get("ok"):
         return {"ok": False, "stage": "declare",

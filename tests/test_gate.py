@@ -974,3 +974,52 @@ class TestDelete:
         result = gate.delete("Outputs/Tao/t.md", actor=Actor.HUMAN)
         assert result["deleted"] is True
         assert "Outputs/Tao/t.md" not in vault.store
+
+
+class TestMoveNote:
+    def _seed(self, gate, vault, title="Movable", path="Knowledge/Notes/Movable.md"):
+        gate.create_note(
+            title=title, note_type="note", pillar="Knowledge", created="2026-05-30"
+        )
+        return path
+
+    def test_move_succeeds(self):
+        gate, vault = _gate()
+        src = self._seed(gate, vault)
+        result = gate.move_note(src, "Projects/Movable.md")
+        assert result["ok"] is True and result["moved"] is True
+        assert src not in vault.store
+        assert "Projects/Movable.md" in vault.store
+
+    def test_move_preserves_content(self):
+        gate, vault = _gate()
+        src = self._seed(gate, vault)
+        original = vault.store[src]
+        gate.move_note(src, "Projects/Movable.md")
+        assert vault.store["Projects/Movable.md"] == original
+
+    def test_move_source_missing_rejected(self):
+        gate, _ = _gate()
+        with pytest.raises(FieldError):
+            gate.move_note("Knowledge/Notes/ghost.md", "Projects/ghost.md")
+
+    def test_move_destination_exists_rejected(self):
+        gate, vault = _gate()
+        src = self._seed(gate, vault)
+        gate.create_note(
+            title="Blocker", note_type="project", pillar="Projects", created="2026-05-30"
+        )
+        with pytest.raises(FieldError, match="already exists"):
+            gate.move_note(src, "Projects/Blocker.md")
+
+    def test_move_blocked_by_src_protection(self):
+        gate, vault = _gate()
+        vault.store["Records/old.md"] = "---\ntitle: old\n---\n\nbody\n"
+        with pytest.raises(ProtectionError):
+            gate.move_note("Records/old.md", "Knowledge/Notes/old.md")
+
+    def test_move_blocked_by_dst_protection(self):
+        gate, vault = _gate()
+        src = self._seed(gate, vault)
+        with pytest.raises(ProtectionError):
+            gate.move_note(src, "Artifacts/Movable.md")

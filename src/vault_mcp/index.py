@@ -526,6 +526,59 @@ class VaultIndex:
                 })
         return results
 
+    def find_dangling_links(
+        self, scope: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Find wikilinks and ``up:`` values that point at non-existent notes."""
+        self._ensure_fresh()
+        dangles: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for stem, targets in self._outbound.items():
+            if scope:
+                paths = self._by_name.get(stem, [])
+                if paths and not any(
+                    str(p.relative_to(self.vault)).replace("\\", "/").startswith(scope)
+                    for p in paths
+                ):
+                    continue
+            for target in targets:
+                if target not in self._by_name:
+                    key = f"{stem}->{target}"
+                    if key not in seen:
+                        seen.add(key)
+                        src_paths = self._by_name.get(stem, [])
+                        src_path = (
+                            str(src_paths[0].relative_to(self.vault)).replace("\\", "/")
+                            if src_paths else stem
+                        )
+                        dangles.append({
+                            "source": src_path,
+                            "target": target,
+                            "link_type": "wikilink",
+                        })
+
+        for path, fm, rel in self._content:
+            if scope and not rel.startswith(scope):
+                continue
+            up_val = fm.get("up")
+            if not up_val:
+                continue
+            up_refs = [up_val] if isinstance(up_val, str) else list(up_val)
+            for ref in up_refs:
+                ref_stem = ref.strip().strip("[]").split("|")[0].strip()
+                if ref_stem and ref_stem not in self._by_name:
+                    key = f"{rel}->up:{ref_stem}"
+                    if key not in seen:
+                        seen.add(key)
+                        dangles.append({
+                            "source": rel,
+                            "target": ref_stem,
+                            "link_type": "up",
+                        })
+
+        return dangles
+
     @staticmethod
     def parse_audit_ignores(ignores_path: Path) -> list[str]:
         """Extract folder-prefix exemptions from audit-ignores.md."""
