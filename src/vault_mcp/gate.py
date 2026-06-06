@@ -620,6 +620,33 @@ class ConventionGate:
         self._emit_diff(path, "delete", [], stamp(actor, WriteMode.METADATA))
         return {"ok": True, "path": path, "deleted": True}
 
+    # --- Move / relocate (Feature: move_note) --------------------------------
+    def move_note(
+        self, src: str, dst: str, *, actor: Actor = Actor.AGENT,
+    ) -> dict[str, Any]:
+        """Move a note from src to dst, preserving content and frontmatter.
+
+        Checks write-protection on both the source directory (must allow
+        deletion) and the destination directory (must allow creation).
+        Raises FieldError if source doesn't exist or destination already exists.
+        """
+        if not self._note_exists(src):
+            raise FieldError(f"source {src!r} does not exist")
+        if self._note_exists(dst):
+            raise FieldError(f"destination {dst!r} already exists")
+
+        src_dir = src.rsplit("/", 1)[0] if "/" in src else ""
+        dst_dir = dst.rsplit("/", 1)[0] if "/" in dst else ""
+        self.check_protection(src_dir, actor, WriteMode.CREATE, touches_body=True)
+        self.check_protection(dst_dir, actor, WriteMode.CREATE, touches_body=False)
+
+        content = self._io.read_note(src)
+        self._write(dst, content, created=True)
+        self._io.delete_note(src)
+        self._emit_diff(src, "delete", [], stamp(actor, WriteMode.METADATA))
+        self._emit_diff(dst, "create", [], stamp(actor, WriteMode.METADATA))
+        return {"ok": True, "src": src, "dst": dst, "moved": True}
+
     # --- Drift audit + heal (Feature: Audit) -------------------------------
     def audit(
         self, directory: str = "", *, resolve: bool = False, all_dirs: bool = False
