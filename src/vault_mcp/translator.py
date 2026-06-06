@@ -58,15 +58,23 @@ def note_to_payloads(
     """
     note_type = str(frontmatter.get("note_type") or "").strip().lower()
 
+    doc_payload: dict[str, Any] = {
+        "source_path": source_path,
+        "body_text": body,
+        "schema_type": _schema_type(frontmatter),
+        "subject": _subject(frontmatter),
+        "file_path": file_path,
+    }
+    fm_updated = frontmatter.get("updated")
+    fm_created = frontmatter.get("created")
+    if fm_updated:
+        doc_payload["mtime"] = str(fm_updated)
+    if fm_created:
+        doc_payload["ctime"] = str(fm_created)
+
     payloads: list[dict[str, Any]] = [{
         "endpoint": DOC_ENDPOINT,
-        "payload": {
-            "source_path": source_path,
-            "body_text": body,
-            "schema_type": _schema_type(frontmatter),
-            "subject": _subject(frontmatter),
-            "file_path": file_path,
-        },
+        "payload": doc_payload,
     }]
 
     if note_type == "plan":

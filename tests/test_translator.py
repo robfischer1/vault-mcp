@@ -87,6 +87,22 @@ def test_row_to_payload_document() -> None:
                  "body": "the body", "frontmatter": {}}
 
 
+def test_frontmatter_dates_pass_through_as_mtime_ctime() -> None:
+    fm = {"@type": "Article", "name": "Dated", "created": "2025-01-15", "updated": "2026-06-05"}
+    payloads = note_to_payloads(fm, "body", "/vault/dated.md")
+    doc = payloads[0]["payload"]
+    assert doc["ctime"] == "2025-01-15"
+    assert doc["mtime"] == "2026-06-05"
+
+
+def test_missing_dates_omitted_from_payload() -> None:
+    fm = {"@type": "Article", "name": "No Dates"}
+    payloads = note_to_payloads(fm, "body", "/vault/nodates.md")
+    doc = payloads[0]["payload"]
+    assert "mtime" not in doc
+    assert "ctime" not in doc
+
+
 def test_row_to_payload_plan_carries_prose_not_legacy_metadata() -> None:
     row = {"name": "P", "status": "active", "phase": "3", "effort": "L",
            "description": "a plan"}

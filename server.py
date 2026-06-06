@@ -1284,6 +1284,51 @@ def add_triple(
 
 
 @mcp.tool()
+def delete_triple(
+    triple_id: int,
+    prune_orphan_nodes: bool = False,
+) -> dict[str, Any]:
+    """Delete a triple by ID (idempotent). Qualifiers cascade automatically.
+
+    Use ``query_triples`` to find the triple_id first, then pass it here.
+
+    Args:
+        triple_id: The ID of the triple to delete.
+        prune_orphan_nodes: If True, also delete subject/object nodes that
+            have no remaining triples after this deletion.
+
+    Returns:
+        {"deleted": bool, "triple_id": int, "nodes_pruned": int} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.triples import delete_triple as _dt
+    return _dt(conn, triple_id, prune_orphan_nodes=prune_orphan_nodes)
+
+
+@mcp.tool()
+def delete_node(
+    node_id: int,
+    cascade: bool = False,
+) -> dict[str, Any]:
+    """Delete a node by ID. Refuses if the node has triples unless cascade=True.
+
+    Args:
+        node_id: The ID of the node to delete.
+        cascade: If True, also delete all triples referencing this node.
+
+    Returns:
+        {"deleted": bool, "node_id": int, ...} or {"error": str}.
+    """
+    conn = _get_phdb_conn()
+    if conn is None:
+        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+    from phdb.triples import delete_node as _dn
+    return _dn(conn, node_id, cascade=cascade)
+
+
+@mcp.tool()
 def triple_stats() -> dict[str, Any]:
     """Get summary statistics for the predicate table.
 
@@ -1623,6 +1668,23 @@ def note_list(
 # vault-mcp v2 — Convention Gate write tools (schema-driven, provenance-stamped)
 # ---------------------------------------------------------------------------
 
+def _prune_empty_parents(child_path: Path, root: Path) -> list[str]:
+    """Walk up from child_path's parent, removing empty dirs until root."""
+    pruned: list[str] = []
+    d = child_path.parent
+    while d != root and d.is_relative_to(root):
+        try:
+            if not any(d.iterdir()):
+                d.rmdir()
+                pruned.append(str(d.relative_to(root)))
+            else:
+                break
+        except OSError:
+            break
+        d = d.parent
+    return pruned
+
+
 _gate: ConventionGate | None = None
 _compute_receiver: ComputeReceiver | None = None
 
@@ -1848,7 +1910,11 @@ def delete(
     try:
         gate = _get_gate()
         result = gate.delete(path, actor=Actor.HUMAN if actor == "human" else Actor.AGENT)
-        return _commit_write(result, "delete", commit_message, is_delete=True)
+        committed = _commit_write(result, "delete", commit_message, is_delete=True)
+        if committed.get("ok"):
+            abs_path = (VAULT_PATH / path).resolve()
+            committed["dirs_pruned"] = _prune_empty_parents(abs_path, VAULT_PATH)
+        return committed
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
 
@@ -2051,6 +2117,7 @@ def dissolve(
             )
         finally:
             committer.end_write()
+        res["dirs_pruned"] = _prune_empty_parents(abs_path, VAULT_PATH)
     return res
 
 
