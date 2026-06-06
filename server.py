@@ -1920,6 +1920,45 @@ def delete(
 
 
 @mcp.tool()
+def move_note(
+    src: str,
+    dst: str,
+    actor: str = "agent",
+    commit_message: str | None = None,
+) -> dict[str, Any]:
+    """Move a vault note from src to dst, preserving content and frontmatter.
+
+    Reads the source note, writes it to the destination path, then deletes the
+    source. Checks write-protection on both directories. Does NOT update
+    backlinks — use ``backlinks_to`` to enumerate inbound references and update
+    them separately via ``write_note``.
+
+    Args:
+        src: Vault-relative source path (e.g. 'Software/README.md').
+        dst: Vault-relative destination path (e.g. 'References/README.md').
+        actor: 'agent' (default) or 'human'.
+        commit_message: Optional git commit message.
+
+    Returns:
+        {"ok": True, "src", "dst", "moved": True} or a structured error.
+    """
+    from vault_mcp.provenance import Actor
+
+    try:
+        gate = _get_gate()
+        result = gate.move_note(
+            src, dst, actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
+        )
+        committed = _commit_write(result, "move", commit_message)
+        if committed.get("ok"):
+            abs_src = (VAULT_PATH / src).resolve()
+            committed["dirs_pruned"] = _prune_empty_parents(abs_src, VAULT_PATH)
+        return committed
+    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+        return _gate_error_envelope(exc)
+
+
+@mcp.tool()
 def lint(
     title: str = "",
     note_type: str | None = None,
@@ -2103,6 +2142,7 @@ def dissolve(
     raw_text = abs_path.read_text(encoding="utf-8")
     res = dissolve_note(
         source_path=str(abs_path), raw_text=raw_text, file_path=abs_path.name,
+        vault_rel_path=path,
         plan_slug=plan_slug, rationale=rationale, post=_phdb_post,
         delete_file=abs_path.unlink, declared_by=declared_by, repo=repo,
     )
