@@ -29,8 +29,32 @@ _DOC_SCHEMA_TYPES = frozenset({
     "Dataset", "CollectionPage",
 })
 
+# Entity @types that route to phdb's typed entity tables instead of documents.
+# Must match phdb's EntitySchema registry schema_type values.
+_ENTITY_SCHEMA_TYPES = frozenset({
+    "WebPage", "Book", "VideoGame", "Movie", "TVSeries",
+    "PodcastSeries",
+})
+
+_ENTITY_TABLE_MAP: dict[str, str] = {
+    "WebPage": "web_pages",
+    "Book": "books",
+    "VideoGame": "games",
+    "Movie": "movies",
+    "TVSeries": "tv_series",
+    "PodcastSeries": "podcasts",
+}
+
+# Vault-internal frontmatter keys that are not entity data.
+_VAULT_INTERNAL_KEYS = frozenset({
+    "note_type", "author_type", "author_level", "tags", "aliases",
+    "cssclasses", "pillar", "up", "nn_icon", "permalink",
+    "@type", "type", "created", "updated",
+})
+
 DOC_ENDPOINT = "/write/document"
 PLAN_ENDPOINT = "/write/plan"
+ENTITY_ENDPOINT = "/write/entity"
 
 
 def _schema_type(frontmatter: dict[str, Any]) -> str:
@@ -42,6 +66,23 @@ def _subject(frontmatter: dict[str, Any]) -> str | None:
     return frontmatter.get("name") or frontmatter.get("title")
 
 
+def _raw_type(frontmatter: dict[str, Any]) -> str | None:
+    return frontmatter.get("@type") or frontmatter.get("type") or None
+
+
+def _entity_fields(frontmatter: dict[str, Any], body: str) -> dict[str, Any]:
+    """Extract entity column values from frontmatter + body."""
+    fields: dict[str, Any] = {}
+    for k, v in frontmatter.items():
+        if k not in _VAULT_INTERNAL_KEYS and v is not None:
+            fields[k] = v
+    if "name" not in fields:
+        fields["name"] = _subject(frontmatter)
+    if "description" not in fields and body.strip():
+        fields["description"] = body.strip()
+    return fields
+
+
 def note_to_payloads(
     frontmatter: dict[str, Any],
     body: str,
@@ -51,12 +92,26 @@ def note_to_payloads(
 ) -> list[dict[str, Any]]:
     """Translate one parsed note into the typed-write payloads phdb expects.
 
-    Always emits a ``documents`` payload carrying the body verbatim. A note whose
-    ``note_type`` is ``Plan`` additionally emits a ``plans`` metadata payload.
-    Returns ``[{"endpoint": str, "payload": dict}, ...]`` in write order
-    (document first, then metadata).
+    Entity-typed notes (``@type`` in ``_ENTITY_SCHEMA_TYPES``) route to the
+    entity table instead of documents. All other notes emit a ``documents``
+    payload carrying the body verbatim. A ``Plan`` note additionally emits a
+    ``plans`` metadata payload.
+    Returns ``[{"endpoint": str, "payload": dict}, ...]`` in write order.
     """
     note_type = str(frontmatter.get("note_type") or "").strip().lower()
+    raw_at = _raw_type(frontmatter)
+
+    # Entity-typed notes → entity table instead of documents.
+    if raw_at and raw_at in _ENTITY_SCHEMA_TYPES:
+        return [{
+            "endpoint": ENTITY_ENDPOINT,
+            "payload": {
+                "schema_type": raw_at,
+                "source_path": source_path,
+                "fields": _entity_fields(frontmatter, body),
+                "file_path": file_path,
+            },
+        }]
 
     doc_payload: dict[str, Any] = {
         "source_path": source_path,
@@ -104,9 +159,14 @@ def target_tables(payloads: list[dict[str, Any]]) -> list[str]:
     mapping = {DOC_ENDPOINT: "documents", PLAN_ENDPOINT: "plans"}
     seen: list[str] = []
     for p in payloads:
-        t = mapping.get(p["endpoint"])
-        if t and t not in seen:
-            seen.append(t)
+        if p["endpoint"] == ENTITY_ENDPOINT:
+            t = _ENTITY_TABLE_MAP.get(p["payload"].get("schema_type", ""), "")
+            if t and t not in seen:
+                seen.append(t)
+        else:
+            t = mapping.get(p["endpoint"])
+            if t and t not in seen:
+                seen.append(t)
     return seen
 
 

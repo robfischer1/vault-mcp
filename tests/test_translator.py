@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from vault_mcp.translator import (
     DOC_ENDPOINT,
+    ENTITY_ENDPOINT,
     PLAN_ENDPOINT,
     note_to_payloads,
     row_to_payload,
@@ -113,3 +114,62 @@ def test_row_to_payload_plan_carries_prose_not_legacy_metadata() -> None:
     assert p["body"] == "paired prose"  # prose from the paired documents row
     # Structured/validated metadata stays DB-canonical — only safe free-text carries.
     assert p["frontmatter"] == {"description": "a plan"}
+
+
+# ── Entity routing ──────────────────────────────────────────────────────────
+
+def test_entity_type_routes_to_entity_endpoint() -> None:
+    fm = {"@type": "VideoGame", "name": "FFXIV", "genre": "MMORPG",
+          "game_platform": "PC", "publisher": "Square Enix"}
+    payloads = note_to_payloads(fm, "", "/vault/Entities/Games/FFXIV.md",
+                                file_path="FFXIV.md")
+    assert len(payloads) == 1
+    assert payloads[0]["endpoint"] == ENTITY_ENDPOINT
+    p = payloads[0]["payload"]
+    assert p["schema_type"] == "VideoGame"
+    assert p["fields"]["name"] == "FFXIV"
+    assert p["fields"]["genre"] == "MMORPG"
+    assert p["fields"]["game_platform"] == "PC"
+
+
+def test_entity_body_maps_to_description() -> None:
+    fm = {"@type": "Book", "name": "Meditations"}
+    payloads = note_to_payloads(fm, "Stoic philosophy classic.", "/vault/b.md")
+    fields = payloads[0]["payload"]["fields"]
+    assert fields["description"] == "Stoic philosophy classic."
+
+
+def test_entity_explicit_description_wins_over_body() -> None:
+    fm = {"@type": "Movie", "name": "Dune", "description": "Sci-fi epic"}
+    payloads = note_to_payloads(fm, "Long review body here.", "/vault/m.md")
+    fields = payloads[0]["payload"]["fields"]
+    assert fields["description"] == "Sci-fi epic"
+
+
+def test_entity_title_falls_back_to_name() -> None:
+    fm = {"@type": "VideoGame", "title": "Elden Ring"}
+    payloads = note_to_payloads(fm, "", "/vault/g.md")
+    assert payloads[0]["payload"]["fields"]["name"] == "Elden Ring"
+
+
+def test_entity_vault_internal_keys_excluded() -> None:
+    fm = {"@type": "TVSeries", "name": "Breaking Bad", "note_type": "entity",
+          "author_type": "ai-compiled", "tags": ["media"], "genre": "Drama"}
+    payloads = note_to_payloads(fm, "", "/vault/s.md")
+    fields = payloads[0]["payload"]["fields"]
+    assert "note_type" not in fields
+    assert "author_type" not in fields
+    assert "tags" not in fields
+    assert fields["genre"] == "Drama"
+
+
+def test_non_entity_type_still_routes_to_documents() -> None:
+    fm = {"@type": "Person", "name": "Alice"}
+    payloads = note_to_payloads(fm, "Bio text.", "/vault/p.md")
+    assert payloads[0]["endpoint"] == DOC_ENDPOINT
+
+
+def test_entity_target_tables_resolves_table_name() -> None:
+    fm = {"@type": "VideoGame", "name": "FFXIV"}
+    payloads = note_to_payloads(fm, "", "/vault/g.md")
+    assert target_tables(payloads) == ["games"]

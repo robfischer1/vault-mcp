@@ -24,6 +24,7 @@ from typing import Any, Protocol
 
 from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
 from vault_mcp.translator import (
+    ENTITY_ENDPOINT,
     PLAN_ENDPOINT,
     note_to_payloads,
     target_tables,
@@ -36,11 +37,14 @@ class Poster(Protocol):
 
 def _target_schemas(payloads: list[dict[str, Any]]) -> list[str]:
     """Distinct Schema.org @types a payload set lands as — for the wave's
-    target_schemas. Document payloads carry schema_type; a plan payload adds Plan."""
+    target_schemas. Document payloads carry schema_type; a plan payload adds Plan;
+    entity payloads carry schema_type directly."""
     schemas: list[str] = []
     for p in payloads:
         if p["endpoint"] == PLAN_ENDPOINT:
             st = "Plan"
+        elif p["endpoint"] == ENTITY_ENDPOINT:
+            st = p["payload"].get("schema_type", "Entity")
         else:
             st = p["payload"].get("schema_type", "DigitalDocument")
         if st not in schemas:
