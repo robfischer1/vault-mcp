@@ -515,6 +515,26 @@ def find_orphans(scope: str | None = None) -> dict[str, Any]:
     return {"count": len(results), "results": results}
 
 
+@mcp.tool()
+def find_dangling_links(scope: str | None = None) -> dict[str, Any]:
+    """Find wikilinks and ``up:`` values that point at non-existent notes.
+
+    Scans the vault for broken links — useful for finding stale references
+    after moves, renames, or dissolutions.
+
+    Args:
+        scope: Optional vault-relative path prefix to restrict search.
+            Example: "Knowledge" scans only Knowledge/ notes.
+
+    Returns:
+        {"count": int, "results": [{source, target, link_type}]}
+        link_type is "wikilink" or "up".
+    """
+    idx = _get_index()
+    results = idx.find_dangling_links(scope=scope)
+    return {"count": len(results), "results": results}
+
+
 # ---------------------------------------------------------------------------
 # Phase 3 — Governance tools
 # ---------------------------------------------------------------------------
@@ -915,6 +935,134 @@ if not REST_DISABLE:
         return data
 
     @mcp.tool()
+    def patch_note(
+        path: str,
+        content: str,
+        target_type: str = "heading",
+        target: str | None = None,
+        operation: str = "replace",
+        create_if_missing: bool = False,
+    ) -> dict[str, Any]:
+        """[REST-backed] Patch a section of a note without rewriting the whole file.
+
+        Uses Obsidian's PATCH /vault/{path} with targeting headers to modify
+        a specific heading, block, or frontmatter field. Use document_map()
+        first to discover valid targets.
+
+        Args:
+            path: Vault-relative file path.
+            content: The markdown content to write.
+            target_type: "heading", "block", or "frontmatter". Default "heading".
+            target: Target identifier — heading path ("## Section"), block ID,
+                or frontmatter field name. If None, targets the whole note.
+            operation: "replace", "append", or "prepend". Default "replace".
+            create_if_missing: If True, create the target heading/block if it
+                doesn't exist.
+
+        Returns:
+            {"ok": True, "patched": path} on success.
+        """
+        client = _get_rest_client()
+        headers: dict[str, str] = {
+            "Target-Type": target_type,
+            "Operation": operation,
+        }
+        if target:
+            headers["Target"] = target
+        if create_if_missing:
+            headers["Create-Target-If-Missing"] = "true"
+        result = client.patch(
+            f"/vault/{path}", content=content, extra_headers=headers,
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return {"ok": True, "patched": path}
+
+    @mcp.tool()
+    def append_note(path: str, content: str) -> dict[str, Any]:
+        """[REST-backed] Append content to the end of a note.
+
+        Convenience wrapper around POST /vault/{path}. Appends the content
+        after the note's existing body.
+
+        Args:
+            path: Vault-relative file path.
+            content: Markdown content to append.
+
+        Returns:
+            {"ok": True, "appended": path} on success.
+        """
+        client = _get_rest_client()
+        result = client.post(
+            f"/vault/{path}",
+            content=content, content_type="text/markdown",
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return {"ok": True, "appended": path}
+
+    @mcp.tool()
+    def set_field(path: str, key: str, value: str) -> dict[str, Any]:
+        """[REST-backed] Set a single frontmatter field on a note.
+
+        Convenience wrapper around PATCH with Target-Type: frontmatter.
+        Replaces the field value; creates the field if it doesn't exist.
+
+        Args:
+            path: Vault-relative file path.
+            key: Frontmatter field name (e.g. "status", "created").
+            value: New value as a string. YAML scalars are auto-parsed by
+                Obsidian (e.g. "true" -> boolean, "42" -> number).
+
+        Returns:
+            {"ok": True, "field": key, "path": path} on success.
+        """
+        client = _get_rest_client()
+        headers: dict[str, str] = {
+            "Target-Type": "frontmatter",
+            "Target": key,
+            "Operation": "replace",
+            "Create-Target-If-Missing": "true",
+        }
+        result = client.patch(
+            f"/vault/{path}", content=value, extra_headers=headers,
+        )
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return {"ok": True, "field": key, "path": path}
+
+    @mcp.tool()
+    def periodic_append(
+        level: str,
+        content: str,
+        date: str | None = None,
+    ) -> dict[str, Any]:
+        """[REST-backed] Append content to a periodic note (daily, weekly, etc.).
+
+        Creates the note if it doesn't exist (Obsidian's periodic note
+        behavior). Useful for Journal/ daily capture and atom emission.
+
+        Args:
+            level: One of "daily", "weekly", "monthly", "quarterly", "yearly".
+            content: Markdown content to append.
+            date: Optional date string. Defaults to today.
+
+        Returns:
+            {"ok": True, "appended": level, "date": date} on success.
+        """
+        valid = {"daily", "weekly", "monthly", "quarterly", "yearly"}
+        if level not in valid:
+            return {"error": "rest_invalid_request", "detail": f"level must be one of {valid}"}
+        path = f"/periodic/{level}/"
+        if date:
+            path = f"/periodic/{level}/{date}"
+        client = _get_rest_client()
+        result = client.post(path, content=content, content_type="text/markdown")
+        if not result["ok"]:
+            return {"error": result["error"], "detail": result.get("detail")}
+        return {"ok": True, "appended": level, "date": date}
+
+    @mcp.tool()
     def obsidian_search(query: str) -> dict[str, Any]:
         """[REST-backed] Search the vault using Obsidian's built-in search engine.
 
@@ -941,22 +1089,30 @@ if not REST_DISABLE:
         return {"count": 0, "results": [], "raw": data}
 
     REST_COMMAND_ALLOWLIST = {
+        # Navigation / focus
         "workspace:open-in-new-leaf",
         "app:reveal-active-file",
         "editor:focus",
         "app:open-settings",
+        # Linter / formatting
+        "obsidian-linter:lint-file",
+        "obsidian-linter:lint-all-files",
+        # Templater
+        "templater-obsidian:replace-in-file-templater",
+        # Update frontmatter
+        "update-time-on-edit:update-current",
     }
 
     @mcp.tool()
     def execute_command(command_id: str) -> dict[str, Any]:
         """[REST-backed] Execute an Obsidian command by ID (allowlisted only).
 
-        Only non-mutating navigation/focus commands are permitted. Current
-        allowlist: workspace:open-in-new-leaf, app:reveal-active-file,
-        editor:focus, app:open-settings.
+        Crosses the session boundary (HTTP on loopback), so this works
+        headless where the CLI cannot. Allowed commands include navigation,
+        linter, templater, and frontmatter-update triggers.
 
         Args:
-            command_id: Obsidian command ID. Example: "editor:focus"
+            command_id: Obsidian command ID. Example: "obsidian-linter:lint-file"
 
         Returns:
             {"executed": str} on success, {"error": ...} on rejection.

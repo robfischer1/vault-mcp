@@ -235,6 +235,22 @@ class ObsidianRESTClient:
             "PUT", path, content=content, content_type=content_type, accept=accept,
         )
 
+    def patch(
+        self,
+        path: str,
+        *,
+        content: str,
+        content_type: str = "text/markdown",
+        accept: str = "application/json",
+        extra_headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """PATCH a note section. Headers select target + operation."""
+        return self._request(
+            "PATCH", path,
+            content=content, content_type=content_type,
+            accept=accept, extra_headers=extra_headers,
+        )
+
     def delete(self, path: str, *, accept: str = "application/json") -> dict[str, Any]:
         """DELETE a note. ``DELETE /vault/{path}`` removes the file."""
         return self._request("DELETE", path, accept=accept)
