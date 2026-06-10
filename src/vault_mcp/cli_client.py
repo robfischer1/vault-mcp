@@ -99,6 +99,7 @@ class ObsidianCLI:
 
         Returns:
             {"ok": bool, "data": Any, "error": str|None, "detail": str|None}
+
         """
         if command not in CLI_COMMAND_ALLOWLIST:
             return {

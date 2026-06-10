@@ -156,7 +156,8 @@ def note_to_payloads(
 
 def target_tables(payloads: list[dict[str, Any]]) -> list[str]:
     """The phdb table names a payload set lands in — for the dissolution wave's
-    ``target_tables``. Derived from the endpoints, deduped, order-preserving."""
+    ``target_tables``. Derived from the endpoints, deduped, order-preserving.
+    """
     mapping = {DOC_ENDPOINT: "documents", PLAN_ENDPOINT: "plans"}
     seen: list[str] = []
     for p in payloads:

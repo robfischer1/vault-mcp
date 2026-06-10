@@ -184,7 +184,8 @@ class Linter:
     # --- Delta-aware severity ---------------------------------------------
     def _adjust(self, candidate: LintCandidate, finding: Finding) -> Finding:
         """Downgrade a field-scoped error to a warning when an update did not
-        touch that field — pre-existing drift must not block an unrelated edit."""
+        touch that field — pre-existing drift must not block an unrelated edit.
+        """
         if not candidate.is_update:
             return finding
         if finding.severity is not Severity.ERROR:

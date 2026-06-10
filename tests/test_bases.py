@@ -648,7 +648,7 @@ class TestWriter:
         write_base_to_file(target, base_dict)
 
         new_content = target.read_text(encoding="utf-8")
-        original_before = original_content.split("```base")[0]
+        original_before = original_content.split("```base", maxsplit=1)[0]
         new_before = new_content.split("```base")[0]
         assert original_before == new_before
 

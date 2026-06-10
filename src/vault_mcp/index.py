@@ -42,8 +42,7 @@ class VaultIndex:
         normalized = []
         for t in raw:
             t = t.rsplit('/', 1)[-1]
-            if t.endswith('.md'):
-                t = t[:-3]
+            t = t.removesuffix('.md')
             normalized.append(t)
         return list(set(normalized))
 
@@ -234,7 +233,7 @@ class VaultIndex:
     def find_by_filename(
         self, pattern: str, scope: str | None = None
     ) -> list[dict[str, Any]]:
-        """fnmatch over the by_name index keys."""
+        """Fnmatch over the by_name index keys."""
         results = []
         for stem, paths in self.by_name.items():
             if not fnmatch.fnmatch(stem, pattern):

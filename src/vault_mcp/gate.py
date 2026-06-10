@@ -144,7 +144,8 @@ def _slugify(text: str) -> str:
 
 def _title_case_note_type(value: str) -> str:
     """Ensure a leading uppercase without lowercasing the rest (``plan`` -> ``Plan``,
-    ``TVSeries`` preserved)."""
+    ``TVSeries`` preserved).
+    """
     return value[:1].upper() + value[1:] if value else value
 
 
@@ -709,7 +710,8 @@ class ConventionGate:
         note_type: str | None,
     ) -> list[dict[str, Any]]:
         """Collect every drift item for one note: untyped, deprecated/dead keys,
-        all linter errors, and routing misplacement."""
+        all linter errors, and routing misplacement.
+        """
         drift: list[dict[str, Any]] = []
         if note_type is None:
             drift.append({"category": "untyped", "detail": "no note_type"})

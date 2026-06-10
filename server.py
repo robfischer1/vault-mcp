@@ -46,8 +46,8 @@ from vault_mcp.bases import (  # noqa: E402, I001
     validate_base as _validate_base_impl,
     write_base_to_file as _write_base_to_file_impl,
 )
-from vault_mcp.index import VaultIndex  # noqa: E402, I001
-from vault_mcp.rest_client import DEFAULT_REST_URL  # noqa: E402, I001
+from vault_mcp.index import VaultIndex  # noqa: E402
+from vault_mcp.rest_client import DEFAULT_REST_URL  # noqa: E402
 
 # phdb sibling-repo import for predicate table (Phase 9 — triple tools)
 _phdb_src = Path(__file__).resolve().parent.parent / "personal-history-db" / "src"
@@ -236,7 +236,7 @@ class SubscriptionManager:
         disconnected = []
         for session in _active_sessions:
             try:
-                await session.send_notification(cast(Any, notification))
+                await session.send_notification(cast("Any", notification))
             except Exception:
                 disconnected.append(session)
 
@@ -310,6 +310,7 @@ def obsidian_cli_status() -> dict[str, Any]:
 
     Returns:
         {"available": bool, "version": str|None, "error": str|None, "detail": str|None}
+
     """
     return _get_cli_client().probe()
 
@@ -325,6 +326,7 @@ def obsidian_cli_reload_plugin(id: str) -> dict[str, Any]:
 
     Returns:
         {"ok": bool, "data": Any} on success.
+
     """
     return _get_cli_client().run("plugin:reload", id=id)
 
@@ -341,6 +343,7 @@ def obsidian_cli_eval(code: str) -> dict[str, Any]:
 
     Returns:
         {"ok": bool, "data": Any} on success.
+
     """
     return _get_cli_client().run("eval", code=code)
 
@@ -360,6 +363,7 @@ def obsidian_cli_command(
 
     Returns:
         {"ok": bool, "data": Any} on success.
+
     """
     return _get_cli_client().run(command, **(params or {}))
 
@@ -380,6 +384,7 @@ def find_notes_by_frontmatter(
 
     Returns:
         {"count": int, "results": [{path, frontmatter}]}
+
     """
     results = _get_index().find_notes_by_frontmatter(filters, scope=scope)
     return {"count": len(results), "results": results}
@@ -399,6 +404,7 @@ def find_by_filename(
 
     Returns:
         {"count": int, "results": [{stem, path}]}
+
     """
     results = _get_index().find_by_filename(pattern, scope=scope)
     return {"count": len(results), "results": results}
@@ -419,6 +425,7 @@ def recent_edits(
 
     Returns:
         {"count": int, "results": [{path, modified, stem}]}
+
     """
     results = _get_index().recent_edits(since, scope=scope, limit=limit)
     return {"count": len(results), "results": results}
@@ -440,6 +447,7 @@ def read_note(
 
     Outbound links include resolution: each wikilink stem is resolved to its
     full path when unambiguous, or flagged as "ambiguous"/"unresolved".
+
     """
     return _get_index().read_note(stem_or_path)
 
@@ -453,6 +461,7 @@ def reindex() -> dict[str, Any]:
 
     Returns:
         {"indexed": int, "names": int, "elapsed_ms": int}
+
     """
     return _get_index().reindex()
 
@@ -473,6 +482,7 @@ def backlinks_to(stem: str) -> dict[str, Any]:
 
     Returns:
         {"stem": str, "count": int, "results": [{stem, path}]}
+
     """
     results = _get_index().backlinks_to(stem)
     return {"stem": stem, "count": len(results), "results": results}
@@ -491,6 +501,7 @@ def outbound_links(
 
     Returns:
         {"stem": str, "count": int, "results": [{stem, path|resolution}]}
+
     """
     results = _get_index().outbound_links(stem, include_image_embeds=include_image_embeds)
     return {"stem": stem, "count": len(results), "results": results}
@@ -507,6 +518,7 @@ def find_orphans(scope: str | None = None) -> dict[str, Any]:
 
     Returns:
         {"count": int, "results": [{path, stem, reason}]}
+
     """
     idx = _get_index()
     ignores_path = VAULT_PATH / _AUDIT_IGNORES_REL
@@ -529,6 +541,7 @@ def find_dangling_links(scope: str | None = None) -> dict[str, Any]:
     Returns:
         {"count": int, "results": [{source, target, link_type}]}
         link_type is "wikilink" or "up".
+
     """
     idx = _get_index()
     results = idx.find_dangling_links(scope=scope)
@@ -553,6 +566,7 @@ def tag_glossary_check() -> dict[str, Any]:
     Returns:
         {"files_with_violations": int,
          "results": [{path, invalid_tags: [str]}]}
+
     """
     idx = _get_index()
     glossary_path = VAULT_PATH / _TAGS_GLOSSARY_REL
@@ -574,6 +588,7 @@ def all_tags(include_body: bool = True) -> dict[str, Any]:
 
     Returns:
         {"count": int, "tags": [{tag, count, frontmatter_count, body_count, sources}]}
+
     """
     results = _get_index().all_tags(include_body=include_body)
     return {"count": len(results), "tags": results}
@@ -593,6 +608,7 @@ def vault_stats() -> dict[str, Any]:
          "types": [{type, count}],
          "top_tags": [{tag, count}],
          "edit_volume_by_week": [{week, count}]}
+
     """
     idx = _get_index()
     stats = idx.vault_stats()
@@ -625,6 +641,7 @@ async def subscribe_base(
 
     Returns:
         {"handle": str, "initial_results": dict}
+
     """
     idx = _get_index()
     file_path = idx.vault / path
@@ -671,6 +688,7 @@ async def unsubscribe_base(handle: str) -> dict[str, Any]:
 
     Returns:
         {"ok": bool}
+
     """
     mgr = _get_sub_manager()
     success = mgr.remove(handle)
@@ -689,6 +707,7 @@ def parse_base(path: str) -> dict[str, Any]:
 
     Returns:
         {"path": str, "count": int, "bases": [...], "errors": [...]}
+
     """
     file_path = VAULT_PATH / path
     if not file_path.exists():
@@ -720,6 +739,7 @@ def execute_base(
 
     Returns:
         {"total": int, "view": str|null, "notes": [...], "warnings": [...]}
+
     """
     file_path = VAULT_PATH / path
     if not file_path.exists():
@@ -786,6 +806,7 @@ def write_base(
 
     Returns:
         {"written": true, "path": str, "action": str, "base_index": int} on success.
+
     """
     file_path = VAULT_PATH / path
     if not file_path.exists() and not file_path.parent.exists():
@@ -821,6 +842,7 @@ def validate_base_tool(base: dict[str, Any]) -> dict[str, Any]:
 
     Returns:
         {"valid": bool, "errors": [...], "warnings": [...]}
+
     """
     vr = _validate_base_impl(base)
     return {
@@ -847,6 +869,7 @@ if not REST_DISABLE:
         Returns:
             {"reachable": bool, "version": str|None,
              "last_probed": float, "last_error": str|None}
+
         """
         return _get_rest_client().probe()
 
@@ -864,6 +887,7 @@ if not REST_DISABLE:
         Returns:
             {"path": str, "frontmatter": dict, "content": str, "stat": dict,
              "as_of": "rest"} on success.
+
         """
         client = _get_rest_client()
         result = client.get(
@@ -889,6 +913,7 @@ if not REST_DISABLE:
         Returns:
             {"path": str, "frontmatter": dict, "content": str, "stat": dict,
              "as_of": "rest"} on success.
+
         """
         valid = {"daily", "weekly", "monthly", "quarterly", "yearly"}
         if level not in valid:
@@ -922,6 +947,7 @@ if not REST_DISABLE:
         Returns:
             {"path": str, "frontmatter": dict, "content": str, "stat": dict,
              "as_of": "rest"} on success.
+
         """
         client = _get_rest_client()
         result = client.get(
@@ -961,6 +987,7 @@ if not REST_DISABLE:
 
         Returns:
             {"ok": True, "patched": path} on success.
+
         """
         client = _get_rest_client()
         headers: dict[str, str] = {
@@ -991,6 +1018,7 @@ if not REST_DISABLE:
 
         Returns:
             {"ok": True, "appended": path} on success.
+
         """
         client = _get_rest_client()
         result = client.post(
@@ -1016,6 +1044,7 @@ if not REST_DISABLE:
 
         Returns:
             {"ok": True, "field": key, "path": path} on success.
+
         """
         client = _get_rest_client()
         headers: dict[str, str] = {
@@ -1049,6 +1078,7 @@ if not REST_DISABLE:
 
         Returns:
             {"ok": True, "appended": level, "date": date} on success.
+
         """
         valid = {"daily", "weekly", "monthly", "quarterly", "yearly"}
         if level not in valid:
@@ -1075,6 +1105,7 @@ if not REST_DISABLE:
 
         Returns:
             {"count": int, "results": [{filename, score, matches}]}
+
         """
         client = _get_rest_client()
         result = client.post(
@@ -1116,6 +1147,7 @@ if not REST_DISABLE:
 
         Returns:
             {"executed": str} on success, {"error": ...} on rejection.
+
         """
         if command_id not in REST_COMMAND_ALLOWLIST:
             return {
@@ -1150,6 +1182,7 @@ if not REST_DISABLE:
 
         Returns:
             {"count": int, "results": [{filename, result: {field: value}}]} on success.
+
         """
         client = _get_rest_client()
         result = client.post(
@@ -1184,6 +1217,7 @@ if not REST_DISABLE:
 
         Returns:
             {"count": int, "results": [...]} on success.
+
         """
         client = _get_rest_client()
         result = client.post(
@@ -1211,6 +1245,7 @@ if not REST_DISABLE:
 
         Returns:
             {"count": int, "tags": [{"name": str, "count": int}]}
+
         """
         client = _get_rest_client()
         result = client.get("/tags/")
@@ -1232,6 +1267,7 @@ if not REST_DISABLE:
 
         Returns:
             {"files": [str]} — filenames and subdirectory names.
+
         """
         client = _get_rest_client()
         endpoint = f"/vault/{path}" if path else "/vault/"
@@ -1259,6 +1295,7 @@ if not REST_DISABLE:
 
         Returns:
             {"opened": str} on success.
+
         """
         client = _get_rest_client()
         params = {"newLeaf": "true"} if new_leaf else None
@@ -1280,6 +1317,7 @@ if not REST_DISABLE:
 
         Returns:
             {"headings": [str], "blocks": [str], "frontmatterFields": [str]}
+
         """
         client = _get_rest_client()
         endpoint = f"/vault/{path}" if path else "/active/"
@@ -1367,6 +1405,7 @@ def query_triples(
 
     Returns:
         {"count": int, "triples": [...]} or {"error": str} if DB unavailable.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1417,6 +1456,7 @@ def add_triple(
 
     Returns:
         {"triple_id": int, "created": bool, ...} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1455,6 +1495,7 @@ def delete_triple(
 
     Returns:
         {"deleted": bool, "triple_id": int, "nodes_pruned": int} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1476,6 +1517,7 @@ def delete_node(
 
     Returns:
         {"deleted": bool, "node_id": int, ...} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1493,6 +1535,7 @@ def triple_stats() -> dict[str, Any]:
 
     Returns:
         {"nodes": int, "triples": int, ...} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1516,6 +1559,7 @@ def node_neighborhood(
 
     Returns:
         {"node": {...}, "outgoing": [...], "incoming": [...]} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1530,6 +1574,7 @@ def list_predicates() -> dict[str, Any]:
 
     Returns:
         {"count": int, "predicates": [...]} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1564,6 +1609,7 @@ def materialize_revision(
     Returns:
         {"rev_id": int, "file_path": str, "body": str, ...} on success,
         {"error": str, "detail": str} on miss.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1605,6 +1651,7 @@ def list_file_revisions(
 
     Returns:
         {"count": int, "revisions": [...]} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1630,6 +1677,7 @@ def revision_triple_deltas(rev_id: int) -> dict[str, Any]:
 
     Returns:
         {"count": int, "deltas": [...]} or {"error": str}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1660,6 +1708,7 @@ def dissolution_lookup(vault_path: str, repo: str = "vault") -> dict[str, Any]:
     Returns:
         {"file_path": ..., "repo": ..., "dissolutions": [...],
          "materializations": [...], "lifecycle": [...]} or {"error": ...}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1679,6 +1728,7 @@ def list_dissolution_waves(repo: str = "vault") -> dict[str, Any]:
         {"count": int, "waves": [...]} where each wave dict includes
         plan_slug, migration_id, target_schemas/tables, dissolved_at,
         and linked_files count.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1699,6 +1749,7 @@ def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
         Dissolution dict on hit, {"dissolution": None} when the
         revision is not linked to any dissolution, or
         {"error": str} on lookup failure.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1734,6 +1785,7 @@ def note_lookup(query: str) -> dict[str, Any]:
 
     Returns:
         Full note dict on hit, {"result": None} on miss, or {"error": ...}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1759,6 +1811,7 @@ def note_search(query: str, limit: int = 20) -> dict[str, Any]:
 
     Returns:
         {"count": int, "results": [...]} with snippet per hit.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1782,6 +1835,7 @@ def note_read(name_or_path: str) -> dict[str, Any]:
     Returns:
         {"name_or_path": str, "body": str} on hit,
         {"result": None} on miss.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -1811,6 +1865,7 @@ def note_list(
 
     Returns:
         {"count": int, "notes": [...]}.
+
     """
     conn = _get_phdb_conn()
     if conn is None:
@@ -2028,6 +2083,7 @@ def write_note(
 
     Returns:
         {"ok": True, "path", "frontmatter", "created", "warnings", ...} or a structured error.
+
     """
     from vault_mcp.provenance import Actor
 
@@ -2060,6 +2116,7 @@ def delete(
 
     Returns:
         {"ok": True, "path", "deleted": True} or a structured error.
+
     """
     from vault_mcp.provenance import Actor
 
@@ -2097,6 +2154,7 @@ def move_note(
 
     Returns:
         {"ok": True, "src", "dst", "moved": True} or a structured error.
+
     """
     from vault_mcp.provenance import Actor
 
@@ -2142,6 +2200,7 @@ def lint(
 
     Returns:
         {"ok": bool, "errors": [...], "warnings": [...]} or a structured error.
+
     """
     from vault_mcp.provenance import Actor
 
@@ -2166,6 +2225,7 @@ def list_types() -> dict[str, Any]:
 
     Returns:
         {"ok": True, "types": [{"name", "write_mode", "required", "body_empty", "atom_slug"}, ...]}
+
     """
     try:
         return {"ok": True, "types": _get_gate()._schema.list_types()}
@@ -2179,6 +2239,7 @@ def list_tags() -> dict[str, Any]:
 
     Returns:
         {"ok": True, "tags": {"<prefix>": ["<prefix>/<leaf>", ...], ...}}
+
     """
     try:
         return {"ok": True, "tags": _get_gate()._schema.list_tags()}
@@ -2192,6 +2253,7 @@ def list_keys() -> dict[str, Any]:
 
     Returns:
         {"ok": True, "keys": ["<key>", ...]}
+
     """
     try:
         return {"ok": True, "keys": _get_gate()._schema.list_keys()}
@@ -2213,6 +2275,7 @@ def query(note_type: str) -> dict[str, Any]:
 
     Returns:
         {"ok": True, ...spec...} or {"ok": False, "error": "unknown_type"}.
+
     """
     try:
         spec = _get_gate()._schema.describe_type(note_type)
@@ -2251,6 +2314,7 @@ def audit(
 
     Returns:
         {"ok": True, "scanned", "drifted", "corrected", "notes": [...]} or an error.
+
     """
     try:
         return _get_gate().audit(directory, resolve=resolve, all_dirs=all_dirs)
@@ -2284,6 +2348,7 @@ def dissolve(
     Returns:
         {"ok": True, "written": [...], "dissolution_id", "deleted": True}, or a
         structured error naming the failing stage (the file is left in place).
+
     """
     from vault_mcp.lifecycle_verbs import dissolve_note
 
@@ -2376,6 +2441,7 @@ def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict
 
     Returns:
         {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
+
     """
     from vault_mcp.compute import ComputePayloadError
 
@@ -2403,6 +2469,7 @@ def compute_receiver(payload: dict[str, Any], created: str | None = None) -> dic
 
     Returns:
         {"ok": True, "path", "frontmatter", "provenance"} or a structured error.
+
     """
     from vault_mcp.lifecycle import MaterializePayloadError
 
@@ -2440,6 +2507,7 @@ def atom(
 
     Returns:
         {"ok": True, "atom_type", "event_id", "ts"} or a structured error.
+
     """
     from vault_mcp.phdb_client import (
         AtomError,

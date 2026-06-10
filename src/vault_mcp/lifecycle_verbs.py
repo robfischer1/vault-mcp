@@ -38,7 +38,8 @@ class Poster(Protocol):
 def _target_schemas(payloads: list[dict[str, Any]]) -> list[str]:
     """Distinct Schema.org @types a payload set lands as — for the wave's
     target_schemas. Document payloads carry schema_type; a plan payload adds Plan;
-    entity payloads carry schema_type directly."""
+    entity payloads carry schema_type directly.
+    """
     schemas: list[str] = []
     for p in payloads:
         if p["endpoint"] == PLAN_ENDPOINT:

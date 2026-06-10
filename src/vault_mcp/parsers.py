@@ -127,6 +127,7 @@ def build_content_index(
     Returns:
         content: list of (Path, frontmatter_dict, rel_str) for files with frontmatter
         by_name: dict[stem -> list[Path]] for ALL non-hidden .md files
+
     """
     _skip_dirs = skip_dirs if skip_dirs is not None else SKIP_DIRS
     _skip_content = skip_content if skip_content is not None else SKIP_CONTENT_CHECKS

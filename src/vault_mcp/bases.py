@@ -430,17 +430,17 @@ def parse_file(file_path: Path) -> ParsedFile:
 
 class FormulaError(Exception):
     """Base class for formula evaluation errors."""
-    pass
+
 
 
 class FormulaTimeoutError(FormulaError):
     """Regex evaluation timed out."""
-    pass
+
 
 
 class FormulaDepthError(FormulaError):
     """Maximum nesting depth exceeded."""
-    pass
+
 
 
 class FormulaEvaluator:
@@ -469,11 +469,11 @@ class FormulaEvaluator:
         def replacer(m: re.Match[str]) -> str:
             if m.group(1):  # string literal
                 return m.group(1)
-            elif m.group(2):  # regex literal
+            if m.group(2):  # regex literal
                 return f'"{m.group(2)}"'
-            elif m.group(3):  # if(
+            if m.group(3):  # if(
                 return "_if_("
-            elif m.group(4):  # var =>
+            if m.group(4):  # var =>
                 return f"lambda {m.group(4)}:"
             return m.group(0)
 
@@ -532,8 +532,7 @@ class FormulaEvaluator:
                         # Eager evaluation of the chosen branch
                         if condition:
                             return self._visit(node.args[1])
-                        else:
-                            return self._visit(node.args[2])
+                        return self._visit(node.args[2])
                     finally:
                         self._current_depth -= 1
 
@@ -985,10 +984,8 @@ def execute_base(
                     num = float(val)
                     accums[name]["sum"] += num
                     accums[name]["count_with_val"] += 1
-                    if num < accums[name]["min"]:
-                        accums[name]["min"] = num
-                    if num > accums[name]["max"]:
-                        accums[name]["max"] = num
+                    accums[name]["min"] = min(accums[name]["min"], num)
+                    accums[name]["max"] = max(accums[name]["max"], num)
                 except (ValueError, TypeError):
                     pass
 
@@ -1000,17 +997,16 @@ def execute_base(
             results[name] = a["count_with_val"]
         elif a["count_with_val"] == 0:
             results[name] = 0 if s.function == "sum" else None
-        else:
-            if s.function == "sum":
-                results[name] = a["sum"]
-            elif s.function == "average":
-                results[name] = a["sum"] / a["count_with_val"]
-            elif s.function == "min":
-                results[name] = a["min"]
-            elif s.function == "max":
-                results[name] = a["max"]
-            elif s.function == "range":
-                results[name] = a["max"] - a["min"]
+        elif s.function == "sum":
+            results[name] = a["sum"]
+        elif s.function == "average":
+            results[name] = a["sum"] / a["count_with_val"]
+        elif s.function == "min":
+            results[name] = a["min"]
+        elif s.function == "max":
+            results[name] = a["max"]
+        elif s.function == "range":
+            results[name] = a["max"] - a["min"]
 
     if selected_view and selected_view.sort:
         for sd in reversed(selected_view.sort):

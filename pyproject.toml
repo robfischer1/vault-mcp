@@ -43,11 +43,33 @@ where = ["src"]
 
 [tool.ruff]
 target-version = "py311"
-line-length = 99
+line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+# Opt-out model: enable everything, disable the noise (the canonical policy —
+# see Forge/Governance/Code-Standards.md). ALL auto-adopts new rules on ruff
+# upgrade, so treat `pre-commit autoupdate` as a review-new-rules event.
+select = ["ALL"]
+ignore = [
+    # Formatter's job / would fight a formatter
+    "COM", "ISC", "Q", "E501",
+    # Docstring rule-conflicts — keep D211 + D212, silence the losers
+    "D203", "D213",
+    # Annotate-everything: we enforce public return types (ANN201) only
+    "ANN001", "ANN002", "ANN003", "ANN202", "ANN204", "ANN401",
+    # Exception-message ergonomics — pedantic
+    "EM", "TRY003",
+    # Complexity + magic-number thresholds — opinionated
+    "C901", "PLR09", "PLR2004",
+    # Intentional patterns in this codebase
+    "T201",     # deliberate CLI prints
+    "PLC0415",  # deferred / optional-dependency imports
+    "FBT", "SLF001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are self-documenting and assert freely
+"tests/**" = ["S101", "PT", "ANN", "D", "ARG", "PLR2004", "SLF001"]
 
 [tool.mypy]
 python_version = "3.11"

@@ -208,7 +208,8 @@ class VaultSchema:
     # --- status vocabulary (Feature: Value Vocabularies) -------------------
     def normalize_status(self, value: object) -> str:
         """Repair a status value: unwrap singleton lists, blank -> default,
-        apply the schema's rename repairs. Does not check validity."""
+        apply the schema's rename repairs. Does not check validity.
+        """
         if isinstance(value, list):
             value = value[0] if len(value) == 1 else ""
         text = "" if value is None else str(value).strip()
@@ -327,7 +328,8 @@ class VaultSchema:
     def describe_type(self, note_type: str) -> dict[str, Any] | None:
         """The per-type spec sheet: caller-settable fields, value constraints,
         formats, freeform fields, routing (with discriminators), and body
-        guidance. Returns None when ``note_type`` is unknown."""
+        guidance. Returns None when ``note_type`` is unknown.
+        """
         tc = self.type_config(note_type)
         if tc is None:
             return None
