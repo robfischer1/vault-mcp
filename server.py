@@ -2443,18 +2443,15 @@ def atom(
     """
     from vault_mcp.phdb_client import (
         AtomError,
-        PhdbBusyError,
         PhdbUnavailableError,
         emit_atom,
     )
 
     try:
-        result = emit_atom(atom_type, payload, ts=ts)
+        result = emit_atom(atom_type, payload, ts=ts, post=_phdb_post)
         return result.to_dict()
     except AtomError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
-    except PhdbBusyError as exc:
-        return {"ok": False, "error": "phdb_busy", "detail": str(exc)}
     except PhdbUnavailableError as exc:
         return {"ok": False, "error": "phdb_unavailable", "detail": str(exc)}
 
