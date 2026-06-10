@@ -165,7 +165,7 @@ def target_tables(payloads: list[dict[str, Any]]) -> list[str]:
             if t and t not in seen:
                 seen.append(t)
         else:
-            t = mapping.get(p["endpoint"])
+            t = mapping.get(p["endpoint"], "")
             if t and t not in seen:
                 seen.append(t)
     return seen

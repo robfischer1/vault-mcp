@@ -558,7 +558,7 @@ class VaultIndex:
                             "link_type": "wikilink",
                         })
 
-        for path, fm, rel in self._content:
+        for _path, fm, rel in self._content:
             if scope and not rel.startswith(scope):
                 continue
             up_val = fm.get("up")

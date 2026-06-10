@@ -1,31 +1,27 @@
 """phdb write client — the atom-emit write surface into personal-history-db.
 
 The ``atom`` lifecycle verb records an AI-observed *atom* (a decision,
-reversal, tension, or pushback) directly into phdb's ``session_events`` table,
-skipping the vault filesystem entirely. phdb is a *sibling* package (not a
-dependency of the core server): every phdb touch resolves through
-``PHDB_DB_PATH`` and degrades gracefully when unset/missing, exactly like the
-REST-backed tools degrade without Obsidian (Constitution II).
+reversal, tension, or pushback) into phdb's ``session_events`` table, skipping
+the vault filesystem entirely. vault-mcp is a *pure client*: it POSTs the atom
+to the running phdb service's HTTP ``/emit`` route (#720), so phdb owns the
+write and its backend (PG via ``PHDB_BACKEND``) — vault-mcp never opens phdb's
+DB directly. Degrades gracefully when the route is unreachable, exactly like
+the REST-backed tools degrade without Obsidian (Constitution II).
 
 Boundary discipline:
 
-* **Write-only.** This module only inserts ``session_events`` rows. All
-  reads, identity resolution, and the typed-graph live in phdb.
-* **Lock-coordinated.** Writes acquire phdb's own ``write_lock`` (the real
-  one, imported from phdb — a *replicated* lock would not mutually exclude
-  with phdb's ingest/embed writers and would reintroduce ``SQLITE_BUSY``).
-* **Pure core, coupled edge.** Validation + the INSERT (``insert_atom``) take
-  a plain ``sqlite3.Connection`` and are unit-tested against a temp DB; only
-  ``emit_atom`` imports phdb to open + lock the live connection.
+* **Write-only, over HTTP.** This module only emits ``session_events`` rows,
+  through phdb's ``/emit`` route. All reads, identity resolution, and the
+  typed-graph live in phdb.
+* **Pure core, injected edge.** Validation + ts-resolution are pure; the
+  poster (the HTTP transport) is injected, so the logic is unit-tested with a
+  fake and the MCP layer wires the real ``_phdb_post`` adapter.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 # The four AI-observed atom types and the payload fields each carries (#140).
@@ -53,7 +49,11 @@ _ATOM_ALLOWED: dict[str, frozenset[str]] = {
 
 ATOM_TYPES: frozenset[str] = frozenset(_ATOM_REQUIRED)
 
-PHDB_PATH_ENV_VAR = "PHDB_DB_PATH"
+# The write transport: a poster (endpoint, payload) -> result. Injected so this
+# module never opens phdb's DB — atom writes go to the phdb service's HTTP
+# /emit route, which owns the backend (PG via PHDB_BACKEND) (#720). The MCP
+# layer wires the real adapter (server._phdb_post); tests pass a fake.
+Poster = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 
 class AtomError(Exception):
@@ -61,11 +61,7 @@ class AtomError(Exception):
 
 
 class PhdbUnavailableError(Exception):
-    """phdb is not reachable (path unset/missing, or the package is absent)."""
-
-
-class PhdbBusyError(Exception):
-    """Another phdb writer holds the write lock; the emit was not performed."""
+    """phdb's HTTP /emit route is unreachable or returned a non-success result."""
 
 
 @dataclass(frozen=True)
@@ -120,80 +116,37 @@ def _event_ts(payload: dict[str, Any], ts: str | None) -> str | None:
     return captured if isinstance(captured, str) and captured != "" else None
 
 
-def insert_atom(
-    conn: sqlite3.Connection,
-    atom_type: str,
-    payload: object,
-    *,
-    ts: str | None = None,
-) -> AtomResult:
-    """Validate ``payload`` and INSERT one ``session_events`` row via ``conn``.
-
-    The validated payload is stored as a deterministic JSON blob in the
-    ``payload`` column; ``event_type`` is the atom type and ``ts`` is the event
-    time (explicit arg or the payload's ``captured_when``). The caller owns the
-    transaction (``commit``) and connection lifecycle.
-    """
-    validated = validate_atom(atom_type, payload)
-    event_ts = _event_ts(validated, ts)
-    blob = json.dumps(validated, sort_keys=True, ensure_ascii=False)
-    cur = conn.execute(
-        "INSERT INTO session_events (event_type, ts, payload) VALUES (?, ?, ?)",
-        (atom_type, event_ts, blob),
-    )
-    event_id = cur.lastrowid
-    assert event_id is not None  # INSERT always yields a rowid on this table
-    return AtomResult(atom_type=atom_type, event_id=event_id, ts=event_ts)
-
-
-def _resolve_db_path(db_path: str | Path | None) -> Path | None:
-    """Resolve the phdb path from an explicit arg or ``PHDB_DB_PATH``.
-
-    The env var is read at call time (never bound as a default), so runtime and
-    test overrides take effect. Returns ``None`` when no usable path exists.
-    """
-    raw = db_path if db_path is not None else os.environ.get(PHDB_PATH_ENV_VAR)
-    if raw is None or str(raw) == "":
-        return None
-    path = Path(raw)
-    return path if path.exists() else None
-
-
 def emit_atom(
     atom_type: str,
     payload: object,
     *,
     ts: str | None = None,
-    db_path: str | Path | None = None,
+    post: Poster,
 ) -> AtomResult:
-    """Emit an atom into the live phdb ``session_events`` table, lock-coordinated.
+    """Emit an atom by POSTing it to phdb's HTTP ``/emit`` route (#720).
 
-    Resolves ``PHDB_DB_PATH``, acquires phdb's cross-process ``write_lock``,
-    opens a pragma-configured read-write connection (busy_timeout=30s,
-    foreign_keys=ON, WAL), inserts the atom, and commits. Validation happens
-    first, so a bad payload is rejected (``AtomError``) before any lock or
-    connection is taken.
+    vault-mcp is a pure client: the running phdb service owns the write and the
+    backend (PG via ``PHDB_BACKEND``), so this no longer opens phdb's DB directly
+    — which broke once SQLite went read-only at cutover, and pinned writes to
+    SQLite besides. ``post`` is injected (the real adapter is the server's
+    ``_phdb_post``), so the logic is unit-testable with a fake.
 
-    Raises ``PhdbUnavailableError`` when phdb is unreachable and
-    ``PhdbBusyError`` when another phdb writer holds the lock.
+    Validation runs first, so a bad payload is rejected (``AtomError``) before any
+    network call. Raises ``PhdbUnavailableError`` when the route is unreachable or
+    returns a non-success envelope.
     """
-    validate_atom(atom_type, payload)  # fail fast, before touching phdb
-    path = _resolve_db_path(db_path)
-    if path is None:
+    validated = validate_atom(atom_type, payload)  # fail fast, before the POST
+    event_ts = _event_ts(validated, ts)
+    result = post("/emit", {
+        "event_type": atom_type,
+        "payload": validated,
+        "ts": event_ts,
+    })
+    if not result.get("ok"):
         raise PhdbUnavailableError(
-            f"{PHDB_PATH_ENV_VAR} is not set or the database file does not exist"
+            str(result.get("error", "phdb /emit returned no success flag"))
         )
-
-    try:
-        from phdb.core.db import connect
-        from phdb.writelock import WriteLockError, write_lock
-    except ImportError as exc:  # phdb package not on the path
-        raise PhdbUnavailableError(f"phdb package is not importable: {exc}") from exc
-
-    try:
-        with write_lock(path), connect(path) as conn:
-            result = insert_atom(conn, atom_type, payload, ts=ts)
-            conn.commit()
-    except WriteLockError as exc:
-        raise PhdbBusyError(str(exc)) from exc
-    return result
+    event_id = result.get("event_id")
+    if not isinstance(event_id, int):
+        raise PhdbUnavailableError(f"phdb /emit returned no event_id: {result}")
+    return AtomResult(atom_type=atom_type, event_id=event_id, ts=event_ts)
