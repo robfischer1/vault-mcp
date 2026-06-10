@@ -42,14 +42,14 @@ def run_obsidian_cli(command, **kwargs):
     binary = shutil.which("obsidian")
     if not binary:
         return {"ok": False, "error": "cli_not_found"}
-    
+
     args = [binary, command]
     for k, v in kwargs.items():
         args.append(f"{k}={v}")
-        
+
     res = subprocess.run(args, capture_output=True, text=True)
     if res.returncode != 0:
         return {"ok": False, "error": "cli_error", "detail": res.stderr}
-    
+
     return {"ok": True, "data": res.stdout}
 ```

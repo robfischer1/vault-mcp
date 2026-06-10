@@ -25,8 +25,8 @@ jobs:
       - name: Install dependencies
         run: uv pip install -e ".[dev]" --system
 
-      - name: Lint
-        run: uv run ruff check src/ tests/
+      - name: Lint + hygiene (same hooks as local pre-commit)
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
       - name: Type check
         run: uv run mypy src/

@@ -18,14 +18,14 @@ This feature allows `vault-mcp` to resolve Obsidian Bases embeds in Markdown fil
 2.  **Embed it in a note** (`Dashboard.md`):
     ```markdown
     # Dashboard
-    
+
     Current active projects:
     ![[Projects.base#Active]]
     ```
 
 3.  **Read the note via MCP**:
     Call `read_note(stem_or_path="Dashboard")`.
-    
+
     **Response**:
     ```json
     {

@@ -27,7 +27,7 @@ graph TD
 
 ### Bases & Formula Evaluation
 
-The `bases.py` module implements a restricted AST-based evaluator for Obsidian-compatible formulas. 
+The `bases.py` module implements a restricted AST-based evaluator for Obsidian-compatible formulas.
 - **Tier 1**: Simple property access and link counting.
 - **Tier 2**: Logic (`if`), list-shaping (`map`, `join`), and string manipulation (`replace`, `+`).
 - **Safety**: Includes regex timeouts (100ms) and nesting depth limits (10 levels) to protect the server from expensive or recursive evaluations.

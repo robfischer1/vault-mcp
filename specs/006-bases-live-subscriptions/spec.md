@@ -14,7 +14,7 @@ Currently, to get the latest results from an Obsidian Base query, a client (agen
 
 ## User Value
 
-Users and agents can subscribe to a base query and receive immediate, push-based notifications when the result set changes. 
+Users and agents can subscribe to a base query and receive immediate, push-based notifications when the result set changes.
 - **Live Dashboards**: A status-tracker UI can display up-to-date project statuses without polling.
 - **Reactive Agents**: An agent can "watch" a base (e.g., "High Priority Tasks") and react immediately when a new task matches the filter or an existing task is updated.
 - **Efficiency**: Reduces churn and latency for any consumer that wants up-to-date base results.

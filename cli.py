@@ -53,6 +53,7 @@ if not _srv.REST_DISABLE:
 
 
 def main() -> None:
+    """Run a single vault-mcp tool from the CLI for smoke-testing."""
     parser = argparse.ArgumentParser(description="vault-mcp CLI smoke-test runner")
     parser.add_argument("--tool", required=True, choices=list(TOOLS.keys()))
     parser.add_argument("--json", default="{}", help="JSON kwargs for the tool")

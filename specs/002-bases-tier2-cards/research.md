@@ -5,7 +5,7 @@
 ### 1. Formula Evaluation Strategy
 - **Decision**: Implement a restricted expression evaluator that supports the specific vocabulary of Tier 2 (logic, list-shaping, string manipulation).
 - **Rationale**: The current evaluator uses simple regex matching for property access. Tier 2 requires actual logic (`if`) and method chaining (`.map().join()`). We will use a safe evaluation approach rather than a full Python `eval()` to prevent unauthorized code execution.
-- **Alternatives Considered**: 
+- **Alternatives Considered**:
     - Full `eval()` with limited globals: Rejected due to security risks and the difficulty of truly sandboxing Python.
     - Custom recursive descent parser: Better for security but higher implementation complexity. A hybrid approach using a subset of Python's AST (via `ast.literal_eval` or similar restricted parser) is preferred.
 

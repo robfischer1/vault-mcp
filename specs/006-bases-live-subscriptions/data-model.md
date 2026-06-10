@@ -12,7 +12,7 @@ class Subscription:
     view_name: str | None  # Optional view name
     base_index: int        # Index of the Base in the file
     session_id: str | None # Optional MCP session identifier
-    
+
     # Dependencies (computed on registration)
     dependency_keys: set[str]   # Frontmatter keys (e.g., "status", "note.type")
     depends_on_links: bool      # True if query uses file.links/backlinks

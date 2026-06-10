@@ -96,6 +96,8 @@ _active_sessions: set[Any] = set()
 
 @dataclass
 class Subscription:
+    """A live-update subscription: a handle bound to a base path/view plus its last result hash."""
+
     handle: str
     path: str
     view: str | None
@@ -107,6 +109,7 @@ class SubscriptionManager:
     """Manages Bases live update subscriptions and pushes notifications."""
 
     def __init__(self, mcp_server: FastMCP):
+        """Initialize the subscription manager bound to the FastMCP server."""
         self.mcp = mcp_server
         self.subscriptions: dict[str, Subscription] = {}
         self.lock = threading.Lock()
@@ -148,6 +151,7 @@ class SubscriptionManager:
             self._loop.call_soon_threadsafe(self._queue.put_nowait, path)
 
     def add(self, path: str, view: str | None, base_index: int) -> str:
+        """Register a subscription for a base path/view and return its handle."""
         self._ensure_worker()
         handle = f"sub_{uuid.uuid4().hex[:8]}"
         with self.lock:
@@ -160,6 +164,7 @@ class SubscriptionManager:
         return handle
 
     def remove(self, handle: str) -> bool:
+        """Remove the subscription with `handle`; return True if it existed."""
         with self.lock:
             if handle in self.subscriptions:
                 del self.subscriptions[handle]
@@ -181,6 +186,7 @@ class SubscriptionManager:
         return hashlib.sha256(dump.encode("utf-8")).hexdigest()
 
     async def notify_all(self, _changed_path: Path) -> None:
+        """Re-evaluate every subscription and push notifications for changed result sets."""
         subs_to_check = []
         with self.lock:
             subs_to_check = list(self.subscriptions.values())
@@ -237,7 +243,7 @@ class SubscriptionManager:
         for session in _active_sessions:
             try:
                 await session.send_notification(cast("Any", notification))
-            except Exception:
+            except Exception:  # noqa: BLE001 — any send failure means the session is gone
                 disconnected.append(session)
 
         for session in disconnected:
@@ -1944,9 +1950,9 @@ def _commit_write(
     *,
     is_delete: bool = False,
 ) -> dict[str, Any]:
-    """Commit a successful Gate write and attach ``commit_sha`` (the checkpoint
-    handshake). Fail-safe: a commit failure leaves the write intact, sha None.
+    """Commit a successful Gate write and attach ``commit_sha`` (the checkpoint handshake).
 
+    Fail-safe: a commit failure leaves the write intact, sha None.
     A caller-supplied ``commit_message`` is used verbatim; otherwise a
     ``vault: {op} {path}`` fallback is generated. The in-flight markers let the
     scheduled sweep defer rather than race this per-transaction commit.
@@ -1988,7 +1994,7 @@ def _start_sweep_scheduler() -> None:
         while True:
             _time.sleep(interval)
             try:
-                stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                stamp = datetime.now().strftime("%Y-%m-%d %H:%M")  # noqa: DTZ005 — local stamp for a commit message
                 res = committer.sweep_commit(f"vault: periodic sweep {stamp}")
                 if res.get("committed"):
                     log.info(
@@ -2525,6 +2531,7 @@ def atom(
 
 
 def main() -> None:
+    """Parse CLI args and run the MCP server over the chosen transport."""
     import argparse
 
     parser = argparse.ArgumentParser(description="vault-mcp MCP server")
@@ -2536,7 +2543,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--host",
-        default="0.0.0.0",
+        default="0.0.0.0",  # noqa: S104 — operator-chosen bind host for HTTP transport
         help="Bind host for HTTP transports (default: 0.0.0.0)",
     )
     parser.add_argument(

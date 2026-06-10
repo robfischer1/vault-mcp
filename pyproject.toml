@@ -36,6 +36,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "types-PyYAML>=6.0",
+    "pre-commit>=3.5",
 ]
 
 [tool.setuptools.packages.find]
@@ -69,6 +70,8 @@ ignore = [
     "TRY300", "TRY301", # opinionated exception-flow nudges
     "ARG002",           # unused args are usually interface/handler conformance
     "PERF401", "PERF403", # codebase prefers explicit readable loops to comprehensions here
+    "A002",             # MCP tool params mirror API field names (id/object) — can't rename
+    "D417",             # summary-style docstrings, not full Args sections
 ]
 
 [tool.ruff.lint.per-file-ignores]

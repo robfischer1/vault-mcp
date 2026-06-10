@@ -45,7 +45,7 @@ specs/002-bases-tier2-cards/
 ├── research.md          # Research findings and decisions
 ├── data-model.md        # Updated entity and result definitions
 ├── quickstart.md        # Summary and usage examples
-├── contracts/           
+├── contracts/
 │   └── mcp-execute-base.md # Interface contract for the MCP tool
 └── tasks.md             # Implementation tasks (Phase 2)
 ```

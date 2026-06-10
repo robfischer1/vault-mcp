@@ -23,7 +23,7 @@ You can group by any computed formula. This is powerful for derived categories.
 ```yaml
 formulas:
   Phase: |
-    if(tags.contains("#idea"), "1 - Discovery", 
+    if(tags.contains("#idea"), "1 - Discovery",
     if(tags.contains("#active"), "2 - Execution", "3 - Other"))
 views:
   - name: "Dashboard"
