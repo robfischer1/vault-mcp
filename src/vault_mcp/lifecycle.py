@@ -17,10 +17,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from string import Template
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .gate import ConventionGate, WriteResult
 from .provenance import Actor, WriteMode
+
+if TYPE_CHECKING:
+    from .gate import ConventionGate, WriteResult
 
 _REQUIRED_KEYS: tuple[str, ...] = ("title", "note_type", "directory")
 
@@ -97,6 +99,7 @@ class Materializer:
     """Renders materialize payloads into notes via the Convention Gate."""
 
     def __init__(self, gate: ConventionGate, templates: dict[str, str] | None = None) -> None:
+        """Build a materializer that renders payloads through the Gate using `templates`."""
         self._gate = gate
         # Caller templates override the built-in pass-through stub.
         self._templates = {**_BUILTIN_TEMPLATES, **(templates or {})}

@@ -7,17 +7,22 @@ import concurrent.futures
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
+if TYPE_CHECKING:
+    from .index import VaultIndex
+
 # ---------------------------------------------------------------------------
-# Dataclasses (T006)
+# Dataclasses
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class FilterNode:
+    """A node in a Bases filter tree: a leaf condition (field/value) or a boolean group (op over children)."""
+
     op: str
     field: str | None = None
     value: str | None = None
@@ -26,6 +31,8 @@ class FilterNode:
 
 @dataclass
 class Formula:
+    """A named computed-property formula, evaluated at a given dependency tier."""
+
     name: str
     expression: str
     tier: int
@@ -33,6 +40,8 @@ class Formula:
 
 @dataclass
 class Summary:
+    """A column summary: an aggregate function over a property."""
+
     name: str
     function: str
     property: str | None
@@ -40,18 +49,24 @@ class Summary:
 
 @dataclass
 class SortDirective:
+    """One sort key: a property and a direction (ASC/DESC)."""
+
     property: str
     direction: str
 
 
 @dataclass
 class GroupByConfig:
+    """Group-by setting for a view: the property to group on and the group direction."""
+
     property: str
     direction: str
 
 
 @dataclass
 class ViewConfig:
+    """A single Bases view (table/board/etc.) with its filters, order, sort, grouping, and summaries."""
+
     name: str
     type: str
     filters: FilterNode | None = None
@@ -66,6 +81,8 @@ class ViewConfig:
 
 @dataclass
 class Base:
+    """A parsed `.base` file: its top-level filters, named formulas, and views."""
+
     filters: FilterNode | None
     formulas: dict[str, Formula]
     views: list[ViewConfig]
@@ -76,6 +93,8 @@ class Base:
 
 @dataclass
 class ParsedFile:
+    """The result of parsing one `.base` file: its bases plus any parse errors."""
+
     path: str
     bases: list[Base]
     errors: list[dict[str, Any]]
@@ -83,6 +102,8 @@ class ParsedFile:
 
 @dataclass
 class GroupResult:
+    """One group in a grouped query result: its label, row count, and member notes."""
+
     label: str
     count: int
     notes: list[dict[str, Any]]
@@ -90,6 +111,8 @@ class GroupResult:
 
 @dataclass
 class QueryResult:
+    """The result of executing a Bases view: matched notes, computed properties, summaries, groups, and total."""
+
     notes: list[dict[str, Any]]
     warnings: list[dict[str, str]]
     view_name: str | None
@@ -101,13 +124,15 @@ class QueryResult:
 
 @dataclass
 class ValidationResult:
+    """The outcome of validating a base: valid plus structured errors and warnings."""
+
     valid: bool
     errors: list[dict[str, Any]]
     warnings: list[dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
-# Globals & Constants (T011)
+# Globals & Constants
 # ---------------------------------------------------------------------------
 
 _BASE_BLOCK_RE = re.compile(r"^```base\s*\n(.*?)^```", re.DOTALL | re.MULTILINE)
@@ -279,6 +304,7 @@ def _build_filter_tree(raw: Any) -> FilterNode | None:
 
 
 def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Base:
+    """Parse one base's YAML dict into a Base (filters, formulas, views)."""
     filters = _build_filter_tree(raw.get("filters"))
 
     formulas: dict[str, Formula] = {}
@@ -374,10 +400,11 @@ def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Ba
 
 
 def parse_file(file_path: Path) -> ParsedFile:
+    """Parse every base code-block in a markdown/`.base` file into a ParsedFile."""
     rel_path = str(file_path)
     try:
         text = file_path.read_text(encoding="utf-8")
-    except Exception as e:
+    except (OSError, UnicodeDecodeError) as e:
         return ParsedFile(
             path=rel_path,
             bases=[],
@@ -452,12 +479,14 @@ class FormulaEvaluator:
         max_depth: int = 10,
         regex_timeout: float = 0.1,
     ):
+        """Build an evaluator over the given context with depth and regex-timeout limits."""
         self.context = context
         self.max_depth = max_depth
         self.regex_timeout = regex_timeout
         self._current_depth = 0
 
     def evaluate(self, expression: str) -> Any:
+        """Evaluate a Tier-2 formula expression against the bound context."""
         # Pre-process JS syntax: if( -> _if_( , x => -> lambda x: , and /regex/ -> "/regex/"
         # We protect string literals from being corrupted.
         # Group 1: strings
@@ -643,6 +672,7 @@ def evaluate_filter(
     rel_path: str,
     outbound_links: set[str],
 ) -> bool:
+    """Return True if the filter node matches the given note."""
     if node.op == "and":
         return all(
             evaluate_filter(c, path, frontmatter, rel_path, outbound_links)
@@ -702,6 +732,7 @@ def evaluate_formula(
     outbound_links: set[str],
     inbound_links: set[str],
 ) -> tuple[Any, str | None]:
+    """Evaluate a formula for one note, returning a (value, error) tuple."""
     expr = formula.expression
 
     if formula.tier == 2:
@@ -730,7 +761,7 @@ def evaluate_formula(
             return (None, str(e))
         except FormulaError as e:
             return (None, f"Evaluation error: {e}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — formula eval: any error → result tuple, never crash
             return (None, f"Unexpected error: {e}")
 
     m = _NOTE_KEY_RE.match(expr)
@@ -842,8 +873,7 @@ def execute_base(
     index: Any,
     view_name: str | None = None,
 ) -> QueryResult:
-    from .index import VaultIndex
-
+    """Execute a base's selected view against the index and return a QueryResult."""
     idx: VaultIndex = index
 
     selected_view: ViewConfig | None = None
@@ -915,7 +945,7 @@ def execute_base(
     # Initialize accumulators
     # count: int, sum: float, min: float, max: float, count_with_val: int
     accums: dict[str, dict[str, Any]] = {}
-    for name, _s in summaries_to_run.items():
+    for name in summaries_to_run:
         accums[name] = {
             "sum": 0.0,
             "min": float("inf"),
@@ -1050,7 +1080,7 @@ def execute_base(
 
 
 # ---------------------------------------------------------------------------
-# Serializer (T022)
+# Serializer
 # ---------------------------------------------------------------------------
 
 
@@ -1105,7 +1135,7 @@ def _serialize_base(base: Base) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Writer (T027, T028)
+# Writer
 # ---------------------------------------------------------------------------
 
 
@@ -1123,6 +1153,7 @@ def write_base_to_file(
     base_dict: dict[str, Any],
     base_index: int | None = None,
 ) -> dict[str, Any]:
+    """Write a base block to a file — create, append, or replace by index — and report the action."""
     yaml_content = _base_dict_to_yaml(base_dict)
     new_block = f"```base\n{yaml_content}```"
 
@@ -1136,7 +1167,7 @@ def write_base_to_file(
     if not blocks:
         separator = "\n" if text and not text.endswith("\n") else ""
         if text and not text.endswith("\n\n"):
-            separator = "\n\n" if text.endswith("\n") else "\n\n"
+            separator = "\n\n"
         file_path.write_text(text + separator + new_block, encoding="utf-8")
         return {"written": True, "action": "appended", "base_index": 0}
 
@@ -1166,13 +1197,14 @@ def write_base_to_file(
 
 
 # ---------------------------------------------------------------------------
-# Validator (T032)
+# Validator
 # ---------------------------------------------------------------------------
 
 _YAML_SPECIAL_CHARS = set(":{}[]#&*!|>'\"-%@`")
 
 
 def validate_base(base_dict: dict[str, Any]) -> ValidationResult:
+    """Validate a base dict's structure and return a ValidationResult."""
     errors: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
 

@@ -38,6 +38,7 @@ class ObsidianRESTClient:
         base_url: str = DEFAULT_REST_URL,
         key_path: str | Path | None = None,
     ):
+        """Build a REST client for `base_url`, loading the API key from `key_path` if given."""
         self._base_url = base_url.rstrip("/")
         self._api_key: str | None = None
         self._key_error: str | None = None
@@ -46,7 +47,7 @@ class ObsidianRESTClient:
             kp = Path(key_path).expanduser()
             try:
                 self._api_key = kp.read_text(encoding="utf-8").strip()
-            except Exception as exc:
+            except (OSError, UnicodeDecodeError) as exc:
                 self._key_error = str(exc)
                 log.warning("REST API key unreadable at %s: %s", kp, exc)
 
@@ -121,7 +122,7 @@ class ObsidianRESTClient:
                 "last_probed": self._last_probed,
                 "last_error": detail,
             }
-        except Exception as exc:
+        except (httpx.HTTPError, OSError) as exc:
             detail = str(exc)
             self._mark_unreachable(detail)
             return {
@@ -203,6 +204,7 @@ class ObsidianRESTClient:
         accept: str = "application/json",
         extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
+        """Issue a GET to `path` and return the response envelope."""
         return self._request("GET", path, accept=accept, extra_headers=extra_headers)
 
     def post(
@@ -215,6 +217,7 @@ class ObsidianRESTClient:
         content_type: str | None = None,
         accept: str = "application/json",
     ) -> dict[str, Any]:
+        """Issue a POST to `path` with params/body/content and return the response envelope."""
         return self._request(
             "POST", path,
             params=params, json_body=json_body,
@@ -269,15 +272,19 @@ class RestNoteIO:
     """
 
     def __init__(self, client: ObsidianRESTClient) -> None:
+        """Wrap an ObsidianRESTClient for note read/write via REST."""
         self._client = client
 
     def create_note(self, path: str, content: str) -> None:
+        """Create a note at `path` with `content` via REST PUT."""
         self._put(path, content)
 
     def write_note(self, path: str, content: str) -> None:
+        """Overwrite the note at `path` with `content` via REST PUT."""
         self._put(path, content)
 
     def read_note(self, path: str) -> str:
+        """Read and return the note body at `path` via REST."""
         res = self._client.get(f"/vault/{path}", accept="text/markdown")
         if not res.get("ok"):
             raise ObsidianIOError(

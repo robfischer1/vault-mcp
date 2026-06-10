@@ -16,7 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vault_mcp.gate import (  # noqa: E402
+from vault_mcp.gate import (
     BodyError,
     ConventionGate,
     FieldError,
@@ -26,8 +26,8 @@ from vault_mcp.gate import (  # noqa: E402
     TagError,
     WriteModeError,
 )
-from vault_mcp.provenance import Actor, Provenance, WriteMode  # noqa: E402
-from vault_mcp.schema import load_schema  # noqa: E402
+from vault_mcp.provenance import Actor, Provenance, WriteMode
+from vault_mcp.schema import load_schema
 
 VALID = ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
 NAMED = ROOT / "tests" / "fixtures" / "schema" / "named.schema.yml"
@@ -395,7 +395,7 @@ class TestFilenameConventions:
         assert result.path == "Knowledge/2026-05-30-atom.0.md"
 
     def test_atom_slug_increments(self):
-        gate, vault = _gate()
+        gate, _vault = _gate()
         first = gate.create_note(
             title="one", note_type="atom", directory="Knowledge", created="2026-05-30"
         )
@@ -870,7 +870,7 @@ class TestSchemaDrivenFrontmatter:
         assert "title" not in fm
 
     def test_update_restamps_updated(self):
-        gate, vault = self._named_gate()
+        gate, _vault = self._named_gate()
         path = gate.create_note(
             title="My Note", note_type="note", pillar="Knowledge", created="2026-05-30"
         ).path
@@ -914,7 +914,7 @@ class TestWriteNote:
         assert len(vault.calls) == 1
 
     def test_updates_when_present(self):
-        gate, vault = _gate()
+        gate, _vault = _gate()
         gate.write_note(title="W", note_type="note", pillar="Knowledge", created="2026-05-30")
         result = gate.write_note(
             title="W", note_type="note", pillar="Knowledge", fields={"status": "Active"}

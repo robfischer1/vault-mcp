@@ -15,10 +15,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vault_mcp.compute import ComputePayloadError, ComputeReceiver  # noqa: E402
-from vault_mcp.gate import ConventionGate, ProtectionError  # noqa: E402
-from vault_mcp.provenance import Actor, Provenance, WriteMode  # noqa: E402
-from vault_mcp.schema import load_schema  # noqa: E402
+from vault_mcp.compute import ComputePayloadError, ComputeReceiver
+from vault_mcp.gate import ConventionGate, ProtectionError
+from vault_mcp.provenance import Actor, Provenance, WriteMode
+from vault_mcp.schema import load_schema
 
 VALID = ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
 

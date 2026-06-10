@@ -55,6 +55,7 @@ class GitCommitter:
         push_enabled: bool = False,
         git_bin: str = "git",
     ) -> None:
+        """Initialize a serialized committer over a repo root with bot identity and enable/push flags."""
         self.repo_root = Path(repo_root)
         self.author_name = author_name
         self.author_email = author_email
@@ -78,6 +79,7 @@ class GitCommitter:
             text=True,
             encoding="utf-8",
             errors="replace",
+            check=False,
         )
 
     def _identity_args(self) -> list[str]:
@@ -91,10 +93,11 @@ class GitCommitter:
         ]
 
     def head_sha(self) -> str | None:
+        """Return the repo's current HEAD sha, or None on failure."""
         try:
             cp = self._run("rev-parse", "HEAD")
             return cp.stdout.strip() if cp.returncode == 0 else None
-        except Exception as exc:  # noqa: BLE001 - fail-safe
+        except Exception as exc:
             log.warning("git head_sha failed: %s", exc)
             return None
 
@@ -113,10 +116,12 @@ class GitCommitter:
 
     # -- in-flight write tracking (sweep guard) -----------------------------
     def begin_write(self) -> None:
+        """Mark a Gate write as in flight so the sweep defers."""
         with self._inflight_lock:
             self._inflight += 1
 
     def end_write(self) -> None:
+        """Mark a Gate write as finished."""
         with self._inflight_lock:
             self._inflight = max(0, self._inflight - 1)
 
@@ -152,7 +157,7 @@ class GitCommitter:
                     log.warning("git commit failed for %s: %s", paths, commit.stderr.strip())
                     return None
                 return self.head_sha()
-        except Exception as exc:  # noqa: BLE001 - a commit failure must never break the write
+        except Exception as exc:
             log.warning("commit_paths failed for %s: %s", paths, exc)
             return None
 
@@ -184,7 +189,7 @@ class GitCommitter:
                 sha = self.head_sha()
                 pushed = self.push() if self.push_enabled else False
                 return {"committed": True, "sha": sha, "pushed": pushed}
-        except Exception as exc:  # noqa: BLE001 - fail-safe
+        except Exception as exc:
             log.warning("sweep_commit failed: %s", exc)
             return {"committed": False, "reason": f"error: {exc}"}
 
@@ -197,6 +202,6 @@ class GitCommitter:
                     log.warning("git push failed: %s", cp.stderr.strip())
                     return False
                 return True
-        except Exception as exc:  # noqa: BLE001 - fail-safe
+        except Exception as exc:
             log.warning("push failed: %s", exc)
             return False

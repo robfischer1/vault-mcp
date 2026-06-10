@@ -65,11 +65,21 @@ ignore = [
     "T201",     # deliberate CLI prints
     "PLC0415",  # deferred / optional-dependency imports
     "FBT", "SLF001",
+    "PLW0603",          # module-level singletons set in init fns — the FastMCP server pattern
+    "TRY300", "TRY301", # opinionated exception-flow nudges
+    "ARG002",           # unused args are usually interface/handler conformance
+    "PERF401", "PERF403", # codebase prefers explicit readable loops to comprehensions here
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests are self-documenting and assert freely
-"tests/**" = ["S101", "PT", "ANN", "D", "ARG", "PLR2004", "SLF001"]
+# Tests assert freely, use subprocess/temp dirs, late imports, no docs/packaging
+"tests/**" = ["S", "PT", "ANN", "D", "ARG", "PLR2004", "SLF001", "INP001", "ERA001", "E402", "PLW1510"]
+# Benchmarks are throwaway scripts
+"benchmarks/**" = ["INP001", "T201", "D", "ANN", "S", "PLR2004", "ERA001"]
+# gitops wraps git subprocesses with deliberately fail-safe boundaries (logged, never propagated)
+"src/vault_mcp/gitops.py" = ["S603", "BLE001"]
+# cli_client shells out to the obsidian binary (configured path / allowlisted commands)
+"src/vault_mcp/cli_client.py" = ["S603"]
 
 [tool.mypy]
 python_version = "3.11"

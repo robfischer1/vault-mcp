@@ -19,8 +19,7 @@ and the MCP layer wires the real adapters.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
 from vault_mcp.translator import (
@@ -30,15 +29,23 @@ from vault_mcp.translator import (
     target_tables,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 class Poster(Protocol):
-    def __call__(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+    """A callable that POSTs a payload to a phdb endpoint and returns the response."""
+
+    def __call__(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """POST `payload` to `endpoint` and return the response."""
+        ...
 
 
 def _target_schemas(payloads: list[dict[str, Any]]) -> list[str]:
-    """Distinct Schema.org @types a payload set lands as — for the wave's
-    target_schemas. Document payloads carry schema_type; a plan payload adds Plan;
-    entity payloads carry schema_type directly.
+    """Return the distinct Schema.org @types a payload set lands as (the wave's target_schemas).
+
+    Document payloads carry schema_type; a plan payload adds Plan; entity
+    payloads carry schema_type directly.
     """
     schemas: list[str] = []
     for p in payloads:
@@ -66,11 +73,10 @@ def dissolve_note(
     declared_by: str = "code",
     repo: str = "vault",
 ) -> dict[str, Any]:
-    """Dissolve one note: write its content to phdb, declare the wave, then
-    delete the original — in that order.
+    """Dissolve one note: write its content to phdb, declare the wave, then delete the original.
 
-    Returns {ok, written: [...], dissolution_id, deleted}. On any write/declare
-    failure returns {ok: False, error, stage, written} WITHOUT deleting the file.
+    Returns {ok, written, dissolution_id, deleted}. On any write/declare failure
+    returns {ok: False, error, stage, written} WITHOUT deleting the file.
     """
     frontmatter = parse_frontmatter(raw_text)
     body = strip_frontmatter(raw_text)

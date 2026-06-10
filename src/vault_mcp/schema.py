@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import difflib
 import os
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 SCHEMA_ENV_VAR = "VAULT_MCP_SCHEMA"
 
@@ -89,6 +91,7 @@ class Route:
         pillar: str | None,
         attrs: Mapping[str, Any] | None = None,
     ) -> bool:
+        """Return True if this type config matches the given note_type, pillar, and attrs."""
         if self.note_type is not None and self.note_type != note_type:
             return False
         if self.pillar is not None and self.pillar != pillar:
@@ -207,9 +210,7 @@ class VaultSchema:
 
     # --- status vocabulary (Feature: Value Vocabularies) -------------------
     def normalize_status(self, value: object) -> str:
-        """Repair a status value: unwrap singleton lists, blank -> default,
-        apply the schema's rename repairs. Does not check validity.
-        """
+        """Repair a status value: unwrap singleton lists, blank -> default, apply rename repairs (does not check validity)."""
         if isinstance(value, list):
             value = value[0] if len(value) == 1 else ""
         text = "" if value is None else str(value).strip()
@@ -306,7 +307,7 @@ class VaultSchema:
         ]
 
     def list_tags(self) -> dict[str, list[str]]:
-        """The closed tag glossary grouped by prefix (text before the first '/')."""
+        """Return the closed tag glossary grouped by prefix (text before the first '/')."""
         grouped: dict[str, list[str]] = {}
         for tag in sorted(self.tags):
             prefix = tag.split("/", 1)[0] if "/" in tag else "_root"
@@ -314,7 +315,7 @@ class VaultSchema:
         return grouped
 
     def list_keys(self) -> list[str]:
-        """The global union of frontmatter property keys across all @types (sorted)."""
+        """Return the global union of frontmatter property keys across all @types (sorted)."""
         keys: set[str] = set(self.required_frontmatter)
         for tc in self.types:
             keys.update(tc.required_fields)
@@ -326,9 +327,10 @@ class VaultSchema:
         return sorted(keys)
 
     def describe_type(self, note_type: str) -> dict[str, Any] | None:
-        """The per-type spec sheet: caller-settable fields, value constraints,
-        formats, freeform fields, routing (with discriminators), and body
-        guidance. Returns None when ``note_type`` is unknown.
+        """Return the per-type spec sheet, or None when ``note_type`` is unknown.
+
+        Covers caller-settable fields, value constraints, formats, freeform
+        fields, and routing with discriminators plus body guidance.
         """
         tc = self.type_config(note_type)
         if tc is None:
@@ -358,7 +360,7 @@ class VaultSchema:
             "required": list(tc.required_fields),
             "caller_settable": caller_settable,
             "constraints": {field: list(vals) for field, vals in tc.value_constraints},
-            "formats": {field: fmt for field, fmt in tc.formats},
+            "formats": dict(tc.formats),
             "freeform": list(tc.freeform_fields),
             "status_values": list(self.status_values),
             "body_empty": tc.body_empty,
@@ -418,8 +420,8 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
     provenance = tuple((raw.get("provenance", {}) or {}).get("levels", []) or [])
 
     types: list[TypeConfig] = []
-    for name, cfg in (raw.get("types", {}) or {}).items():
-        cfg = cfg or {}
+    for name, raw_cfg in (raw.get("types", {}) or {}).items():
+        cfg = raw_cfg or {}
         constraints = tuple(
             (fname, tuple(vals or []))
             for fname, vals in (cfg.get("constraints", {}) or {}).items()

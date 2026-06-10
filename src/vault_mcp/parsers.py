@@ -5,10 +5,13 @@ imports from here instead of carrying its own copy.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 SKIP_DIRS: set[str] = {
     ".git", ".obsidian", ".claude", ".amazonq", ".trash",
@@ -59,7 +62,7 @@ def parse_frontmatter(text: str) -> dict[str, Any]:
                     j += 1
                     continue
                 ns = nxt.lstrip()
-                if (nxt.startswith(' ') or nxt.startswith('\t')) and ns.startswith('- '):
+                if (nxt.startswith((' ', '\t'))) and ns.startswith('- '):
                     item = ns[2:].strip()
                     if (item.startswith('"') and item.endswith('"')) or \
                        (item.startswith("'") and item.endswith("'")):
@@ -153,7 +156,7 @@ def build_content_index(
 
         top = parts[0] if parts else ''
         for fname in filenames:
-            if not (fname.endswith('.md') or fname.endswith('.base')):
+            if not (fname.endswith(('.md', '.base'))):
                 continue
             p_file = Path(dirpath) / fname
             rel = p_file.relative_to(vault)
@@ -171,7 +174,8 @@ def build_content_index(
                 continue
             try:
                 text_inner = p_file.read_text(encoding='utf-8')
-            except Exception:
+            except (OSError, UnicodeDecodeError) as exc:
+                log.debug("index: skip unreadable %s: %s", p_file, exc)
                 continue
             fm = parse_frontmatter(text_inner)
             if not fm:

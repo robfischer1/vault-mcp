@@ -11,10 +11,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from string import Template
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .gate import ConventionGate, WriteResult
 from .provenance import Actor, WriteMode
+
+if TYPE_CHECKING:
+    from .gate import ConventionGate, WriteResult
 
 _REQUIRED_KEYS: tuple[str, ...] = ("template", "title", "directory")
 
@@ -71,6 +73,7 @@ class ComputeReceiver:
     """Renders compute payloads into notes via the Convention Gate."""
 
     def __init__(self, gate: ConventionGate, templates: dict[str, str]) -> None:
+        """Build a receiver that renders compute payloads through the Gate using `templates`."""
         self._gate = gate
         self._templates = dict(templates)
 

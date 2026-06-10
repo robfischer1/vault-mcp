@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vault_mcp.schema import load_schema  # noqa: E402
+from vault_mcp.schema import load_schema
 
 VALID = ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
 
@@ -49,7 +49,7 @@ class TestListKeys:
         assert {"serial", "vendor", "condition"} <= keys  # Gadget fields + constraint key
         assert "coords" in keys  # Spot format key
         assert "status" in keys  # vocabulary exists
-        assert keys == set(sorted(keys))  # returned sorted
+        assert keys == set(keys)  # returned sorted
 
 
 class TestDescribeType:

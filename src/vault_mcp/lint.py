@@ -25,10 +25,12 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .provenance import Actor, WriteMode
-from .schema import VaultSchema, WriteProtectionRule
+
+if TYPE_CHECKING:
+    from .schema import VaultSchema, WriteProtectionRule
 
 
 class Severity(StrEnum):
@@ -67,6 +69,7 @@ class Finding:
     severity: Severity = Severity.ERROR
 
     def to_dict(self) -> dict[str, Any]:
+        """Return this finding as a JSON-serializable dict."""
         return {
             "code": self.code.value,
             "severity": self.severity.value,
@@ -85,10 +88,12 @@ class LintResult:
 
     @property
     def errors(self) -> list[Finding]:
+        """Return the error-severity findings."""
         return [f for f in self.findings if f.severity is Severity.ERROR]
 
     @property
     def warnings(self) -> list[Finding]:
+        """Return the warning-severity findings."""
         return [f for f in self.findings if f.severity is Severity.WARNING]
 
     @property
@@ -97,13 +102,14 @@ class LintResult:
         return len(self.errors) == 0
 
     def first_error(self) -> Finding | None:
-        """The first blocking finding in check order, or None."""
+        """Return the first blocking finding in check order, or None."""
         for f in self.findings:
             if f.severity is Severity.ERROR:
                 return f
         return None
 
     def to_dict(self) -> dict[str, Any]:
+        """Return this lint result as a JSON-serializable dict."""
         return {
             "ok": self.ok,
             "errors": [f.to_dict() for f in self.errors],
@@ -136,6 +142,7 @@ class LintCandidate:
 
     @property
     def is_update(self) -> bool:
+        """Return True when this candidate is an update (vs a create)."""
         return self.touched_fields is not None
 
 
@@ -159,6 +166,7 @@ class Linter:
     """Schema-aware, collect-all validator. No IO except the link predicate."""
 
     def __init__(self, schema: VaultSchema, note_exists: NoteExists | None = None) -> None:
+        """Build a linter over a schema with an optional note-exists predicate."""
         self._schema = schema
         self._note_exists = note_exists or (lambda _t: True)
 
@@ -183,9 +191,7 @@ class Linter:
 
     # --- Delta-aware severity ---------------------------------------------
     def _adjust(self, candidate: LintCandidate, finding: Finding) -> Finding:
-        """Downgrade a field-scoped error to a warning when an update did not
-        touch that field — pre-existing drift must not block an unrelated edit.
-        """
+        """Downgrade a field-scoped error to a warning when an update did not touch that field (pre-existing drift must not block an unrelated edit)."""
         if not candidate.is_update:
             return finding
         if finding.severity is not Severity.ERROR:
@@ -263,9 +269,7 @@ class Linter:
         top = c.directory.split("/", 1)[0]
         for forbidden in self._schema.forbidden_dirs:
             if (
-                c.directory == forbidden
-                or top == forbidden
-                or c.directory.startswith(forbidden + "/")
+                forbidden in (c.directory, top) or c.directory.startswith(forbidden + "/")
             ):
                 out.append(
                     Finding(

@@ -33,6 +33,7 @@ class ObsidianCLI:
     """Wrapper for the 'obsidian' binary."""
 
     def __init__(self, binary_path: str | None = None):
+        """Resolve the obsidian binary: explicit arg, then VAULT_MCP_OBSIDIAN_BIN, then PATH."""
         # Explicit arg wins; else VAULT_MCP_OBSIDIAN_BIN (so a service that does
         # not inherit the user PATH can be pointed at the binary directly); else
         # discover on PATH.
@@ -64,6 +65,7 @@ class ObsidianCLI:
                 capture_output=True,
                 text=True,
                 timeout=5.0,
+                check=False,
             )
             if res.returncode == 0:
                 self._available = True
@@ -81,7 +83,7 @@ class ObsidianCLI:
                 "version": "unknown",
                 "error": None,
             }
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             self._available = False
             return {
                 "available": False,
@@ -132,6 +134,7 @@ class ObsidianCLI:
                 capture_output=True,
                 text=True,
                 timeout=15.0,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             return {
@@ -139,7 +142,7 @@ class ObsidianCLI:
                 "error": "cli_timeout",
                 "detail": "Command timed out after 15 seconds.",
             }
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             return {
                 "ok": False,
                 "error": "cli_error",
@@ -257,15 +260,19 @@ class ObsidianNoteIO:
     """
 
     def __init__(self, cli: ObsidianCLI) -> None:
+        """Wrap an ObsidianCLI for note read/write via eval."""
         self._cli = cli
 
     def create_note(self, path: str, content: str) -> None:
+        """Create a note at `path` with `content` via the CLI."""
         self._eval_write(build_create_js(path, content), path)
 
     def write_note(self, path: str, content: str) -> None:
+        """Overwrite the note at `path` with `content` via the CLI."""
         self._eval_write(build_modify_js(path, content), path)
 
     def read_note(self, path: str) -> str:
+        """Read and return the note body at `path` via the CLI."""
         res = self._eval(build_read_js(path), path)
         data = _eval_value(res.get("data"))
         if not isinstance(data, str):
@@ -273,9 +280,11 @@ class ObsidianNoteIO:
         return data
 
     def delete_note(self, path: str) -> None:
+        """Delete the note at `path` via the CLI."""
         self._eval_write(build_delete_js(path), path)
 
     def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
+        """List markdown note paths under `directory` (recursive by default)."""
         res = self._eval(build_list_js(directory.strip("/")), directory or "<root>")
         data = _eval_value(res.get("data"))
         paths = [p for p in data if isinstance(p, str)] if isinstance(data, list) else []

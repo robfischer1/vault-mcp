@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vault_mcp.bases import (  # noqa: E402
+from vault_mcp.bases import (
     Base,
     FilterNode,
     Formula,
@@ -25,7 +25,7 @@ from vault_mcp.bases import (  # noqa: E402
     validate_base,
     write_base_to_file,
 )
-from vault_mcp.index import VaultIndex  # noqa: E402
+from vault_mcp.index import VaultIndex
 
 FIXTURES = ROOT / "tests" / "fixtures" / "bases"
 VAULT_FIXTURE = ROOT / "tests" / "fixtures" / "bases-vault"
@@ -272,7 +272,7 @@ class TestFormulaEvaluation:
         pf = parse_file(VAULT_FIXTURE / "Projects" / "Projects.md")
         base = pf.bases[0]
         result = execute_base(base, idx)
-        alpha = [n for n in result.notes if "Alpha" in n["path"]][0]
+        alpha = next(n for n in result.notes if "Alpha" in n["path"])
         assert alpha["formulas"]["Status"] == "active"
         assert alpha["formulas"]["Phase"] == "1"
 
@@ -281,7 +281,7 @@ class TestFormulaEvaluation:
         pf = parse_file(VAULT_FIXTURE / "Projects" / "Projects.md")
         base = pf.bases[0]
         result = execute_base(base, idx)
-        gamma = [n for n in result.notes if "Gamma" in n["path"]][0]
+        gamma = next(n for n in result.notes if "Gamma" in n["path"])
         assert gamma["formulas"]["Phase"] is None
 
     def test_file_name_formula(self):
@@ -899,7 +899,7 @@ class TestGrouping:
         # Alpha has phase=1, Beta has phase=2, Gamma has NO phase
         labels = {g.label for g in result.groups}
         assert "(None)" in labels
-        none_group = [g for g in result.groups if g.label == "(None)"][0]
+        none_group = next(g for g in result.groups if g.label == "(None)")
         none_paths = [Path(n["path"]).stem for n in none_group.notes]
         assert "Gamma" in none_paths
 
@@ -944,4 +944,3 @@ class TestGrouping:
         for g in result.groups:
             if g.label in ("1", "2"):
                 assert g.count == 1
-

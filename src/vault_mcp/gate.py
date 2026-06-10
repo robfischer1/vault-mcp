@@ -93,11 +93,22 @@ _CODE_TO_EXC: dict[Code, type[GateError]] = {
 class NoteIO(Protocol):
     """The vault IO surface the Gate depends on (Obsidian CLI implements it)."""
 
-    def create_note(self, path: str, content: str) -> None: ...
-    def read_note(self, path: str) -> str: ...
-    def write_note(self, path: str, content: str) -> None: ...
-    def delete_note(self, path: str) -> None: ...
-    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]: ...
+    def create_note(self, path: str, content: str) -> None:
+        """Create a note at `path` with `content`."""
+
+    def read_note(self, path: str) -> str:
+        """Read and return the note body at `path`."""
+        ...
+
+    def write_note(self, path: str, content: str) -> None:
+        """Overwrite the note at `path` with `content`."""
+
+    def delete_note(self, path: str) -> None:
+        """Delete the note at `path`."""
+
+    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
+        """List note paths under `directory`."""
+        ...
 
 
 @dataclass
@@ -118,9 +129,11 @@ class WriteResult:
 
     @property
     def author_level(self) -> Provenance:
+        """Return the author level (alias of provenance)."""
         return self.provenance
 
     def to_dict(self) -> dict[str, Any]:
+        """Return this write result as a JSON-serializable dict."""
         return {
             "ok": True,
             "path": self.path,
@@ -143,9 +156,7 @@ def _slugify(text: str) -> str:
 
 
 def _title_case_note_type(value: str) -> str:
-    """Ensure a leading uppercase without lowercasing the rest (``plan`` -> ``Plan``,
-    ``TVSeries`` preserved).
-    """
+    """Capitalize the first letter without lowercasing the rest (``plan`` -> ``Plan``, ``TVSeries`` preserved)."""
     return value[:1].upper() + value[1:] if value else value
 
 
@@ -160,7 +171,7 @@ _TAG_ESCAPE_EXEMPT = ("activity/processed",)
 
 
 def _escape_inline_tags(body: str) -> str:
-    """Escape bare ``#tag`` to ``\\#tag`` in imported body text, outside fenced code."""
+    r"""Escape bare ``#tag`` to ``\\#tag`` in imported body text, outside fenced code."""
 
     def repl(m: re.Match[str]) -> str:
         tag = m.group(1)
@@ -198,6 +209,7 @@ class ConventionGate:
     """Schema- and provenance-aware write API over an injected NoteIO."""
 
     def __init__(self, schema: VaultSchema, io: NoteIO, diff_sink: DiffSink | None = None) -> None:
+        """Build a Gate over a schema and NoteIO, with an optional diff sink."""
         self._schema = schema
         self._io = io
         self._diff_sink = diff_sink
@@ -209,7 +221,7 @@ class ConventionGate:
 
     # --- Single internal write layer (Feature: Write Pipeline) -------------
     def _write(self, path: str, content: str, *, created: bool) -> None:
-        """The one disk-write chokepoint — the only Gate code that issues a write.
+        """Issue the one disk write — the single chokepoint every write path converges on.
 
         create_note, update_note, write_note, and the materialize/compute path
         all converge here, so there is exactly one place a note reaches disk.
@@ -383,14 +395,14 @@ class ConventionGate:
 
     def _maybe_escape_body(self, directory: str, body: str) -> str:
         """Escape bare inline #tags in imported bodies (References/, Records/) — FR-15."""
-        if directory.startswith("References") or directory.startswith("Records"):
+        if directory.startswith(("References", "Records")):
             return _escape_inline_tags(body)
         return body
 
     def _link_warnings(self, directory: str, title: str, fm: dict[str, Any]) -> list[str]:
         """Advisory (non-blocking) warnings for missing recommended links (FR-36)."""
         warns: list[str] = []
-        derived = directory.startswith("Artifacts") or directory.startswith("Records")
+        derived = directory.startswith(("Artifacts", "Records"))
         if derived and "isBasedOn" not in fm:
             warns.append("isBasedOn missing for an Artifacts/Records-derived note")
         last = directory.rsplit("/", 1)[-1] if directory else ""
@@ -709,9 +721,7 @@ class ConventionGate:
         filename: str,
         note_type: str | None,
     ) -> list[dict[str, Any]]:
-        """Collect every drift item for one note: untyped, deprecated/dead keys,
-        all linter errors, and routing misplacement.
-        """
+        """Collect every drift item for one note: untyped, deprecated/dead keys, all linter errors, routing misplacement."""
         drift: list[dict[str, Any]] = []
         if note_type is None:
             drift.append({"category": "untyped", "detail": "no note_type"})
@@ -957,7 +967,7 @@ class ConventionGate:
         }
         try:
             self._diff_sink(record)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — observability is non-critical; never fail the write
             # Observability is non-critical: a failed emit must never fail the
             # write that already succeeded (RFC: emission failure never blocks).
             log.warning("diff emission failed for %s: %s", path, exc)

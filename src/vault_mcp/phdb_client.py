@@ -73,6 +73,7 @@ class AtomResult:
     ts: str | None
 
     def to_dict(self) -> dict[str, Any]:
+        """Return this result as a JSON-serializable dict."""
         return {
             "ok": True,
             "atom_type": self.atom_type,

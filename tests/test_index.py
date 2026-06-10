@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vault_mcp.index import VaultIndex  # noqa: E402
+from vault_mcp.index import VaultIndex
 
 MINI_VAULT = ROOT / "tests" / "fixtures" / "mini-vault"
 
@@ -165,7 +165,7 @@ class TestReadNoteEmbeds:
         assert len(embeds) == 2
 
         # ![[ActiveProjects.base#CardView]]
-        card_view = [e for e in embeds if "#CardView" in e["token"]][0]
+        card_view = next(e for e in embeds if "#CardView" in e["token"])
         assert card_view["path"] == "ActiveProjects.base"
         assert "results" in card_view
         assert card_view["results"]["view_name"] == "CardView"
@@ -173,7 +173,7 @@ class TestReadNoteEmbeds:
         assert card_view["results"]["total"] >= 1
 
         # ![[ActiveProjects.base]]
-        default_view = [e for e in embeds if "#" not in e["token"]][0]
+        default_view = next(e for e in embeds if "#" not in e["token"])
         assert default_view["path"] == "ActiveProjects.base"
         assert "results" in default_view
         assert default_view["results"]["total"] >= 1
@@ -197,10 +197,10 @@ class TestReadNoteEmbeds:
         embeds = result["resolved_embeds"]
         assert len(embeds) == 2
 
-        missing_file = [e for e in embeds if "Missing.base" in e["token"]][0]
+        missing_file = next(e for e in embeds if "Missing.base" in e["token"])
         assert missing_file["error"]["type"] == "not_found"
 
-        missing_view = [e for e in embeds if "#MissingView" in e["token"]][0]
+        missing_view = next(e for e in embeds if "#MissingView" in e["token"])
         assert missing_view["error"]["type"] == "view_not_found"
 
 

@@ -13,8 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from vault_mcp.gate import ConventionGate  # noqa: E402
-from vault_mcp.schema import load_schema  # noqa: E402
+from vault_mcp.gate import ConventionGate
+from vault_mcp.schema import load_schema
 
 VALID = ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
 

@@ -12,10 +12,8 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Callable
-from datetime import datetime
-from pathlib import Path
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from .parsers import (
     SKIP_CONTENT_CHECKS,
@@ -26,6 +24,10 @@ from .parsers import (
     parse_frontmatter,
     strip_frontmatter,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -40,13 +42,13 @@ class VaultIndex:
     def _normalize_link_targets(raw: list[str]) -> list[str]:
         """Strip path prefixes and .md suffixes to match by_name stems."""
         normalized = []
-        for t in raw:
-            t = t.rsplit('/', 1)[-1]
-            t = t.removesuffix('.md')
-            normalized.append(t)
+        for raw_target in raw:
+            stem = raw_target.rsplit('/', 1)[-1].removesuffix('.md')
+            normalized.append(stem)
         return list(set(normalized))
 
     def __init__(self, vault_path: Path, ttl_seconds: int = 300):
+        """Initialize an empty index over a vault path with the given TTL (seconds)."""
         self.vault = vault_path.resolve()
         self.ttl = ttl_seconds
         self._content: list[tuple[Path, dict[str, Any], str]] = []
@@ -77,7 +79,8 @@ class VaultIndex:
             stem = path.stem
             try:
                 text = path.read_text(encoding='utf-8')
-            except Exception:
+            except (OSError, UnicodeDecodeError) as exc:
+                log.debug("link graph: skip unreadable %s: %s", path, exc)
                 continue
 
             body = strip_frontmatter(text)
@@ -103,7 +106,9 @@ class VaultIndex:
             self._content, self._by_name, self._mtime = build_content_index(self.vault)
             self._build_link_graph()
             self._built_at = time.time()
-            self.last_indexed_at = datetime.fromtimestamp(self._built_at).isoformat(timespec="seconds")
+            self.last_indexed_at = (
+                datetime.fromtimestamp(self._built_at, tz=UTC).astimezone().isoformat(timespec="seconds")
+            )
         elapsed_ms = int((self._built_at - t0) * 1000)
         log.info("reindex: %d content, %d names in %dms", len(self._content), len(self._by_name), elapsed_ms)
         return {"indexed": len(self._content), "names": len(self._by_name), "elapsed_ms": elapsed_ms}
@@ -165,7 +170,8 @@ class VaultIndex:
 
             try:
                 text = path.read_text(encoding='utf-8')
-            except Exception:
+            except (OSError, UnicodeDecodeError) as exc:
+                log.debug("invalidate: skip unreadable %s: %s", path, exc)
                 return
 
             fm = parse_frontmatter(text)
@@ -200,11 +206,13 @@ class VaultIndex:
 
     @property
     def content(self) -> list[tuple[Path, dict[str, Any], str]]:
+        """Return the indexed (path, frontmatter, rel) tuples, refreshing if stale."""
         self._ensure_fresh()
         return self._content
 
     @property
     def by_name(self) -> dict[str, list[Path]]:
+        """Return the stem→paths name index, refreshing if stale."""
         self._ensure_fresh()
         return self._by_name
 
@@ -268,7 +276,7 @@ class VaultIndex:
                 if mtime >= since_ts:
                     candidates.append({
                         "path": rel,
-                        "modified": datetime.fromtimestamp(mtime).isoformat(timespec="seconds"),
+                        "modified": datetime.fromtimestamp(mtime, tz=UTC).astimezone().isoformat(timespec="seconds"),
                         "stem": stem,
                     })
 
@@ -305,7 +313,7 @@ class VaultIndex:
 
         try:
             text = target_path.read_text(encoding='utf-8')
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             return {"error": "read_failed", "path": str(target_path), "detail": str(e)}
 
         fm = parse_frontmatter(text)
@@ -457,7 +465,8 @@ class VaultIndex:
             for p in paths:
                 try:
                     text = p.read_text(encoding='utf-8')
-                except Exception:
+                except (OSError, UnicodeDecodeError) as exc:
+                    log.debug("image-embed scan: skip unreadable %s: %s", p, exc)
                     continue
                 body = strip_frontmatter(text)
                 for m in IMAGE_EMBED_RE.finditer(body):
@@ -628,7 +637,7 @@ class VaultIndex:
         return tags
 
     def tag_glossary_check(self, glossary_path: Path) -> list[dict[str, Any]]:
-        """Find body #tags not in the Tags Glossary.
+        r"""Find body #tags not in the Tags Glossary.
 
         Excludes \\#tag escapes and #activity/processed per policy.
         """
@@ -639,7 +648,8 @@ class VaultIndex:
         for path, _fm, rel in self._content:
             try:
                 text = path.read_text(encoding='utf-8')
-            except Exception:
+            except (OSError, UnicodeDecodeError) as exc:
+                log.debug("tag check: skip unreadable %s: %s", path, exc)
                 continue
 
             body = strip_frontmatter(text)
@@ -679,7 +689,7 @@ class VaultIndex:
 
             mtime = self._mtime.get(path)
             if mtime is not None:
-                week = datetime.fromtimestamp(mtime).strftime('%Y-W%W')
+                week = datetime.fromtimestamp(mtime, tz=UTC).astimezone().strftime('%Y-W%W')
                 week_counts[week] = week_counts.get(week, 0) + 1
 
         top_types = sorted(type_counts.items(), key=lambda x: -x[1])
@@ -714,7 +724,8 @@ class VaultIndex:
             if include_body:
                 try:
                     text = path.read_text(encoding='utf-8')
-                except Exception:
+                except (OSError, UnicodeDecodeError) as exc:
+                    log.debug("all_tags: skip unreadable %s: %s", path, exc)
                     continue
                 body = strip_frontmatter(text)
                 for m in self.BODY_TAG_RE.finditer(body):

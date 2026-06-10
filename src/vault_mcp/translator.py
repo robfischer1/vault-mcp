@@ -155,8 +155,9 @@ def note_to_payloads(
 
 
 def target_tables(payloads: list[dict[str, Any]]) -> list[str]:
-    """The phdb table names a payload set lands in — for the dissolution wave's
-    ``target_tables``. Derived from the endpoints, deduped, order-preserving.
+    """Return the phdb tables a payload set lands in (deduped, order-preserving).
+
+    Powers the dissolution wave's ``target_tables``; derived from the endpoints.
     """
     mapping = {DOC_ENDPOINT: "documents", PLAN_ENDPOINT: "plans"}
     seen: list[str] = []
@@ -179,10 +180,10 @@ def row_to_payload(
     directory: str,
     paired_body: str | None = None,
 ) -> dict[str, Any]:
-    """Reverse direction (materialize): map a typed phdb row to a **Materializer
-    payload** (written with ``mode=COMPUTE`` — the sanctioned path for
-    materialize-only ``@type``s like ``Plan``, which agent-create rejects).
+    """Map a typed phdb row to a Materializer payload (the reverse, materialize direction).
 
+    Written with ``mode=COMPUTE`` — the sanctioned path for materialize-only
+    ``@type``s like ``Plan``, which agent-create rejects.
     ``directory`` is caller-resolved (materialize-only types route by the schema,
     or by the row's origin). ``documents`` rows render their body directly;
     ``plans`` rows are metadata-only — pass the paired ``documents`` body via
