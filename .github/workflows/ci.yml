@@ -23,7 +23,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv pip install -e ".[dev]" --system
+        run: uv sync --all-extras
 
       - name: Lint + hygiene (same hooks as local pre-commit)
         run: uv run pre-commit run --all-files --show-diff-on-failure
