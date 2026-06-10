@@ -1,0 +1,23 @@
+# Pre-commit hooks: lint (ruff), secret scan (detect-secrets), basic hygiene.
+# Runs on STAGED files at commit time. Install once: `pre-commit install`.
+# Full manual sweep: `pre-commit run --all-files`.  Bypass once: `git commit --no-verify`.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff            # lint only (uses [tool.ruff] in pyproject); no ruff-format
+        args: [--fix]
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^tests/fixtures/
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
