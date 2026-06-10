@@ -72,6 +72,7 @@ ignore = [
     "PERF401", "PERF403", # codebase prefers explicit readable loops to comprehensions here
     "A002",             # MCP tool params mirror API field names (id/object) — can't rename
     "D417",             # summary-style docstrings, not full Args sections
+    "EXE",              # Windows-developed repo — the executable bit isn't meaningful; shebangs are vestigial
 ]
 
 [tool.ruff.lint.per-file-ignores]
