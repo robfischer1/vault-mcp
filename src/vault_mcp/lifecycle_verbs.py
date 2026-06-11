@@ -36,7 +36,9 @@ if TYPE_CHECKING:
 class Poster(Protocol):
     """A callable that POSTs a payload to a phdb endpoint and returns the response."""
 
-    def __call__(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def __call__(
+        self, endpoint: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         """POST `payload` to `endpoint` and return the response."""
         ...
 
@@ -80,33 +82,56 @@ def dissolve_note(
     """
     frontmatter = parse_frontmatter(raw_text)
     body = strip_frontmatter(raw_text)
-    payloads = note_to_payloads(frontmatter, body, source_path, file_path=file_path)
+    payloads = note_to_payloads(
+        frontmatter, body, source_path, file_path=file_path
+    )
 
     # 1. Write every payload; verify each. Stop before delete on any failure.
     written: list[dict[str, Any]] = []
     for p in payloads:
         res = post(p["endpoint"], p["payload"])
         if not res.get("ok"):
-            return {"ok": False, "stage": "write", "endpoint": p["endpoint"],
-                    "error": res.get("error", "write failed"), "written": written}
-        written.append({"table": res.get("table"), "id": res.get("id"),
-                        "deduped": res.get("deduped")})
+            return {
+                "ok": False,
+                "stage": "write",
+                "endpoint": p["endpoint"],
+                "error": res.get("error", "write failed"),
+                "written": written,
+            }
+        written.append(
+            {
+                "table": res.get("table"),
+                "id": res.get("id"),
+                "deduped": res.get("deduped"),
+            }
+        )
 
     # 2. Declare the dissolution wave (with file provenance).
-    declare = post("/dissolution/declare", {
-        "plan_slug": plan_slug,
-        "target_schemas": _target_schemas(payloads),
-        "target_tables": target_tables(payloads),
-        "rationale": rationale,
-        "declared_by": declared_by,
-        "repo": repo,
-        "dissolved_paths": [vault_rel_path] if vault_rel_path else None,
-    })
+    declare = post(
+        "/dissolution/declare",
+        {
+            "plan_slug": plan_slug,
+            "target_schemas": _target_schemas(payloads),
+            "target_tables": target_tables(payloads),
+            "rationale": rationale,
+            "declared_by": declared_by,
+            "repo": repo,
+            "dissolved_paths": [vault_rel_path] if vault_rel_path else None,
+        },
+    )
     if not declare.get("ok"):
-        return {"ok": False, "stage": "declare",
-                "error": declare.get("error", "declare failed"), "written": written}
+        return {
+            "ok": False,
+            "stage": "declare",
+            "error": declare.get("error", "declare failed"),
+            "written": written,
+        }
 
     # 3. Only now remove the vault original.
     delete_file()
-    return {"ok": True, "written": written,
-            "dissolution_id": declare.get("dissolution_id"), "deleted": True}
+    return {
+        "ok": True,
+        "written": written,
+        "dissolution_id": declare.get("dissolution_id"),
+        "deleted": True,
+    }

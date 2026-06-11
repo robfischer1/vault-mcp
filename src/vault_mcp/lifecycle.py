@@ -69,15 +69,23 @@ def parse_payload(raw: object) -> MaterializePayload:
     frontmatter = raw.get("frontmatter") or {}
     data = raw.get("data") or {}
     if not isinstance(body, str):
-        raise MaterializePayloadError("materialize payload 'body' must be a string")
+        raise MaterializePayloadError(
+            "materialize payload 'body' must be a string"
+        )
     if not isinstance(frontmatter, dict):
-        raise MaterializePayloadError("materialize payload 'frontmatter' must be a mapping")
+        raise MaterializePayloadError(
+            "materialize payload 'frontmatter' must be a mapping"
+        )
     if not isinstance(data, dict):
-        raise MaterializePayloadError("materialize payload 'data' must be a mapping")
+        raise MaterializePayloadError(
+            "materialize payload 'data' must be a mapping"
+        )
 
     template = raw.get("template") or DEFAULT_TEMPLATE
     if not isinstance(template, str):
-        raise MaterializePayloadError("materialize payload 'template' must be a string")
+        raise MaterializePayloadError(
+            "materialize payload 'template' must be a string"
+        )
 
     return MaterializePayload(
         title=raw["title"],
@@ -92,19 +100,25 @@ def parse_payload(raw: object) -> MaterializePayload:
 
 def _render_body(template_src: str, data: dict[str, Any]) -> str:
     """Render a note body deterministically from payload data (no LLM)."""
-    return Template(template_src).safe_substitute({k: str(v) for k, v in data.items()})
+    return Template(template_src).safe_substitute(
+        {k: str(v) for k, v in data.items()}
+    )
 
 
 class Materializer:
     """Renders materialize payloads into notes via the Convention Gate."""
 
-    def __init__(self, gate: ConventionGate, templates: dict[str, str] | None = None) -> None:
+    def __init__(
+        self, gate: ConventionGate, templates: dict[str, str] | None = None
+    ) -> None:
         """Build a materializer that renders payloads through the Gate using `templates`."""
         self._gate = gate
         # Caller templates override the built-in pass-through stub.
         self._templates = {**_BUILTIN_TEMPLATES, **(templates or {})}
 
-    def materialize(self, raw_payload: object, created: str | None = None) -> WriteResult:
+    def materialize(
+        self, raw_payload: object, created: str | None = None
+    ) -> WriteResult:
         """Validate, render, and write a payload as a materialized note.
 
         Writes through the Gate with ``mode=COMPUTE`` so materialize-only

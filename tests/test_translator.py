@@ -27,8 +27,12 @@ FENCED_BODY = "Context before.\n\n```\nmaster (Sonnet)\n```\n\nGoal after.\n"
 
 
 def test_plan_note_yields_document_and_plan() -> None:
-    payloads = note_to_payloads(PLAN_FM, FENCED_BODY, "/vault/Plans/Roadmap Skill.md",
-                                file_path="Roadmap Skill.md")
+    payloads = note_to_payloads(
+        PLAN_FM,
+        FENCED_BODY,
+        "/vault/Plans/Roadmap Skill.md",
+        file_path="Roadmap Skill.md",
+    )
     endpoints = [p["endpoint"] for p in payloads]
     assert endpoints == [DOC_ENDPOINT, PLAN_ENDPOINT]  # document first
 
@@ -47,8 +51,14 @@ def test_plan_note_yields_document_and_plan() -> None:
 
 
 def test_non_plan_note_yields_only_document() -> None:
-    fm = {"@type": "DigitalDocument", "note_type": "Decisions", "name": "Foo DECISIONS"}
-    payloads = note_to_payloads(fm, "decision prose", "/vault/Plans/Foo DECISIONS.md")
+    fm = {
+        "@type": "DigitalDocument",
+        "note_type": "Decisions",
+        "name": "Foo DECISIONS",
+    }
+    payloads = note_to_payloads(
+        fm, "decision prose", "/vault/Plans/Foo DECISIONS.md"
+    )
     assert len(payloads) == 1
     assert payloads[0]["endpoint"] == DOC_ENDPOINT
     assert payloads[0]["payload"]["subject"] == "Foo DECISIONS"
@@ -77,19 +87,35 @@ def test_records_types_preserved() -> None:
 def test_target_tables_derivation() -> None:
     payloads = note_to_payloads(PLAN_FM, "b", "/vault/p.md")
     assert target_tables(payloads) == ["documents", "plans"]
-    doc_only = note_to_payloads({"@type": "Article", "name": "A"}, "b", "/vault/a.md")
+    doc_only = note_to_payloads(
+        {"@type": "Article", "name": "A"}, "b", "/vault/a.md"
+    )
     assert target_tables(doc_only) == ["documents"]
 
 
 def test_row_to_payload_document() -> None:
-    row = {"subject": "My Doc", "schema_type": "Article", "body_text": "the body"}
+    row = {
+        "subject": "My Doc",
+        "schema_type": "Article",
+        "body_text": "the body",
+    }
     p = row_to_payload(row, "documents", directory="Garden")
-    assert p == {"title": "My Doc", "note_type": "Article", "directory": "Garden",
-                 "body": "the body", "frontmatter": {}}
+    assert p == {
+        "title": "My Doc",
+        "note_type": "Article",
+        "directory": "Garden",
+        "body": "the body",
+        "frontmatter": {},
+    }
 
 
 def test_frontmatter_dates_pass_through_as_mtime_ctime() -> None:
-    fm = {"@type": "Article", "name": "Dated", "created": "2025-01-15", "updated": "2026-06-05"}
+    fm = {
+        "@type": "Article",
+        "name": "Dated",
+        "created": "2025-01-15",
+        "updated": "2026-06-05",
+    }
     payloads = note_to_payloads(fm, "body", "/vault/dated.md")
     doc = payloads[0]["payload"]
     assert doc["ctime"] == "2025-01-15"
@@ -105,9 +131,16 @@ def test_missing_dates_omitted_from_payload() -> None:
 
 
 def test_row_to_payload_plan_carries_prose_not_legacy_metadata() -> None:
-    row = {"name": "P", "status": "active", "phase": "3", "effort": "L",
-           "description": "a plan"}
-    p = row_to_payload(row, "plans", directory="System/Plans", paired_body="paired prose")
+    row = {
+        "name": "P",
+        "status": "active",
+        "phase": "3",
+        "effort": "L",
+        "description": "a plan",
+    }
+    p = row_to_payload(
+        row, "plans", directory="System/Plans", paired_body="paired prose"
+    )
     assert p["title"] == "P"
     assert p["note_type"] == "Plan"
     assert p["directory"] == "System/Plans"
@@ -118,11 +151,18 @@ def test_row_to_payload_plan_carries_prose_not_legacy_metadata() -> None:
 
 # ── Entity routing ──────────────────────────────────────────────────────────
 
+
 def test_entity_type_routes_to_entity_endpoint() -> None:
-    fm = {"@type": "VideoGame", "name": "FFXIV", "genre": "MMORPG",
-          "game_platform": "PC", "publisher": "Square Enix"}
-    payloads = note_to_payloads(fm, "", "/vault/Entities/Games/FFXIV.md",
-                                file_path="FFXIV.md")
+    fm = {
+        "@type": "VideoGame",
+        "name": "FFXIV",
+        "genre": "MMORPG",
+        "game_platform": "PC",
+        "publisher": "Square Enix",
+    }
+    payloads = note_to_payloads(
+        fm, "", "/vault/Entities/Games/FFXIV.md", file_path="FFXIV.md"
+    )
     assert len(payloads) == 1
     assert payloads[0]["endpoint"] == ENTITY_ENDPOINT
     p = payloads[0]["payload"]
@@ -153,8 +193,14 @@ def test_entity_title_falls_back_to_name() -> None:
 
 
 def test_entity_vault_internal_keys_excluded() -> None:
-    fm = {"@type": "TVSeries", "name": "Breaking Bad", "note_type": "entity",
-          "author_type": "ai-compiled", "tags": ["media"], "genre": "Drama"}
+    fm = {
+        "@type": "TVSeries",
+        "name": "Breaking Bad",
+        "note_type": "entity",
+        "author_type": "ai-compiled",
+        "tags": ["media"],
+        "genre": "Drama",
+    }
     payloads = note_to_payloads(fm, "", "/vault/s.md")
     fields = payloads[0]["payload"]["fields"]
     assert "note_type" not in fields

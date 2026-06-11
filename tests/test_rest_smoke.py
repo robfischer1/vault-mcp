@@ -4,6 +4,7 @@ Auto-skips when the REST API is unreachable (Cowork sandbox, no Obsidian).
 Run from Code session with Obsidian open:
     VAULT_MCP_PATH=... python -m pytest tests/test_rest_smoke.py -v
 """
+
 from __future__ import annotations
 
 import os
@@ -50,12 +51,16 @@ class TestHealthSmoke:
 
 class TestActiveNote:
     def test_returns_path(self, client):
-        result = client.get("/active/", accept="application/vnd.olrapi.note+json")
+        result = client.get(
+            "/active/", accept="application/vnd.olrapi.note+json"
+        )
         assert result["ok"] is True
         assert "path" in result["data"]
 
     def test_has_frontmatter(self, client):
-        result = client.get("/active/", accept="application/vnd.olrapi.note+json")
+        result = client.get(
+            "/active/", accept="application/vnd.olrapi.note+json"
+        )
         assert "frontmatter" in result["data"]
 
 

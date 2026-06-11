@@ -35,6 +35,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
     "mypy>=1.10",
+    "pyright==1.1.410",
     "types-PyYAML>=6.0",
     "pre-commit>=3.5",
 ]
@@ -44,7 +45,7 @@ where = ["src"]
 
 [tool.ruff]
 target-version = "py311"
-line-length = 120
+line-length = 80
 
 [tool.ruff.lint]
 # Opt-out model: enable everything, disable the noise (the canonical policy —
@@ -71,7 +72,6 @@ ignore = [
     "ARG002",           # unused args are usually interface/handler conformance
     "PERF401", "PERF403", # codebase prefers explicit readable loops to comprehensions here
     "A002",             # MCP tool params mirror API field names (id/object) — can't rename
-    "D417",             # summary-style docstrings, not full Args sections
     "EXE",              # Windows-developed repo — the executable bit isn't meaningful; shebangs are vestigial
 ]
 
@@ -97,6 +97,71 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = "phdb.*"
 ignore_missing_imports = true
+
+# Test files are type-checked but not strict — suppress annotation requirements
+# and known test-pattern false positives (matches the phdb tests.* relaxation).
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+warn_return_any = false
+disable_error_code = ["attr-defined", "arg-type", "type-arg", "union-attr", "index", "var-annotated", "operator", "misc", "override", "assignment", "unused-ignore", "return-value"]
+
+# server.py is the MCP-tool entry layer: it bridges dynamic Obsidian REST JSON
+# and the untyped phdb sibling, so tool returns are dict[str, Any] by contract
+# while the values are runtime-dynamic Any. Structural checks (type-arg,
+# untyped-def, etc.) stay on; only the inherent boundary-Any return is relaxed.
+[[tool.mypy.overrides]]
+module = "server"
+disable_error_code = ["no-any-return"]
+
+# pyright runs strict as a peer to mypy (the authoritative type gate). mypy owns
+# ignore-necessity (warn_unused_ignores), so reportUnnecessaryTypeIgnoreComment
+# is off. The carve-outs below are the strict reportX rules that fight mypy's
+# documented variance, the Any it permits, or ruff's lint domain.
+# server.py is checked by mypy (which ignores the optional phdb sibling via
+# ignore_missing_imports); pyright can't resolve phdb on a clean checkout, so it
+# scopes to the resolvable package + tests. server.py stays covered by the gate.
+[tool.pyright]
+include = ["src", "tests"]
+exclude = ["**/__pycache__", ".venv"]
+extraPaths = ["."]
+typeCheckingMode = "strict"
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+reportUnnecessaryTypeIgnoreComment = false
+# Any-strictness mypy doesn't share.
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+reportUnknownLambdaType = false
+reportMissingTypeStubs = false
+# Lint domain — ruff owns unused imports/vars and dead code.
+reportUnusedImport = false
+reportUnusedVariable = false
+reportUnusedFunction = false
+# Package-internal `_helpers` shared across modules; version deprecation nags.
+reportPrivateUsage = false
+reportDeprecated = false
+# Stricter-than-mypy pattern checks that fight legitimate idioms (conditional
+# constants, optional-dep base shims, defensive isinstance / None compares).
+reportConstantRedefinition = false
+reportUntypedBaseClass = false
+reportUnnecessaryIsInstance = false
+reportUnnecessaryComparison = false
+
+# Tests aren't strict (mirrors the mypy tests.* relaxation).
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportMissingParameterType = false
+reportMissingTypeArgument = false
+reportArgumentType = false
+reportReturnType = false
+reportIncompatibleMethodOverride = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

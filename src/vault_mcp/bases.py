@@ -141,7 +141,9 @@ _BASE_BLOCK_RE = re.compile(r"^```base\s*\n(.*?)^```", re.DOTALL | re.MULTILINE)
 _REGEX_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 _NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
-_LINKS_FILTER_RE = re.compile(r"^file\.(links|backlinks)\.filter\(.*\)\.length$")
+_LINKS_FILTER_RE = re.compile(
+    r"^file\.(links|backlinks)\.filter\(.*\)\.length$"
+)
 
 _CARD_PROPS = {"cardSize", "image", "imageAspectRatio", "indentProperties"}
 _MAP_PROPS = {
@@ -169,7 +171,13 @@ def _classify_formula_tier(expression: str) -> int:
     if expression.startswith("file."):
         if _LINKS_FILTER_RE.match(expression):
             return 1
-        if expression in ("file.name", "file.folder", "file.path", "file.ext", "file.mtime"):
+        if expression in (
+            "file.name",
+            "file.folder",
+            "file.path",
+            "file.ext",
+            "file.mtime",
+        ):
             return 1
 
     # Check for Tier 2 markers
@@ -284,7 +292,9 @@ def _build_filter_tree(raw: Any) -> FilterNode | None:
                     if child is not None:
                         child_nodes.append(child)
                 if child_nodes:
-                    remaining_children.append(FilterNode(op=k, children=child_nodes))
+                    remaining_children.append(
+                        FilterNode(op=k, children=child_nodes)
+                    )
             else:
                 child = _build_filter_tree(v)
                 if child is not None:
@@ -303,7 +313,9 @@ def _build_filter_tree(raw: Any) -> FilterNode | None:
 # ---------------------------------------------------------------------------
 
 
-def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Base:
+def parse_base_yaml(
+    raw: dict[str, Any], yaml_text: str, line_number: int
+) -> Base:
     """Parse one base's YAML dict into a Base (filters, formulas, views)."""
     filters = _build_filter_tree(raw.get("filters"))
 
@@ -455,19 +467,17 @@ def parse_file(file_path: Path) -> ParsedFile:
 # Evaluator — Tier 2 Restricted (T004, T005, T006)
 # ---------------------------------------------------------------------------
 
+
 class FormulaError(Exception):
     """Base class for formula evaluation errors."""
-
 
 
 class FormulaTimeoutError(FormulaError):
     """Regex evaluation timed out."""
 
 
-
 class FormulaDepthError(FormulaError):
     """Maximum nesting depth exceeded."""
-
 
 
 class FormulaEvaluator:
@@ -553,7 +563,9 @@ class FormulaEvaluator:
                 if func_name == "_if_":
                     self._current_depth += 1
                     if self._current_depth > self.max_depth:
-                        raise FormulaDepthError(f"Max nesting depth of {self.max_depth} exceeded")
+                        raise FormulaDepthError(
+                            f"Max nesting depth of {self.max_depth} exceeded"
+                        )
                     try:
                         if len(node.args) != 3:
                             raise FormulaError("if() requires 3 arguments")
@@ -582,8 +594,13 @@ class FormulaEvaluator:
                     if method == "map" and isinstance(target, list):
                         lambda_node = self._visit(node.args[0])
                         if not isinstance(lambda_node, ast.Lambda):
-                            raise FormulaError("map() requires an arrow function")
-                        return [self._eval_lambda(lambda_node, item) for item in target]
+                            raise FormulaError(
+                                "map() requires an arrow function"
+                            )
+                        return [
+                            self._eval_lambda(lambda_node, item)
+                            for item in target
+                        ]
 
                     if method == "join" and isinstance(target, list):
                         sep = args[0] if args else ", "
@@ -597,16 +614,22 @@ class FormulaEvaluator:
                     if method == "toString":
                         return str(target)
 
-                raise FormulaError(f"Unsupported function or method: {func_name}")
+                raise FormulaError(
+                    f"Unsupported function or method: {func_name}"
+                )
 
             if isinstance(node, ast.BinOp):
                 left = self._visit(node.left)
                 right = self._visit(node.right)
                 if isinstance(node.op, ast.Add):
-                    if isinstance(left, (str, list)) or isinstance(right, (str, list)):
+                    if isinstance(left, (str, list)) or isinstance(
+                        right, (str, list)
+                    ):
                         if isinstance(left, list) and isinstance(right, list):
                             return left + right
-                        return str(left if left is not None else "") + str(right if right is not None else "")
+                        return str(left if left is not None else "") + str(
+                            right if right is not None else ""
+                        )
                     return (left or 0) + (right or 0)
 
             if isinstance(node, ast.Compare):
@@ -619,7 +642,9 @@ class FormulaEvaluator:
                     if isinstance(op, ast.NotEq):
                         return left != right
 
-            raise FormulaError(f"Unsupported expression construct: {type(node).__name__}")
+            raise FormulaError(
+                f"Unsupported expression construct: {type(node).__name__}"
+            )
         except FormulaError:
             raise
         except Exception as e:
@@ -640,10 +665,14 @@ class FormulaEvaluator:
         if is_regex:
             regex_str = pattern_str[1:-1]
             try:
-                future = _REGEX_EXECUTOR.submit(re.sub, regex_str, str(replacement), target_str)
+                future = _REGEX_EXECUTOR.submit(
+                    re.sub, regex_str, str(replacement), target_str
+                )
                 return future.result(timeout=self.regex_timeout)
             except concurrent.futures.TimeoutError:
-                raise FormulaTimeoutError(f"Regex evaluation timed out after {self.regex_timeout}s") from None
+                raise FormulaTimeoutError(
+                    f"Regex evaluation timed out after {self.regex_timeout}s"
+                ) from None
             except Exception as e:
                 raise FormulaError(f"Regex error: {e}") from e
         else:
@@ -655,7 +684,9 @@ class FormulaEvaluator:
         var_name = node.args.args[0].arg
         sub_context = self.context.copy()
         sub_context[var_name] = item
-        evaluator = FormulaEvaluator(sub_context, self.max_depth, self.regex_timeout)
+        evaluator = FormulaEvaluator(
+            sub_context, self.max_depth, self.regex_timeout
+        )
         evaluator._current_depth = self._current_depth
         return evaluator._visit(node.body)
 
@@ -724,6 +755,7 @@ def evaluate_filter(
 # Evaluator — formula (T017)
 # ---------------------------------------------------------------------------
 
+
 def evaluate_formula(
     formula: Formula,
     path: Path,
@@ -740,14 +772,16 @@ def evaluate_formula(
         if folder == ".":
             folder = ""
         context = frontmatter.copy()
-        context.update({
-            "file.name": path.stem,
-            "file.folder": folder,
-            "file.path": rel_path,
-            "file.ext": path.suffix.lstrip("."),
-            "file.links": list(outbound_links),
-            "file.backlinks": list(inbound_links),
-        })
+        context.update(
+            {
+                "file.name": path.stem,
+                "file.folder": folder,
+                "file.path": rel_path,
+                "file.ext": path.suffix.lstrip("."),
+                "file.links": list(outbound_links),
+                "file.backlinks": list(inbound_links),
+            }
+        )
         # Add 'tags' if present in frontmatter for list operations
         if "tags" not in context and "tags" in frontmatter:
             context["tags"] = frontmatter["tags"]
@@ -922,13 +956,20 @@ def execute_base(
     if selected_view:
         view_props["type"] = selected_view.type
         if selected_view.type == "cards":
-            for key in ("cardSize", "image", "imageAspectRatio", "indentProperties"):
+            for key in (
+                "cardSize",
+                "image",
+                "imageAspectRatio",
+                "indentProperties",
+            ):
                 if key in selected_view.extra:
                     view_props[key] = selected_view.extra[key]
 
     merged_filter: FilterNode | None = None
     if base.filters and selected_view and selected_view.filters:
-        merged_filter = FilterNode(op="and", children=[base.filters, selected_view.filters])
+        merged_filter = FilterNode(
+            op="and", children=[base.filters, selected_view.filters]
+        )
     elif base.filters:
         merged_filter = base.filters
     elif selected_view and selected_view.filters:
@@ -963,7 +1004,9 @@ def execute_base(
         outbound = set(idx._outbound.get(path.stem, []))
         inbound = set(idx._inbound.get(path.stem, []))
 
-        if merged_filter and not evaluate_filter(merged_filter, path, fm, rel, outbound):
+        if merged_filter and not evaluate_filter(
+            merged_filter, path, fm, rel, outbound
+        ):
             continue
 
         formula_values: dict[str, Any] = {}
@@ -1098,9 +1141,12 @@ def _serialize_filter_node(node: FilterNode) -> dict[str, Any]:
 def _serialize_base(base: Base) -> dict[str, Any]:
     result: dict[str, Any] = {
         "line_number": base.line_number,
-        "filters": _serialize_filter_node(base.filters) if base.filters else None,
+        "filters": _serialize_filter_node(base.filters)
+        if base.filters
+        else None,
         "formulas": {
-            name: {"expression": f.expression, "tier": f.tier} for name, f in base.formulas.items()
+            name: {"expression": f.expression, "tier": f.tier}
+            for name, f in base.formulas.items()
         },
         "summaries": {
             s.name: f"{s.function}({s.property})" if s.property else s.function
@@ -1110,9 +1156,14 @@ def _serialize_base(base: Base) -> dict[str, Any]:
             {
                 "name": v.name,
                 "type": v.type,
-                "filters": _serialize_filter_node(v.filters) if v.filters else None,
+                "filters": _serialize_filter_node(v.filters)
+                if v.filters
+                else None,
                 "order": v.order,
-                "sort": [{"property": s.property, "direction": s.direction} for s in v.sort],
+                "sort": [
+                    {"property": s.property, "direction": s.direction}
+                    for s in v.sort
+                ],
                 "groupBy": {
                     "property": v.group_by.property,
                     "direction": v.group_by.direction,
@@ -1120,13 +1171,35 @@ def _serialize_base(base: Base) -> dict[str, Any]:
                 if v.group_by
                 else None,
                 "summaries": {
-                    s.name: f"{s.function}({s.property})" if s.property else s.function
+                    s.name: f"{s.function}({s.property})"
+                    if s.property
+                    else s.function
                     for s in v.summaries
                 },
                 **({"markers": v.markers} if v.markers else {}),
                 **({"column_sizes": v.column_sizes} if v.column_sizes else {}),
-                **({k: val for k, val in v.extra.items() if (v.type == "cards" and k in _CARD_PROPS) or (v.type == "map" and k in _MAP_PROPS)}),
-                **({"extra": {k: val for k, val in v.extra.items() if not ((v.type == "cards" and k in _CARD_PROPS) or (v.type == "map" and k in _MAP_PROPS))}} if v.extra else {}),
+                **(
+                    {
+                        k: val
+                        for k, val in v.extra.items()
+                        if (v.type == "cards" and k in _CARD_PROPS)
+                        or (v.type == "map" and k in _MAP_PROPS)
+                    }
+                ),
+                **(
+                    {
+                        "extra": {
+                            k: val
+                            for k, val in v.extra.items()
+                            if not (
+                                (v.type == "cards" and k in _CARD_PROPS)
+                                or (v.type == "map" and k in _MAP_PROPS)
+                            )
+                        }
+                    }
+                    if v.extra
+                    else {}
+                ),
             }
             for v in base.views
         ],

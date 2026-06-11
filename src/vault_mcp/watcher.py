@@ -4,6 +4,7 @@ Uses watchdog to monitor the vault for .md file changes. On each event,
 invalidates only the affected file's entries in the index rather than
 triggering a full rebuild.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,8 +30,12 @@ class _VaultEventHandler(FileSystemEventHandler):
         self._lock = threading.Lock()
 
     def _handle(self, event: FileSystemEvent) -> None:
-        src = event.src_path if isinstance(event.src_path, str) else event.src_path.decode("utf-8", errors="replace")
-        if not src.endswith('.md'):
+        src = (
+            event.src_path
+            if isinstance(event.src_path, str)
+            else event.src_path.decode("utf-8", errors="replace")
+        )
+        if not src.endswith(".md"):
             return
         path = Path(src)
         with self._lock:
@@ -52,10 +57,14 @@ class _VaultEventHandler(FileSystemEventHandler):
     def on_moved(self, event: FileSystemEvent) -> None:
         if not event.is_directory:
             self._handle(event)
-            if hasattr(event, 'dest_path'):
+            if hasattr(event, "dest_path"):
                 dest_path = event.dest_path
-                dest_str = dest_path if isinstance(dest_path, str) else dest_path.decode("utf-8", errors="replace")
-                if not dest_str.endswith('.md'):
+                dest_str = (
+                    dest_path
+                    if isinstance(dest_path, str)
+                    else dest_path.decode("utf-8", errors="replace")
+                )
+                if not dest_str.endswith(".md"):
                     return
                 dest = Path(dest_str)
                 with self._lock:

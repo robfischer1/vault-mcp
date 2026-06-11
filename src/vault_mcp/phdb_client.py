@@ -37,10 +37,22 @@ _ATOM_REQUIRED: dict[str, frozenset[str]] = {
 _ATOM_ALLOWED: dict[str, frozenset[str]] = {
     "decision": frozenset({"polarity", "reversed_by"}),
     "reversal": frozenset(
-        {"reverses", "trigger", "position_before", "position_after", "captured_when"}
+        {
+            "reverses",
+            "trigger",
+            "position_before",
+            "position_after",
+            "captured_when",
+        }
     ),
     "tension": frozenset(
-        {"position_a", "position_b", "held_since", "resolution", "captured_when"}
+        {
+            "position_a",
+            "position_b",
+            "held_since",
+            "resolution",
+            "captured_when",
+        }
     ),
     "pushback": frozenset(
         {"from", "challenge", "response", "position_changed", "captured_when"}
@@ -105,7 +117,9 @@ def validate_atom(atom_type: str, payload: object) -> dict[str, Any]:
         )
     missing = _ATOM_REQUIRED[atom_type] - keys
     if len(missing) > 0:
-        raise AtomError(f"{atom_type} payload missing required field(s): {sorted(missing)}")
+        raise AtomError(
+            f"{atom_type} payload missing required field(s): {sorted(missing)}"
+        )
     return dict(payload)
 
 
@@ -138,11 +152,14 @@ def emit_atom(
     """
     validated = validate_atom(atom_type, payload)  # fail fast, before the POST
     event_ts = _event_ts(validated, ts)
-    result = post("/emit", {
-        "event_type": atom_type,
-        "payload": validated,
-        "ts": event_ts,
-    })
+    result = post(
+        "/emit",
+        {
+            "event_type": atom_type,
+            "payload": validated,
+            "ts": event_ts,
+        },
+    )
     if not result.get("ok"):
         raise PhdbUnavailableError(
             str(result.get("error", "phdb /emit returned no success flag"))
