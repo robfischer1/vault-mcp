@@ -31,7 +31,7 @@ Repository = "https://github.com/robfischer1/vault-mcp"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.23",
     "ruff>=0.15.17",
     "mypy>=1.10",
