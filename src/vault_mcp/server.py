@@ -2722,14 +2722,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--host",
-        default="0.0.0.0",  # noqa: S104 — operator-chosen bind host for HTTP transport
-        help="Bind host for HTTP transports (default: 0.0.0.0)",
+        default=os.environ.get("VAULT_MCP_HOST", "0.0.0.0"),  # noqa: S104 — operator-chosen bind host for HTTP transport
+        help="Bind host for HTTP transports (env VAULT_MCP_HOST; default 0.0.0.0)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=8100,
-        help="Bind port for HTTP transports (default: 8100)",
+        default=int(os.environ.get("PORT", "8100")),
+        help="Bind port for HTTP transports (env PORT; default 8100)",
     )
     args = parser.parse_args()
 
