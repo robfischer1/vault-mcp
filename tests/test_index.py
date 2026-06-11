@@ -1,4 +1,5 @@
 """Unit tests for vault_mcp.index against the mini-vault fixture."""
+
 from __future__ import annotations
 
 import sys
@@ -204,10 +205,10 @@ class TestReadNoteEmbeds:
         assert missing_view["error"]["type"] == "view_not_found"
 
 
-
 # ------------------------------------------------------------------
 # Phase 2 — Graph tools
 # ------------------------------------------------------------------
+
 
 class TestBacklinksTo:
     def test_agents_has_backlinks(self):
@@ -276,6 +277,7 @@ class TestFindOrphans:
 class TestParseAuditIgnores:
     def test_parses_fixture(self):
         from vault_mcp.index import VaultIndex
+
         ignores_path = ROOT / "tests" / "fixtures" / "audit-ignores-fixture.md"
         if not ignores_path.exists():
             ignores_path.write_text(
@@ -294,9 +296,11 @@ class TestParseAuditIgnores:
 # Phase 3 — Governance tools
 # ------------------------------------------------------------------
 
+
 class TestParseTagsGlossary:
     def test_parses_mini_vault_glossary(self):
         from vault_mcp.index import VaultIndex
+
         glossary = MINI_VAULT / "System" / "Tags Glossary.md"
         tags = VaultIndex.parse_tags_glossary(glossary)
         assert "#todo" in tags
@@ -354,21 +358,28 @@ class TestVaultStats:
 # Phase 4 — Incremental invalidation
 # ------------------------------------------------------------------
 
+
 class TestInvalidateFile:
     def test_invalidate_removes_from_content(self):
         idx = _idx()
         p = MINI_VAULT / "Garden" / "Stoicism.md"
-        before = len([1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()])
+        before = len(
+            [1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()]
+        )
         assert before == 1
         idx.invalidate_file(p)
-        after = len([1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()])
+        after = len(
+            [1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()]
+        )
         # Re-parsed, so still 1
         assert after == 1
 
     def test_invalidate_deleted_file(self, tmp_path):
         idx = _idx()
         test_file = MINI_VAULT / "Garden" / "_temp_test.md"
-        test_file.write_text("---\nname: temp\n---\nBody [[AGENTS]].", encoding='utf-8')
+        test_file.write_text(
+            "---\nname: temp\n---\nBody [[AGENTS]].", encoding="utf-8"
+        )
         idx.invalidate_file(test_file)
         assert "AGENTS" in idx._outbound.get("_temp_test", [])
         test_file.unlink()

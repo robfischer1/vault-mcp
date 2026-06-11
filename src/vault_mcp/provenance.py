@@ -69,7 +69,9 @@ class AuthorType(StrEnum):
     EXTERNAL = "external"
 
 
-def author_type_for(level: Provenance, declared: AuthorType | None = None) -> AuthorType:
+def author_type_for(
+    level: Provenance, declared: AuthorType | None = None
+) -> AuthorType:
     """Derive the author_type category from an author_level.
 
     A caller-declared ``external`` always wins (3rd-party origin can't be

@@ -12,6 +12,7 @@ Error codes (closed vocabulary):
     rest_obsidian_error  — 5xx from API
     rest_invalid_request — 4xx other than 401/404
 """
+
 from __future__ import annotations
 
 import logging
@@ -146,9 +147,17 @@ class ObsidianRESTClient:
     ) -> dict[str, Any]:
         """Shared request handler with uniform error envelope."""
         if self._key_error:
-            return {"ok": False, "error": "rest_no_key", "detail": self._key_error}
+            return {
+                "ok": False,
+                "error": "rest_no_key",
+                "detail": self._key_error,
+            }
         if self._api_key is None:
-            return {"ok": False, "error": "rest_no_key", "detail": "no API key configured"}
+            return {
+                "ok": False,
+                "error": "rest_no_key",
+                "detail": "no API key configured",
+            }
 
         if self._should_probe():
             self.probe()
@@ -175,25 +184,45 @@ class ObsidianRESTClient:
             resp = self._client.request(method, path, **kwargs)
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             self._mark_unreachable(str(exc))
-            return {"ok": False, "error": "rest_unreachable", "detail": str(exc)}
+            return {
+                "ok": False,
+                "error": "rest_unreachable",
+                "detail": str(exc),
+            }
 
         self._mark_reachable(self._version)
 
         if resp.status_code == 204:
             return {"ok": True, "data": None}
         if resp.status_code == 401:
-            return {"ok": False, "error": "rest_unauthorized", "detail": "invalid API key"}
+            return {
+                "ok": False,
+                "error": "rest_unauthorized",
+                "detail": "invalid API key",
+            }
         if resp.status_code == 404:
-            return {"ok": False, "error": "rest_not_found", "detail": resp.text[:200]}
+            return {
+                "ok": False,
+                "error": "rest_not_found",
+                "detail": resp.text[:200],
+            }
         if 400 <= resp.status_code < 500:
-            return {"ok": False, "error": "rest_invalid_request", "detail": resp.text[:500]}
+            return {
+                "ok": False,
+                "error": "rest_invalid_request",
+                "detail": resp.text[:500],
+            }
         if resp.status_code >= 500:
-            return {"ok": False, "error": "rest_obsidian_error", "detail": resp.text[:500]}
+            return {
+                "ok": False,
+                "error": "rest_obsidian_error",
+                "detail": resp.text[:500],
+            }
 
         if not resp.content:
             return {"ok": True, "data": None}
-        content_type = resp.headers.get("content-type", "")
-        if "json" in content_type:
+        content_type = resp.headers.get("content-type")
+        if content_type and "json" in content_type:
             return {"ok": True, "data": resp.json()}
         return {"ok": True, "data": resp.text}
 
@@ -205,7 +234,9 @@ class ObsidianRESTClient:
         extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Issue a GET to `path` and return the response envelope."""
-        return self._request("GET", path, accept=accept, extra_headers=extra_headers)
+        return self._request(
+            "GET", path, accept=accept, extra_headers=extra_headers
+        )
 
     def post(
         self,
@@ -219,9 +250,12 @@ class ObsidianRESTClient:
     ) -> dict[str, Any]:
         """Issue a POST to `path` with params/body/content and return the response envelope."""
         return self._request(
-            "POST", path,
-            params=params, json_body=json_body,
-            content=content, content_type=content_type,
+            "POST",
+            path,
+            params=params,
+            json_body=json_body,
+            content=content,
+            content_type=content_type,
             accept=accept,
         )
 
@@ -235,7 +269,11 @@ class ObsidianRESTClient:
     ) -> dict[str, Any]:
         """PUT a note body. ``PUT /vault/{path}`` creates or overwrites the file."""
         return self._request(
-            "PUT", path, content=content, content_type=content_type, accept=accept,
+            "PUT",
+            path,
+            content=content,
+            content_type=content_type,
+            accept=accept,
         )
 
     def patch(
@@ -249,12 +287,17 @@ class ObsidianRESTClient:
     ) -> dict[str, Any]:
         """PATCH a note section. Headers select target + operation."""
         return self._request(
-            "PATCH", path,
-            content=content, content_type=content_type,
-            accept=accept, extra_headers=extra_headers,
+            "PATCH",
+            path,
+            content=content,
+            content_type=content_type,
+            accept=accept,
+            extra_headers=extra_headers,
         )
 
-    def delete(self, path: str, *, accept: str = "application/json") -> dict[str, Any]:
+    def delete(
+        self, path: str, *, accept: str = "application/json"
+    ) -> dict[str, Any]:
         """DELETE a note. ``DELETE /vault/{path}`` removes the file."""
         return self._request("DELETE", path, accept=accept)
 
@@ -292,7 +335,9 @@ class RestNoteIO:
             )
         data = res.get("data")
         if not isinstance(data, str):
-            raise ObsidianIOError(f"REST read {path}: unexpected result {data!r}")
+            raise ObsidianIOError(
+                f"REST read {path}: unexpected result {data!r}"
+            )
         return data
 
     def _put(self, path: str, content: str) -> None:
@@ -317,7 +362,9 @@ class RestNoteIO:
                 f"REST delete {path}: {res.get('error')}: {res.get('detail')}"
             )
 
-    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
+    def list_notes(
+        self, directory: str = "", *, recursive: bool = True
+    ) -> list[str]:
         """List ``.md`` note paths under ``directory`` (recursive by default).
 
         Uses the REST directory listing (``GET /vault/{dir}/`` -> ``{files: [...]}``,
@@ -339,7 +386,9 @@ class RestNoteIO:
             full = f"{prefix}/{entry}" if prefix else entry
             if entry.endswith("/"):
                 if recursive:
-                    out.extend(self.list_notes(full.rstrip("/"), recursive=True))
+                    out.extend(
+                        self.list_notes(full.rstrip("/"), recursive=True)
+                    )
             elif entry.endswith(".md"):
                 out.append(full)
         return out

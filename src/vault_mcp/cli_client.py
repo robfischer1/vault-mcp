@@ -54,7 +54,7 @@ class ObsidianCLI:
                 "version": None,
                 "error": "cli_not_found",
                 "detail": "The 'obsidian' binary was not found. Set VAULT_MCP_OBSIDIAN_BIN "
-                          "to its full path, or put it on the service PATH.",
+                "to its full path, or put it on the service PATH.",
             }
 
         try:
@@ -276,18 +276,28 @@ class ObsidianNoteIO:
         res = self._eval(build_read_js(path), path)
         data = _eval_value(res.get("data"))
         if not isinstance(data, str):
-            raise ObsidianIOError(f"unexpected read result for {path}: {data!r}")
+            raise ObsidianIOError(
+                f"unexpected read result for {path}: {data!r}"
+            )
         return data
 
     def delete_note(self, path: str) -> None:
         """Delete the note at `path` via the CLI."""
         self._eval_write(build_delete_js(path), path)
 
-    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
+    def list_notes(
+        self, directory: str = "", *, recursive: bool = True
+    ) -> list[str]:
         """List markdown note paths under `directory` (recursive by default)."""
-        res = self._eval(build_list_js(directory.strip("/")), directory or "<root>")
+        res = self._eval(
+            build_list_js(directory.strip("/")), directory or "<root>"
+        )
         data = _eval_value(res.get("data"))
-        paths = [p for p in data if isinstance(p, str)] if isinstance(data, list) else []
+        paths = (
+            [p for p in data if isinstance(p, str)]
+            if isinstance(data, list)
+            else []
+        )
         if recursive:
             return paths
         # immediate children only: no '/' beyond the directory prefix
@@ -307,5 +317,7 @@ class ObsidianNoteIO:
     def _eval(self, code: str, path: str) -> dict[str, Any]:
         res = self._cli.run("eval", code=code)
         if not res.get("ok"):
-            raise ObsidianIOError(res.get("detail") or f"eval failed for {path}")
+            raise ObsidianIOError(
+                res.get("detail") or f"eval failed for {path}"
+            )
         return res

@@ -11,6 +11,7 @@ Config resolution (highest priority first):
 
     VAULT_MCP_TTL_SECONDS   index TTL in seconds (default: 300)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,7 +51,9 @@ from vault_mcp.index import VaultIndex  # noqa: E402
 from vault_mcp.rest_client import DEFAULT_REST_URL  # noqa: E402
 
 # phdb sibling-repo import for predicate table (Phase 9 — triple tools)
-_phdb_src = Path(__file__).resolve().parent.parent / "personal-history-db" / "src"
+_phdb_src = (
+    Path(__file__).resolve().parent.parent / "personal-history-db" / "src"
+)
 if str(_phdb_src) not in sys.path:
     sys.path.insert(0, str(_phdb_src))
 
@@ -173,11 +176,16 @@ class SubscriptionManager:
 
     def _hash_result(self, result: Any) -> str:
         """Create a stable hash of a QueryResult."""
-        data = asdict(result) if hasattr(result, "__dataclass_fields__") else result
+        data = (
+            asdict(result)
+            if hasattr(result, "__dataclass_fields__")
+            else result
+        )
 
         hash_data = {
             "notes": [
-                {"path": n["path"], "formulas": n["formulas"]} for n in data.get("notes", [])
+                {"path": n["path"], "formulas": n["formulas"]}
+                for n in data.get("notes", [])
             ],
             "summaries": data.get("summaries", {}),
             "total": data.get("total", 0),
@@ -228,7 +236,9 @@ class SubscriptionManager:
             "handle": sub.handle,
             "path": sub.path,
             "view": sub.view,
-            "results": asdict(result) if hasattr(result, "__dataclass_fields__") else result,
+            "results": asdict(result)
+            if hasattr(result, "__dataclass_fields__")
+            else result,
         }
 
         from mcp.types import JSONRPCNotification
@@ -260,6 +270,7 @@ def _get_sub_manager() -> SubscriptionManager:
         _get_index().on_invalidate.append(_sub_manager.on_file_invalidated)
     return _sub_manager
 
+
 # ---------------------------------------------------------------------------
 # Shared state
 # ---------------------------------------------------------------------------
@@ -273,6 +284,7 @@ def _get_index() -> VaultIndex:
         _index = VaultIndex(VAULT_PATH, ttl_seconds=TTL_SECONDS)
         if WATCH_ENABLED:
             from vault_mcp.watcher import start_watcher
+
             _index.enable_watcher()
             _observer = start_watcher(_index)
     return _index
@@ -286,7 +298,10 @@ def _get_rest_client() -> ObsidianRESTClient:
     global _rest_client
     if _rest_client is None:
         from vault_mcp.rest_client import ObsidianRESTClient
-        _rest_client = ObsidianRESTClient(base_url=REST_URL, key_path=REST_KEY_PATH or None)
+
+        _rest_client = ObsidianRESTClient(
+            base_url=REST_URL, key_path=REST_KEY_PATH or None
+        )
         _rest_client.probe()
     return _rest_client
 
@@ -299,6 +314,7 @@ def _get_cli_client() -> ObsidianCLI:
     global _cli_client
     if _cli_client is None:
         from vault_mcp.cli_client import ObsidianCLI
+
         _cli_client = ObsidianCLI()
         _cli_client.probe()
     return _cli_client
@@ -509,7 +525,9 @@ def outbound_links(
         {"stem": str, "count": int, "results": [{stem, path|resolution}]}
 
     """
-    results = _get_index().outbound_links(stem, include_image_embeds=include_image_embeds)
+    results = _get_index().outbound_links(
+        stem, include_image_embeds=include_image_embeds
+    )
     return {"stem": stem, "count": len(results), "results": results}
 
 
@@ -633,7 +651,7 @@ async def subscribe_base(
     path: str,
     view: str | None = None,
     base_index: int = 0,
-    ctx: Context | None = None,
+    ctx: Context[Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Subscribe to live updates for a base query.
 
@@ -644,6 +662,7 @@ async def subscribe_base(
         path: Vault-relative file path containing the base.
         view: Named view to restrict to.
         base_index: 0-based index of which base (default 0).
+        ctx: FastMCP context used to push live-update notifications (injected).
 
     Returns:
         {"handle": str, "initial_results": dict}
@@ -656,7 +675,11 @@ async def subscribe_base(
 
     pf = _parse_file_impl(file_path)
     if pf.errors and not pf.bases:
-        return {"error": "parse_error", "path": path, "detail": pf.errors[0]["message"]}
+        return {
+            "error": "parse_error",
+            "path": path,
+            "detail": pf.errors[0]["message"],
+        }
 
     if base_index < 0 or base_index >= len(pf.bases):
         return {
@@ -677,11 +700,15 @@ async def subscribe_base(
 
     with mgr.lock:
         if handle in mgr.subscriptions:
-            mgr.subscriptions[handle].last_result_hash = mgr._hash_result(result)
+            mgr.subscriptions[handle].last_result_hash = mgr._hash_result(
+                result
+            )
 
     return {
         "handle": handle,
-        "initial_results": asdict(result) if hasattr(result, "__dataclass_fields__") else result,
+        "initial_results": asdict(result)
+        if hasattr(result, "__dataclass_fields__")
+        else result,
     }
 
 
@@ -753,7 +780,11 @@ def execute_base(
 
     pf = _parse_file_impl(file_path)
     if pf.errors and not pf.bases:
-        return {"error": "parse_error", "path": path, "detail": pf.errors[0]["message"]}
+        return {
+            "error": "parse_error",
+            "path": path,
+            "detail": pf.errors[0]["message"],
+        }
 
     if base_index < 0 or base_index >= len(pf.bases):
         return {
@@ -923,7 +954,10 @@ if not REST_DISABLE:
         """
         valid = {"daily", "weekly", "monthly", "quarterly", "yearly"}
         if level not in valid:
-            return {"error": "rest_invalid_request", "detail": f"level must be one of {valid}"}
+            return {
+                "error": "rest_invalid_request",
+                "detail": f"level must be one of {valid}",
+            }
         path = f"/periodic/{level}/"
         if date:
             path = f"/periodic/{level}/{date}"
@@ -1005,7 +1039,9 @@ if not REST_DISABLE:
         if create_if_missing:
             headers["Create-Target-If-Missing"] = "true"
         result = client.patch(
-            f"/vault/{path}", content=content, extra_headers=headers,
+            f"/vault/{path}",
+            content=content,
+            extra_headers=headers,
         )
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
@@ -1029,7 +1065,8 @@ if not REST_DISABLE:
         client = _get_rest_client()
         result = client.post(
             f"/vault/{path}",
-            content=content, content_type="text/markdown",
+            content=content,
+            content_type="text/markdown",
         )
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
@@ -1060,7 +1097,9 @@ if not REST_DISABLE:
             "Create-Target-If-Missing": "true",
         }
         result = client.patch(
-            f"/vault/{path}", content=value, extra_headers=headers,
+            f"/vault/{path}",
+            content=value,
+            extra_headers=headers,
         )
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
@@ -1088,12 +1127,17 @@ if not REST_DISABLE:
         """
         valid = {"daily", "weekly", "monthly", "quarterly", "yearly"}
         if level not in valid:
-            return {"error": "rest_invalid_request", "detail": f"level must be one of {valid}"}
+            return {
+                "error": "rest_invalid_request",
+                "detail": f"level must be one of {valid}",
+            }
         path = f"/periodic/{level}/"
         if date:
             path = f"/periodic/{level}/{date}"
         client = _get_rest_client()
-        result = client.post(path, content=content, content_type="text/markdown")
+        result = client.post(
+            path, content=content, content_type="text/markdown"
+        )
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "appended": level, "date": date}
@@ -1159,14 +1203,13 @@ if not REST_DISABLE:
             return {
                 "error": "rest_invalid_request",
                 "detail": f"command not in allowlist: {command_id}. "
-                          f"Allowed: {sorted(REST_COMMAND_ALLOWLIST)}",
+                f"Allowed: {sorted(REST_COMMAND_ALLOWLIST)}",
             }
         client = _get_rest_client()
         result = client.post(f"/commands/{command_id}/")
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"executed": command_id}
-
 
     # -------------------------------------------------------------------
     # Phase 7 — Advanced query tools
@@ -1204,7 +1247,7 @@ if not REST_DISABLE:
         return {"count": 0, "results": [], "raw": data}
 
     @mcp.tool()
-    def jsonlogic_search(query: dict) -> dict[str, Any]:
+    def jsonlogic_search(query: dict[str, Any]) -> dict[str, Any]:
         """[REST-backed] Search vault files using a JsonLogic query.
 
         Evaluates the query against every file in the vault. Files are
@@ -1344,7 +1387,9 @@ PHDB_DB_PATH = os.environ.get("PHDB_DB_PATH", "")
 # phdb's plain-HTTP base URL — the dissolve verb POSTs typed writes here (VDV F3
 # transport decision: writes go over HTTP, not the legacy direct-DB seam). Reads
 # still use the direct _get_phdb_conn below.
-PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip("/")
+PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip(
+    "/"
+)
 _phdb_conn = None
 
 
@@ -1355,8 +1400,11 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     becomes {"ok": False, "error": ...} so dissolve halts before deleting.
     """
     import httpx
+
     try:
-        resp = httpx.post(f"{PHDB_HTTP_URL}{endpoint}", json=payload, timeout=30.0)
+        resp = httpx.post(
+            f"{PHDB_HTTP_URL}{endpoint}", json=payload, timeout=30.0
+        )
     except httpx.HTTPError as e:
         return {"ok": False, "error": f"phdb unreachable: {e}"}
     if resp.status_code != 200:
@@ -1368,7 +1416,7 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     return resp.json()
 
 
-def _get_phdb_conn():
+def _get_phdb_conn() -> Any:
     global _phdb_conn
     if _phdb_conn is None:
         if not PHDB_DB_PATH:
@@ -1377,6 +1425,7 @@ def _get_phdb_conn():
         if not db_file.exists():
             return None
         from phdb.db import connect_persistent
+
         _phdb_conn = connect_persistent(db_file)
     return _phdb_conn
 
@@ -1415,8 +1464,12 @@ def query_triples(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.triples import query_triples as _qt
+
     results = _qt(
         conn,
         subject=subject,
@@ -1466,8 +1519,12 @@ def add_triple(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.triples import add_triple as _at
+
     try:
         return _at(
             conn,
@@ -1505,8 +1562,12 @@ def delete_triple(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.triples import delete_triple as _dt
+
     return _dt(conn, triple_id, prune_orphan_nodes=prune_orphan_nodes)
 
 
@@ -1527,8 +1588,12 @@ def delete_node(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.triples import delete_node as _dn
+
     return _dn(conn, node_id, cascade=cascade)
 
 
@@ -1545,8 +1610,12 @@ def triple_stats() -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.triples import triple_stats as _ts
+
     return _ts(conn)
 
 
@@ -1569,8 +1638,12 @@ def node_neighborhood(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.triples import node_neighborhood as _nn
+
     return _nn(conn, node, limit=limit)
 
 
@@ -1584,8 +1657,12 @@ def list_predicates() -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.triples import list_predicates as _lp
+
     preds = _lp(conn)
     return {"count": len(preds), "predicates": preds}
 
@@ -1619,11 +1696,18 @@ def materialize_revision(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.file_revisions import get_revision, materialize
+
     row = get_revision(conn, rev_id)
     if row is None:
-        return {"error": "not_found", "detail": f"rev_id={rev_id} has no file_revisions row"}
+        return {
+            "error": "not_found",
+            "detail": f"rev_id={rev_id} has no file_revisions row",
+        }
     try:
         body = materialize(conn, rev_id, repo_root=repo_root)
     except FileNotFoundError as e:
@@ -1661,10 +1745,16 @@ def list_file_revisions(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.file_revisions import list_for_path
+
     rows = list_for_path(
-        conn, file_path, repo=repo,
+        conn,
+        file_path,
+        repo=repo,
         limit=None if limit == 0 else limit,
     )
     return {"count": len(rows), "revisions": rows}
@@ -1687,8 +1777,12 @@ def revision_triple_deltas(rev_id: int) -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.file_revisions import triple_deltas
+
     deltas = triple_deltas(conn, rev_id)
     return {"count": len(deltas), "deltas": deltas}
 
@@ -1718,8 +1812,12 @@ def dissolution_lookup(vault_path: str, repo: str = "vault") -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.dissolutions import lookup_vault_path
+
     return lookup_vault_path(conn, vault_path, repo=repo)
 
 
@@ -1738,8 +1836,12 @@ def list_dissolution_waves(repo: str = "vault") -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.dissolutions import list_waves
+
     waves = list_waves(conn, repo=repo)
     return {"count": len(waves), "waves": waves}
 
@@ -1759,7 +1861,10 @@ def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     row = conn.execute(
         "SELECT d.id FROM dissolutions d"
         " JOIN file_revision_dissolutions frd ON frd.dissolution_pk = d.id"
@@ -1769,6 +1874,7 @@ def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
     if row is None:
         return {"dissolution": None}
     from phdb.dissolutions import get
+
     return {"dissolution": get(conn, int(row[0]))}
 
 
@@ -1795,8 +1901,12 @@ def note_lookup(query: str) -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.vault_notes import lookup
+
     result = lookup(conn, query)
     if result is None:
         return {"result": None}
@@ -1821,8 +1931,12 @@ def note_search(query: str, limit: int = 20) -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.vault_notes import search
+
     results = search(conn, query, limit=limit)
     return {"count": len(results), "results": results}
 
@@ -1845,8 +1959,12 @@ def note_read(name_or_path: str) -> dict[str, Any]:
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.vault_notes import read_note
+
     body = read_note(conn, name_or_path)
     if body is None:
         return {"result": None}
@@ -1875,8 +1993,12 @@ def note_list(
     """
     conn = _get_phdb_conn()
     if conn is None:
-        return {"error": "phdb_unavailable", "detail": "PHDB_DB_PATH not set or DB not found"}
+        return {
+            "error": "phdb_unavailable",
+            "detail": "PHDB_DB_PATH not set or DB not found",
+        }
     from phdb.vault_notes import list_notes
+
     results = list_notes(conn, status=status, at_type=at_type, limit=limit)
     return {"count": len(results), "notes": results}
 
@@ -1884,6 +2006,7 @@ def note_list(
 # ---------------------------------------------------------------------------
 # vault-mcp v2 — Convention Gate write tools (schema-driven, provenance-stamped)
 # ---------------------------------------------------------------------------
+
 
 def _prune_empty_parents(child_path: Path, root: Path) -> list[str]:
     """Walk up from child_path's parent, removing empty dirs until root."""
@@ -1986,7 +2109,10 @@ def _start_sweep_scheduler() -> None:
     log = logging.getLogger(__name__)
     committer = _get_committer()
     if not committer.enabled:
-        print("vault-mcp: git sweep disabled (VAULT_MCP_GIT_COMMIT != 1)", file=sys.stderr)
+        print(
+            "vault-mcp: git sweep disabled (VAULT_MCP_GIT_COMMIT != 1)",
+            file=sys.stderr,
+        )
         return
     interval = int(os.environ.get("VAULT_MCP_GIT_SWEEP_SECONDS", "3600"))
 
@@ -1998,14 +2124,19 @@ def _start_sweep_scheduler() -> None:
                 res = committer.sweep_commit(f"vault: periodic sweep {stamp}")
                 if res.get("committed"):
                     log.info(
-                        "git sweep committed %s (pushed=%s)", res.get("sha"), res.get("pushed")
+                        "git sweep committed %s (pushed=%s)",
+                        res.get("sha"),
+                        res.get("pushed"),
                     )
             except Exception:
                 log.exception("git sweep tick failed")
 
     threading.Thread(target=_loop, name="vault-git-sweep", daemon=True).start()
     push_state = "on" if committer.push_enabled else "off"
-    print(f"vault-mcp: git sweep every {interval}s (push={push_state})", file=sys.stderr)
+    print(
+        f"vault-mcp: git sweep every {interval}s (push={push_state})",
+        file=sys.stderr,
+    )
 
 
 def _load_templates() -> dict[str, str]:
@@ -2086,6 +2217,7 @@ def write_note(
         fields: Extra frontmatter fields (required / constrained values, etc.).
         actor: 'agent' (default) or 'human' — drives the provenance stamp.
         mode: 'upsert' (default), 'create' (refuse if exists), 'update' (refuse if missing).
+        commit_message: Commit message recording this write; auto-generated when omitted.
 
     Returns:
         {"ok": True, "path", "frontmatter", "created", "warnings", ...} or a structured error.
@@ -2105,7 +2237,11 @@ def write_note(
             actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
             mode=mode,
         )
-        return _commit_write(result.to_dict(), "create" if result.created else "update", commit_message)
+        return _commit_write(
+            result.to_dict(),
+            "create" if result.created else "update",
+            commit_message,
+        )
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
 
@@ -2128,11 +2264,17 @@ def delete(
 
     try:
         gate = _get_gate()
-        result = gate.delete(path, actor=Actor.HUMAN if actor == "human" else Actor.AGENT)
-        committed = _commit_write(result, "delete", commit_message, is_delete=True)
+        result = gate.delete(
+            path, actor=Actor.HUMAN if actor == "human" else Actor.AGENT
+        )
+        committed = _commit_write(
+            result, "delete", commit_message, is_delete=True
+        )
         if committed.get("ok"):
             abs_path = (VAULT_PATH / path).resolve()
-            committed["dirs_pruned"] = _prune_empty_parents(abs_path, VAULT_PATH)
+            committed["dirs_pruned"] = _prune_empty_parents(
+                abs_path, VAULT_PATH
+            )
         return committed
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
         return _gate_error_envelope(exc)
@@ -2167,7 +2309,9 @@ def move_note(
     try:
         gate = _get_gate()
         result = gate.move_note(
-            src, dst, actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
+            src,
+            dst,
+            actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
         )
         committed = _commit_write(result, "move", commit_message)
         if committed.get("ok"):
@@ -2291,7 +2435,9 @@ def query(note_type: str) -> dict[str, Any]:
                 "error": "unknown_type",
                 "detail": f"no @type {note_type!r} in the schema",
             }
-        templates = _load_templates()  # the one vault-read: locate a matching template
+        templates = (
+            _load_templates()
+        )  # the one vault-read: locate a matching template
         spec["body_template"] = note_type if note_type in templates else None
         return {"ok": True, **spec}
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
@@ -2368,10 +2514,16 @@ def dissolve(
 
     raw_text = abs_path.read_text(encoding="utf-8")
     res = dissolve_note(
-        source_path=str(abs_path), raw_text=raw_text, file_path=abs_path.name,
+        source_path=str(abs_path),
+        raw_text=raw_text,
+        file_path=abs_path.name,
         vault_rel_path=path,
-        plan_slug=plan_slug, rationale=rationale, post=_phdb_post,
-        delete_file=abs_path.unlink, declared_by=declared_by, repo=repo,
+        plan_slug=plan_slug,
+        rationale=rationale,
+        post=_phdb_post,
+        delete_file=abs_path.unlink,
+        declared_by=declared_by,
+        repo=repo,
     )
     # Commit the deletion through the single writer (the file is already gone, so
     # skip the disk-landing poll); attach the sha for the checkpoint handshake.
@@ -2413,24 +2565,40 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
 
     # 1. Read the row (+ paired documents body for plans) over HTTP.
     try:
-        resp = httpx.get(f"{PHDB_HTTP_URL}/read/{table}", params={"id": row_id}, timeout=30.0)
+        resp = httpx.get(
+            f"{PHDB_HTTP_URL}/read/{table}", params={"id": row_id}, timeout=30.0
+        )
     except httpx.HTTPError as e:
         return {"ok": False, "error": f"phdb unreachable: {e}"}
     if resp.status_code == 404:
-        return {"ok": False, "error": "row_not_found", "detail": f"{table}#{row_id}"}
+        return {
+            "ok": False,
+            "error": "row_not_found",
+            "detail": f"{table}#{row_id}",
+        }
     if resp.status_code != 200:
-        return {"ok": False, "error": f"phdb HTTP {resp.status_code}", "detail": resp.text}
+        return {
+            "ok": False,
+            "error": f"phdb HTTP {resp.status_code}",
+            "detail": resp.text,
+        }
     data = resp.json()
     row = data.get("row") or {}
     paired_body: str | None = data.get("paired_body")
 
-    note_type = "Plan" if table == "plans" else (row.get("schema_type") or "DigitalDocument")
+    note_type = (
+        "Plan"
+        if table == "plans"
+        else (row.get("schema_type") or "DigitalDocument")
+    )
 
     try:
         # 2. Resolve the target directory from the note_type's schema route.
         directory = _get_gate()._schema.resolve_directory(note_type)
         # 3. Build the Materializer payload and write via mode=COMPUTE.
-        payload = row_to_payload(row, table, directory=directory, paired_body=paired_body)
+        payload = row_to_payload(
+            row, table, directory=directory, paired_body=paired_body
+        )
         result = _get_materializer().materialize(payload)
         return _commit_write(result.to_dict(), "materialize")
     except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes
@@ -2438,7 +2606,9 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
 
 
 @mcp.tool()
-def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
+def compute_receive(
+    payload: dict[str, Any], created: str | None = None
+) -> dict[str, Any]:
     """Render a structured compute payload into an ai-computed vault note.
 
     Accepts a payload (template, title, directory, data, frontmatter) from a
@@ -2461,7 +2631,9 @@ def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict
 
 
 @mcp.tool()
-def compute_receiver(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
+def compute_receiver(
+    payload: dict[str, Any], created: str | None = None
+) -> dict[str, Any]:
     """Receive a compute result and write it as a durable note (Compute Receiver).
 
     Accepts a structured payload (title, note_type, directory, body, frontmatter,
@@ -2572,7 +2744,9 @@ def main() -> None:
         mcp.settings.transport_security = TransportSecuritySettings(
             enable_dns_rebinding_protection=False,
         )
-        print(f"vault-mcp: listening on {args.host}:{args.port}", file=sys.stderr)
+        print(
+            f"vault-mcp: listening on {args.host}:{args.port}", file=sys.stderr
+        )
 
     _start_sweep_scheduler()
     mcp.run(transport=args.transport)

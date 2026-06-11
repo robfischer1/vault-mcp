@@ -4,6 +4,7 @@ Wraps parsers.build_content_index with a time-based cache. The index
 rebuilds automatically after TTL_SECONDS (default 300 = 5 min) or on
 explicit reindex() call.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -31,8 +32,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-IMAGE_EMBED_RE = re.compile(r'!\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]')
-BASE_EMBED_RE = re.compile(r'!\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|[^\]]+)?\]\]')
+IMAGE_EMBED_RE = re.compile(r"!\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
+BASE_EMBED_RE = re.compile(r"!\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|[^\]]+)?\]\]")
 
 
 class VaultIndex:
@@ -43,7 +44,7 @@ class VaultIndex:
         """Strip path prefixes and .md suffixes to match by_name stems."""
         normalized = []
         for raw_target in raw:
-            stem = raw_target.rsplit('/', 1)[-1].removesuffix('.md')
+            stem = raw_target.rsplit("/", 1)[-1].removesuffix(".md")
             normalized.append(stem)
         return list(set(normalized))
 
@@ -78,15 +79,17 @@ class VaultIndex:
         for path, fm, _rel in self._content:
             stem = path.stem
             try:
-                text = path.read_text(encoding='utf-8')
+                text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 log.debug("link graph: skip unreadable %s: %s", path, exc)
                 continue
 
             body = strip_frontmatter(text)
-            body_links = [m.group(1).strip() for m in WIKILINK_RE.finditer(body)]
+            body_links = [
+                m.group(1).strip() for m in WIKILINK_RE.finditer(body)
+            ]
 
-            up_val = fm.get('up', '')
+            up_val = fm.get("up", "")
             up_links = extract_wikilink_targets(up_val)
 
             raw_targets = list(set(body_links + up_links))
@@ -103,15 +106,28 @@ class VaultIndex:
         """Force full rebuild. Returns stats."""
         t0 = time.time()
         with self._lock:
-            self._content, self._by_name, self._mtime = build_content_index(self.vault)
+            self._content, self._by_name, self._mtime = build_content_index(
+                self.vault
+            )
             self._build_link_graph()
             self._built_at = time.time()
             self.last_indexed_at = (
-                datetime.fromtimestamp(self._built_at, tz=UTC).astimezone().isoformat(timespec="seconds")
+                datetime.fromtimestamp(self._built_at, tz=UTC)
+                .astimezone()
+                .isoformat(timespec="seconds")
             )
         elapsed_ms = int((self._built_at - t0) * 1000)
-        log.info("reindex: %d content, %d names in %dms", len(self._content), len(self._by_name), elapsed_ms)
-        return {"indexed": len(self._content), "names": len(self._by_name), "elapsed_ms": elapsed_ms}
+        log.info(
+            "reindex: %d content, %d names in %dms",
+            len(self._content),
+            len(self._by_name),
+            elapsed_ms,
+        )
+        return {
+            "indexed": len(self._content),
+            "names": len(self._by_name),
+            "elapsed_ms": elapsed_ms,
+        }
 
     def invalidate_file(self, path: Path) -> None:
         """Re-parse a single file and update all index structures."""
@@ -130,14 +146,16 @@ class VaultIndex:
                 return
 
         parts = rel_dir.parts
-        top = parts[0] if parts else ''
-        if top.startswith('.') or top in SKIP_DIRS:
+        top = parts[0] if parts else ""
+        if top.startswith(".") or top in SKIP_DIRS:
             return
 
         stem = path.stem
 
         with self._lock:
-            self._content = [(p, fm, r) for p, fm, r in self._content if p.resolve() != path]
+            self._content = [
+                (p, fm, r) for p, fm, r in self._content if p.resolve() != path
+            ]
             for s, paths in list(self._by_name.items()):
                 self._by_name[s] = [p for p in paths if p.resolve() != path]
                 if not self._by_name[s]:
@@ -146,30 +164,32 @@ class VaultIndex:
             old_outbound = self._outbound.pop(stem, [])
             for target in old_outbound:
                 if target in self._inbound:
-                    self._inbound[target] = [s for s in self._inbound[target] if s != stem]
+                    self._inbound[target] = [
+                        s for s in self._inbound[target] if s != stem
+                    ]
                     if not self._inbound[target]:
                         del self._inbound[target]
 
             self._mtime.pop(path, None)
 
-            if not path.exists() or path.suffix not in ('.md', '.base'):
+            if not path.exists() or path.suffix not in (".md", ".base"):
                 return
 
             stat = path.stat() if path.exists() else None
             if stat is not None:
                 self._mtime[path] = stat.st_mtime
 
-            if not top.startswith('.'):
+            if not top.startswith("."):
                 self._by_name.setdefault(stem, []).append(path)
 
-            if path.suffix != '.md':
+            if path.suffix != ".md":
                 return
 
             if top in SKIP_CONTENT_CHECKS:
                 return
 
             try:
-                text = path.read_text(encoding='utf-8')
+                text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 log.debug("invalidate: skip unreadable %s: %s", path, exc)
                 return
@@ -179,12 +199,14 @@ class VaultIndex:
                 return
 
             rel = path.relative_to(self.vault)
-            rel_str = str(rel).replace('\\', '/')
+            rel_str = str(rel).replace("\\", "/")
             self._content.append((path, fm, rel_str))
 
             body = strip_frontmatter(text)
-            body_links = [m.group(1).strip() for m in WIKILINK_RE.finditer(body)]
-            up_val = fm.get('up', '')
+            body_links = [
+                m.group(1).strip() for m in WIKILINK_RE.finditer(body)
+            ]
+            up_val = fm.get("up", "")
             up_links = extract_wikilink_targets(up_val)
 
             raw_targets = list(set(body_links + up_links))
@@ -247,7 +269,7 @@ class VaultIndex:
             if not fnmatch.fnmatch(stem, pattern):
                 continue
             for p in paths:
-                rel = str(p.relative_to(self.vault)).replace('\\', '/')
+                rel = str(p.relative_to(self.vault)).replace("\\", "/")
                 if scope and not rel.startswith(scope):
                     continue
                 results.append({"stem": stem, "path": rel})
@@ -267,18 +289,22 @@ class VaultIndex:
 
         for stem, paths in self.by_name.items():
             for p in paths:
-                rel = str(p.relative_to(self.vault)).replace('\\', '/')
+                rel = str(p.relative_to(self.vault)).replace("\\", "/")
                 if scope and not rel.startswith(scope):
                     continue
                 mtime = self._mtime.get(p)
                 if mtime is None:
                     continue
                 if mtime >= since_ts:
-                    candidates.append({
-                        "path": rel,
-                        "modified": datetime.fromtimestamp(mtime, tz=UTC).astimezone().isoformat(timespec="seconds"),
-                        "stem": stem,
-                    })
+                    candidates.append(
+                        {
+                            "path": rel,
+                            "modified": datetime.fromtimestamp(mtime, tz=UTC)
+                            .astimezone()
+                            .isoformat(timespec="seconds"),
+                            "stem": stem,
+                        }
+                    )
 
         candidates.sort(key=lambda r: r["modified"], reverse=True)
         return candidates[:limit]
@@ -290,13 +316,13 @@ class VaultIndex:
         """
         target_path: Path | None = None
 
-        if '/' in stem_or_path or stem_or_path.endswith('.md'):
+        if "/" in stem_or_path or stem_or_path.endswith(".md"):
             candidate = self.vault / stem_or_path
             if candidate.exists():
                 target_path = candidate
 
         if target_path is None:
-            stem = stem_or_path.removesuffix('.md')
+            stem = stem_or_path.removesuffix(".md")
             matches = self.by_name.get(stem, [])
             if len(matches) == 1:
                 target_path = matches[0]
@@ -305,19 +331,24 @@ class VaultIndex:
                     "error": "ambiguous",
                     "stem": stem,
                     "candidates": [
-                        str(p.relative_to(self.vault)).replace('\\', '/') for p in matches
+                        str(p.relative_to(self.vault)).replace("\\", "/")
+                        for p in matches
                     ],
                 }
             else:
                 return {"error": "not_found", "query": stem_or_path}
 
         try:
-            text = target_path.read_text(encoding='utf-8')
+            text = target_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
-            return {"error": "read_failed", "path": str(target_path), "detail": str(e)}
+            return {
+                "error": "read_failed",
+                "path": str(target_path),
+                "detail": str(e),
+            }
 
         fm = parse_frontmatter(text)
-        body = strip_frontmatter(text).lstrip('\n\r')
+        body = strip_frontmatter(text).lstrip("\n\r")
         rel = str(target_path.relative_to(self.vault)).replace("\\", "/")
 
         outbound = extract_wikilink_targets(body)
@@ -325,20 +356,29 @@ class VaultIndex:
         for stem in outbound:
             link_matches = self.by_name.get(stem, [])
             if len(link_matches) == 1:
-                resolved_links.append({
-                    "stem": stem,
-                    "path": str(link_matches[0].relative_to(self.vault)).replace('\\', '/'),
-                })
+                resolved_links.append(
+                    {
+                        "stem": stem,
+                        "path": str(
+                            link_matches[0].relative_to(self.vault)
+                        ).replace("\\", "/"),
+                    }
+                )
             elif len(link_matches) > 1:
-                resolved_links.append({
-                    "stem": stem,
-                    "resolution": "ambiguous",
-                    "candidates": [
-                        str(p.relative_to(self.vault)).replace('\\', '/') for p in link_matches
-                    ],
-                })
+                resolved_links.append(
+                    {
+                        "stem": stem,
+                        "resolution": "ambiguous",
+                        "candidates": [
+                            str(p.relative_to(self.vault)).replace("\\", "/")
+                            for p in link_matches
+                        ],
+                    }
+                )
             else:
-                resolved_links.append({"stem": stem, "resolution": "unresolved"})
+                resolved_links.append(
+                    {"stem": stem, "resolution": "unresolved"}
+                )
 
         # Resolve base embeds (T008, T009, T010, T014, T015)
         resolved_embeds: list[dict[str, Any]] = []
@@ -381,9 +421,9 @@ class VaultIndex:
                 resolved_embeds.append(
                     {
                         "token": token,
-                        "path": str(embed_target_path.relative_to(self.vault)).replace(
-                            "\\", "/"
-                        ),
+                        "path": str(
+                            embed_target_path.relative_to(self.vault)
+                        ).replace("\\", "/"),
                         "error": {
                             "type": "parse_error",
                             "message": pf.errors[0]["message"],
@@ -403,9 +443,9 @@ class VaultIndex:
                     resolved_embeds.append(
                         {
                             "token": token,
-                            "path": str(embed_target_path.relative_to(self.vault)).replace(
-                                "\\", "/"
-                            ),
+                            "path": str(
+                                embed_target_path.relative_to(self.vault)
+                            ).replace("\\", "/"),
                             "error": {
                                 "type": "view_not_found",
                                 "message": f"View '{view_name}' not found",
@@ -419,9 +459,9 @@ class VaultIndex:
             resolved_embeds.append(
                 {
                     "token": token,
-                    "path": str(embed_target_path.relative_to(self.vault)).replace(
-                        "\\", "/"
-                    ),
+                    "path": str(
+                        embed_target_path.relative_to(self.vault)
+                    ).replace("\\", "/"),
                     "results": dataclasses.asdict(res),
                 }
             )
@@ -446,10 +486,14 @@ class VaultIndex:
         for src_stem in sources:
             paths = self._by_name.get(src_stem, [])
             for p in paths:
-                results.append({
-                    "stem": src_stem,
-                    "path": str(p.relative_to(self.vault)).replace('\\', '/'),
-                })
+                results.append(
+                    {
+                        "stem": src_stem,
+                        "path": str(p.relative_to(self.vault)).replace(
+                            "\\", "/"
+                        ),
+                    }
+                )
         return results
 
     def outbound_links(
@@ -464,9 +508,11 @@ class VaultIndex:
             image_stems: set[str] = set()
             for p in paths:
                 try:
-                    text = p.read_text(encoding='utf-8')
+                    text = p.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError) as exc:
-                    log.debug("image-embed scan: skip unreadable %s: %s", p, exc)
+                    log.debug(
+                        "image-embed scan: skip unreadable %s: %s", p, exc
+                    )
                     continue
                 body = strip_frontmatter(text)
                 for m in IMAGE_EMBED_RE.finditer(body):
@@ -477,25 +523,32 @@ class VaultIndex:
         for target in targets:
             matches = self._by_name.get(target, [])
             if len(matches) == 1:
-                results.append({
-                    "stem": target,
-                    "path": str(matches[0].relative_to(self.vault)).replace('\\', '/'),
-                })
+                results.append(
+                    {
+                        "stem": target,
+                        "path": str(matches[0].relative_to(self.vault)).replace(
+                            "\\", "/"
+                        ),
+                    }
+                )
             elif len(matches) > 1:
-                results.append({
-                    "stem": target,
-                    "resolution": "ambiguous",
-                    "candidates": [
-                        str(p.relative_to(self.vault)).replace('\\', '/')
-                        for p in matches
-                    ],
-                })
+                results.append(
+                    {
+                        "stem": target,
+                        "resolution": "ambiguous",
+                        "candidates": [
+                            str(p.relative_to(self.vault)).replace("\\", "/")
+                            for p in matches
+                        ],
+                    }
+                )
             else:
                 results.append({"stem": target, "resolution": "unresolved"})
         return results
 
     def find_orphans(
-        self, scope: str | None = None,
+        self,
+        scope: str | None = None,
         exempt_prefixes: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Files with no inbound links and no `up:` frontmatter.
@@ -518,7 +571,7 @@ class VaultIndex:
                     continue
 
             stem = path.stem
-            has_up = bool(fm.get('up', ''))
+            has_up = bool(fm.get("up", ""))
             has_inbound = stem in self._inbound
 
             if not has_up and not has_inbound:
@@ -527,15 +580,18 @@ class VaultIndex:
                     reasons.append("no up: frontmatter")
                 if not has_inbound:
                     reasons.append("no inbound links")
-                results.append({
-                    "path": rel,
-                    "stem": stem,
-                    "reason": "; ".join(reasons),
-                })
+                results.append(
+                    {
+                        "path": rel,
+                        "stem": stem,
+                        "reason": "; ".join(reasons),
+                    }
+                )
         return results
 
     def find_dangling_links(
-        self, scope: str | None = None,
+        self,
+        scope: str | None = None,
     ) -> list[dict[str, Any]]:
         """Find wikilinks and ``up:`` values that point at non-existent notes."""
         self._ensure_fresh()
@@ -546,7 +602,9 @@ class VaultIndex:
             if scope:
                 paths = self._by_name.get(stem, [])
                 if paths and not any(
-                    str(p.relative_to(self.vault)).replace("\\", "/").startswith(scope)
+                    str(p.relative_to(self.vault))
+                    .replace("\\", "/")
+                    .startswith(scope)
                     for p in paths
                 ):
                     continue
@@ -557,14 +615,19 @@ class VaultIndex:
                         seen.add(key)
                         src_paths = self._by_name.get(stem, [])
                         src_path = (
-                            str(src_paths[0].relative_to(self.vault)).replace("\\", "/")
-                            if src_paths else stem
+                            str(src_paths[0].relative_to(self.vault)).replace(
+                                "\\", "/"
+                            )
+                            if src_paths
+                            else stem
                         )
-                        dangles.append({
-                            "source": src_path,
-                            "target": target,
-                            "link_type": "wikilink",
-                        })
+                        dangles.append(
+                            {
+                                "source": src_path,
+                                "target": target,
+                                "link_type": "wikilink",
+                            }
+                        )
 
         for _path, fm, rel in self._content:
             if scope and not rel.startswith(scope):
@@ -579,11 +642,13 @@ class VaultIndex:
                     key = f"{rel}->up:{ref_stem}"
                     if key not in seen:
                         seen.add(key)
-                        dangles.append({
-                            "source": rel,
-                            "target": ref_stem,
-                            "link_type": "up",
-                        })
+                        dangles.append(
+                            {
+                                "source": rel,
+                                "target": ref_stem,
+                                "link_type": "up",
+                            }
+                        )
 
         return dangles
 
@@ -592,19 +657,19 @@ class VaultIndex:
         """Extract folder-prefix exemptions from audit-ignores.md."""
         if not ignores_path.exists():
             return []
-        text = ignores_path.read_text(encoding='utf-8')
+        text = ignores_path.read_text(encoding="utf-8")
         prefixes = []
         in_folder_table = False
-        for line in text.split('\n'):
-            if 'Folder-level exemptions' in line:
+        for line in text.split("\n"):
+            if "Folder-level exemptions" in line:
                 in_folder_table = True
                 continue
-            if in_folder_table and line.startswith('| `'):
-                m = re.match(r'\|\s*`([^`]+)`', line)
+            if in_folder_table and line.startswith("| `"):
+                m = re.match(r"\|\s*`([^`]+)`", line)
                 if m:
-                    prefix = m.group(1).rstrip('/')
-                    prefixes.append(prefix + '/')
-            elif in_folder_table and line.startswith('#'):
+                    prefix = m.group(1).rstrip("/")
+                    prefixes.append(prefix + "/")
+            elif in_folder_table and line.startswith("#"):
                 break
         return prefixes
 
@@ -613,7 +678,7 @@ class VaultIndex:
     # ------------------------------------------------------------------
 
     BODY_TAG_RE = re.compile(
-        r'(?<![\\])#([a-zA-Z][a-zA-Z0-9_/-]*(?:/[a-zA-Z0-9_☀-➿\U0001F300-\U0001FAFF-]+)*)'
+        r"(?<![\\])#([a-zA-Z][a-zA-Z0-9_/-]*(?:/[a-zA-Z0-9_☀-➿\U0001F300-\U0001FAFF-]+)*)"
     )
 
     @staticmethod
@@ -621,17 +686,17 @@ class VaultIndex:
         """Extract the closed tag vocabulary from Tags Glossary.md."""
         if not glossary_path.exists():
             return set()
-        text = glossary_path.read_text(encoding='utf-8')
+        text = glossary_path.read_text(encoding="utf-8")
         tags: set[str] = set()
         in_code = False
-        for line in text.split('\n'):
-            if line.strip().startswith('```'):
+        for line in text.split("\n"):
+            if line.strip().startswith("```"):
                 in_code = not in_code
                 continue
             if in_code:
                 stripped = line.strip()
-                if stripped.startswith('#'):
-                    tag = stripped.split(' ')[0].split(' -')[0].strip()
+                if stripped.startswith("#"):
+                    tag = stripped.split(" ")[0].split(" -")[0].strip()
                     if tag:
                         tags.add(tag)
         return tags
@@ -647,26 +712,28 @@ class VaultIndex:
 
         for path, _fm, rel in self._content:
             try:
-                text = path.read_text(encoding='utf-8')
+                text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 log.debug("tag check: skip unreadable %s: %s", path, exc)
                 continue
 
             body = strip_frontmatter(text)
             for m in self.BODY_TAG_RE.finditer(body):
-                tag = '#' + m.group(1)
+                tag = "#" + m.group(1)
                 if tag in valid_tags:
                     continue
-                if tag == '#activity/processed':
+                if tag == "#activity/processed":
                     continue
                 violations.setdefault(rel, []).append(tag)
 
         results = []
         for file_path, tags in sorted(violations.items()):
-            results.append({
-                "path": file_path,
-                "invalid_tags": sorted(set(tags)),
-            })
+            results.append(
+                {
+                    "path": file_path,
+                    "invalid_tags": sorted(set(tags)),
+                }
+            )
         return results
 
     def vault_stats(self) -> dict[str, Any]:
@@ -677,11 +744,11 @@ class VaultIndex:
         week_counts: dict[str, int] = {}
 
         for path, fm, _rel in self._content:
-            at_type = fm.get('@type', fm.get('type', 'unknown'))
+            at_type = fm.get("@type", fm.get("type", "unknown"))
             if isinstance(at_type, str):
                 type_counts[at_type] = type_counts.get(at_type, 0) + 1
 
-            fm_tags = fm.get('tags', [])
+            fm_tags = fm.get("tags", [])
             if isinstance(fm_tags, list):
                 for t in fm_tags:
                     if isinstance(t, str) and t:
@@ -689,7 +756,11 @@ class VaultIndex:
 
             mtime = self._mtime.get(path)
             if mtime is not None:
-                week = datetime.fromtimestamp(mtime, tz=UTC).astimezone().strftime('%Y-W%W')
+                week = (
+                    datetime.fromtimestamp(mtime, tz=UTC)
+                    .astimezone()
+                    .strftime("%Y-W%W")
+                )
                 week_counts[week] = week_counts.get(week, 0) + 1
 
         top_types = sorted(type_counts.items(), key=lambda x: -x[1])
@@ -701,7 +772,9 @@ class VaultIndex:
             "total_names": len(self._by_name),
             "types": [{"type": t, "count": c} for t, c in top_types],
             "top_tags": [{"tag": t, "count": c} for t, c in top_tags],
-            "edit_volume_by_week": [{"week": w, "count": c} for w, c in recent_weeks],
+            "edit_volume_by_week": [
+                {"week": w, "count": c} for w, c in recent_weeks
+            ],
         }
 
     def all_tags(self, include_body: bool = True) -> list[dict[str, Any]]:
@@ -715,7 +788,7 @@ class VaultIndex:
         body_counts: dict[str, int] = {}
 
         for path, fm, _rel in self._content:
-            fm_tags = fm.get('tags', [])
+            fm_tags = fm.get("tags", [])
             if isinstance(fm_tags, list):
                 for t in fm_tags:
                     if isinstance(t, str) and t:
@@ -723,13 +796,13 @@ class VaultIndex:
 
             if include_body:
                 try:
-                    text = path.read_text(encoding='utf-8')
+                    text = path.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError) as exc:
                     log.debug("all_tags: skip unreadable %s: %s", path, exc)
                     continue
                 body = strip_frontmatter(text)
                 for m in self.BODY_TAG_RE.finditer(body):
-                    tag = '#' + m.group(1)
+                    tag = "#" + m.group(1)
                     body_counts[tag] = body_counts.get(tag, 0) + 1
 
         all_keys = set(fm_counts) | set(body_counts)
@@ -742,12 +815,16 @@ class VaultIndex:
                 sources.append("frontmatter")
             if bc:
                 sources.append("body")
-            results.append({
-                "tag": tag,
-                "count": fc + bc,
-                "frontmatter_count": fc,
-                "body_count": bc,
-                "sources": sources,
-            })
-        results.sort(key=lambda x: -(x["count"] if isinstance(x["count"], int) else 0))
+            results.append(
+                {
+                    "tag": tag,
+                    "count": fc + bc,
+                    "frontmatter_count": fc,
+                    "body_count": bc,
+                    "sources": sources,
+                }
+            )
+        results.sort(
+            key=lambda x: -(x["count"] if isinstance(x["count"], int) else 0)
+        )
         return results

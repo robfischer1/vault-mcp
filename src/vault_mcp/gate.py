@@ -106,7 +106,9 @@ class NoteIO(Protocol):
     def delete_note(self, path: str) -> None:
         """Delete the note at `path`."""
 
-    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
+    def list_notes(
+        self, directory: str = "", *, recursive: bool = True
+    ) -> list[str]:
         """List note paths under `directory`."""
         ...
 
@@ -200,7 +202,9 @@ def _split_note(text: str) -> tuple[dict[str, Any], str]:
 
 def _render_note(frontmatter: dict[str, Any], body: str) -> str:
     """Serialize frontmatter + body into a markdown note."""
-    fm_yaml = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).rstrip("\n")
+    fm_yaml = yaml.safe_dump(
+        frontmatter, sort_keys=False, allow_unicode=True
+    ).rstrip("\n")
     fm_yaml = _AT_KEY_RE.sub(r'\1"\2":', fm_yaml)  # FR-7: '@type' -> "@type"
     return f"---\n{fm_yaml}\n---\n\n{body}\n"
 
@@ -208,7 +212,9 @@ def _render_note(frontmatter: dict[str, Any], body: str) -> str:
 class ConventionGate:
     """Schema- and provenance-aware write API over an injected NoteIO."""
 
-    def __init__(self, schema: VaultSchema, io: NoteIO, diff_sink: DiffSink | None = None) -> None:
+    def __init__(
+        self, schema: VaultSchema, io: NoteIO, diff_sink: DiffSink | None = None
+    ) -> None:
         """Build a Gate over a schema and NoteIO, with an optional diff sink."""
         self._schema = schema
         self._io = io
@@ -217,7 +223,9 @@ class ConventionGate:
         # Materialize/compute writes come from a trusted DB source; lint them
         # anyway by default (the safety net during DB drift), off-able via the
         # env flag once the DB stabilizes — no code change to flip it.
-        self._lint_on_compute = os.environ.get("VAULT_MCP_MATERIALIZE_LINT", "1") != "0"
+        self._lint_on_compute = (
+            os.environ.get("VAULT_MCP_MATERIALIZE_LINT", "1") != "0"
+        )
 
     # --- Single internal write layer (Feature: Write Pipeline) -------------
     def _write(self, path: str, content: str, *, created: bool) -> None:
@@ -254,7 +262,9 @@ class ConventionGate:
     # --- Write-protection (Feature: Write-protection enforcement) ----------
     def _protection_for(self, directory: str) -> WriteProtectionRule | None:
         for rule in self._schema.write_protection:
-            if directory == rule.directory or directory.startswith(rule.directory + "/"):
+            if directory == rule.directory or directory.startswith(
+                rule.directory + "/"
+            ):
                 return rule
         return None
 
@@ -313,7 +323,9 @@ class ConventionGate:
             )
 
         author_level = stamp(actor, mode)
-        declared = parse_author_type(author_type) if author_type is not None else None
+        declared = (
+            parse_author_type(author_type) if author_type is not None else None
+        )
         resolved_author_type = author_type_for(author_level, declared)
         model = ai_model if actor is Actor.AGENT else None
         frontmatter = self._build_frontmatter(
@@ -329,9 +341,17 @@ class ConventionGate:
         )
         body = self._maybe_escape_body(directory, body)
 
-        tc = self._schema.type_config(note_type) if note_type is not None else None
+        tc = (
+            self._schema.type_config(note_type)
+            if note_type is not None
+            else None
+        )
         if tc is not None and tc.atom_slug and note_type is not None:
-            filename = self._atom_filename(created if created is not None else _today(), note_type, directory)
+            filename = self._atom_filename(
+                created if created is not None else _today(),
+                note_type,
+                directory,
+            )
         else:
             filename = title
 
@@ -350,7 +370,9 @@ class ConventionGate:
             touched_fields=None,  # create: every fault is an error
         )
         if candidate.mode is WriteMode.COMPUTE and not self._lint_on_compute:
-            lint_result = LintResult()  # trusted DB source: lint disabled by flag
+            lint_result = (
+                LintResult()
+            )  # trusted DB source: lint disabled by flag
         else:
             lint_result = self._linter.lint(candidate)
             self._raise_first_error(lint_result)
@@ -367,11 +389,15 @@ class ConventionGate:
             + self._link_warnings(directory, title, frontmatter)
             + [f.message for f in lint_result.warnings],
         )
-        self._emit_diff(path, "create", sorted(frontmatter.keys()), author_level)
+        self._emit_diff(
+            path, "create", sorted(frontmatter.keys()), author_level
+        )
         return result
 
     # --- Filename conventions (Feature: Filename Conventions) --------------
-    def _atom_filename(self, created: str, note_type: str, directory: str) -> str:
+    def _atom_filename(
+        self, created: str, note_type: str, directory: str
+    ) -> str:
         """Dated atom slug YYYY-MM-DD-{type}.{seq}; seq probes for the next free name."""
         base = f"{created}-{note_type}"
         seq = 0
@@ -399,16 +425,22 @@ class ConventionGate:
             return _escape_inline_tags(body)
         return body
 
-    def _link_warnings(self, directory: str, title: str, fm: dict[str, Any]) -> list[str]:
+    def _link_warnings(
+        self, directory: str, title: str, fm: dict[str, Any]
+    ) -> list[str]:
         """Advisory (non-blocking) warnings for missing recommended links (FR-36)."""
         warns: list[str] = []
         derived = directory.startswith(("Artifacts", "Records"))
         if derived and "isBasedOn" not in fm:
-            warns.append("isBasedOn missing for an Artifacts/Records-derived note")
+            warns.append(
+                "isBasedOn missing for an Artifacts/Records-derived note"
+            )
         last = directory.rsplit("/", 1)[-1] if directory else ""
         is_folder_note = title == last  # folder-note / pillar-root exception
         if "up" not in fm and not is_folder_note:
-            warns.append("up: missing — consider linking this note to its parent")
+            warns.append(
+                "up: missing — consider linking this note to its parent"
+            )
         return warns
 
     # --- Note update (Feature: Note update) --------------------------------
@@ -452,7 +484,9 @@ class ConventionGate:
         if not (isinstance(raw_level, str) and raw_level):
             raw_level = current_fm.get("provenance")
         current_level = (
-            parse(raw_level) if isinstance(raw_level, str) and raw_level else Provenance.HUMAN
+            parse(raw_level)
+            if isinstance(raw_level, str) and raw_level
+            else Provenance.HUMAN
         )
         raw_at = current_fm.get("author_type")
         current_at = (
@@ -464,12 +498,18 @@ class ConventionGate:
         # Provenance-based body protection (FR-29): an AI agent may not rewrite the
         # body of human/external-authored content (metadata edits stay OK). Exception:
         # Outputs/ Articles (@type=Article) remain AI-body-mutable.
-        if touches_body and actor is Actor.AGENT and current_at in (
-            AuthorType.HUMAN,
-            AuthorType.EXTERNAL,
+        if (
+            touches_body
+            and actor is Actor.AGENT
+            and current_at
+            in (
+                AuthorType.HUMAN,
+                AuthorType.EXTERNAL,
+            )
         ):
             is_outputs_article = directory.startswith("Outputs") and (
-                current_fm.get("@type") == "Article" or current_fm.get("note_type") == "Article"
+                current_fm.get("@type") == "Article"
+                or current_fm.get("note_type") == "Article"
             )
             if not is_outputs_article:
                 raise ProtectionError(
@@ -581,17 +621,33 @@ class ConventionGate:
         ignored on update (re-routing an existing note is not a write).
         """
         if mode not in ("upsert", "create", "update"):
-            raise FieldError(f"mode must be 'upsert', 'create', or 'update', not {mode!r}")
+            raise FieldError(
+                f"mode must be 'upsert', 'create', or 'update', not {mode!r}"
+            )
 
-        tc = self._schema.type_config(note_type) if note_type is not None else None
+        tc = (
+            self._schema.type_config(note_type)
+            if note_type is not None
+            else None
+        )
         if tc is not None and tc.atom_slug:
             # Dated atom slugs are append-only — always a fresh create.
             if mode == "update":
-                raise FieldError("atom-slug types are create-only; mode='update' is invalid")
+                raise FieldError(
+                    "atom-slug types are create-only; mode='update' is invalid"
+                )
             return self.create_note(
-                title=title, note_type=note_type, pillar=pillar, body=body or "",
-                tags=tags, actor=actor, created=created, directory=directory,
-                extra_fields=fields, author_type=author_type, ai_model=ai_model,
+                title=title,
+                note_type=note_type,
+                pillar=pillar,
+                body=body or "",
+                tags=tags,
+                actor=actor,
+                created=created,
+                directory=directory,
+                extra_fields=fields,
+                author_type=author_type,
+                ai_model=ai_model,
             )
 
         target_dir = directory
@@ -603,22 +659,41 @@ class ConventionGate:
         exists = self._note_exists(path)
 
         if exists and mode == "create":
-            raise FieldError(f"{path} already exists (mode='create' forbids overwrite)")
+            raise FieldError(
+                f"{path} already exists (mode='create' forbids overwrite)"
+            )
         if not exists and mode == "update":
-            raise FieldError(f"{path} does not exist (mode='update' requires it)")
+            raise FieldError(
+                f"{path} does not exist (mode='update' requires it)"
+            )
 
         if exists:
             return self.update_note(
-                path, fields=fields, body=body, tags=tags, actor=actor, ai_model=ai_model
+                path,
+                fields=fields,
+                body=body,
+                tags=tags,
+                actor=actor,
+                ai_model=ai_model,
             )
         return self.create_note(
-            title=title, note_type=note_type, pillar=pillar, body=body or "",
-            tags=tags, actor=actor, created=created, directory=directory,
-            extra_fields=fields, author_type=author_type, ai_model=ai_model,
+            title=title,
+            note_type=note_type,
+            pillar=pillar,
+            body=body or "",
+            tags=tags,
+            actor=actor,
+            created=created,
+            directory=directory,
+            extra_fields=fields,
+            author_type=author_type,
+            ai_model=ai_model,
         )
 
     # --- Delete to trash (Feature: delete) ---------------------------------
-    def delete(self, path: str, *, actor: Actor = Actor.AGENT) -> dict[str, Any]:
+    def delete(
+        self, path: str, *, actor: Actor = Actor.AGENT
+    ) -> dict[str, Any]:
         """Move a note to Obsidian's ``.trash/`` (reversible), if permitted.
 
         Runs the same write-protection rules as a write — an agent cannot trash a
@@ -628,14 +703,20 @@ class ConventionGate:
         if not self._note_exists(path):
             raise FieldError(f"{path} does not exist")
         directory = path.rsplit("/", 1)[0] if "/" in path else ""
-        self.check_protection(directory, actor, WriteMode.CREATE, touches_body=True)
+        self.check_protection(
+            directory, actor, WriteMode.CREATE, touches_body=True
+        )
         self._io.delete_note(path)
         self._emit_diff(path, "delete", [], stamp(actor, WriteMode.METADATA))
         return {"ok": True, "path": path, "deleted": True}
 
     # --- Move / relocate (Feature: move_note) --------------------------------
     def move_note(
-        self, src: str, dst: str, *, actor: Actor = Actor.AGENT,
+        self,
+        src: str,
+        dst: str,
+        *,
+        actor: Actor = Actor.AGENT,
     ) -> dict[str, Any]:
         """Move a note from src to dst, preserving content and frontmatter.
 
@@ -650,8 +731,12 @@ class ConventionGate:
 
         src_dir = src.rsplit("/", 1)[0] if "/" in src else ""
         dst_dir = dst.rsplit("/", 1)[0] if "/" in dst else ""
-        self.check_protection(src_dir, actor, WriteMode.CREATE, touches_body=True)
-        self.check_protection(dst_dir, actor, WriteMode.CREATE, touches_body=False)
+        self.check_protection(
+            src_dir, actor, WriteMode.CREATE, touches_body=True
+        )
+        self.check_protection(
+            dst_dir, actor, WriteMode.CREATE, touches_body=False
+        )
 
         content = self._io.read_note(src)
         self._write(dst, content, created=True)
@@ -662,7 +747,11 @@ class ConventionGate:
 
     # --- Drift audit + heal (Feature: Audit) -------------------------------
     def audit(
-        self, directory: str = "", *, resolve: bool = False, all_dirs: bool = False
+        self,
+        directory: str = "",
+        *,
+        resolve: bool = False,
+        all_dirs: bool = False,
     ) -> dict[str, Any]:
         """Scan a directory (or the whole vault) for schema drift; optionally heal.
 
@@ -688,9 +777,15 @@ class ConventionGate:
             drift = self._scan_drift(fm, body, note_dir, filename, note_type)
             if not drift:
                 continue
-            entry: dict[str, Any] = {"path": note_path, "note_type": note_type, "drift": drift}
+            entry: dict[str, Any] = {
+                "path": note_path,
+                "note_type": note_type,
+                "drift": drift,
+            }
             if resolve:
-                healed = self._heal(note_path, fm, body, note_dir, filename, note_type)
+                healed = self._heal(
+                    note_path, fm, body, note_dir, filename, note_type
+                )
                 entry["corrected"] = healed["corrected"]
                 entry["corrections"] = healed["corrections"]
                 entry["remaining"] = healed["remaining"]
@@ -727,24 +822,53 @@ class ConventionGate:
             drift.append({"category": "untyped", "detail": "no note_type"})
         for old, new in self._schema.deprecated_renames:
             if old in fm:
-                drift.append({"category": "deprecated_key", "field": old, "detail": f"{old} -> {new}"})
+                drift.append(
+                    {
+                        "category": "deprecated_key",
+                        "field": old,
+                        "detail": f"{old} -> {new}",
+                    }
+                )
         for dead in self._schema.dead_keys:
             if dead in fm:
-                drift.append({"category": "dead_key", "field": dead, "detail": f"drop {dead}"})
+                drift.append(
+                    {
+                        "category": "dead_key",
+                        "field": dead,
+                        "detail": f"drop {dead}",
+                    }
+                )
         candidate = LintCandidate(
-            frontmatter=fm, body=body, directory=directory, filename=filename,
-            note_type=note_type, tags=self._tags_of(fm), actor=Actor.AGENT,
-            mode=WriteMode.CREATE, touches_body=True, touched_fields=None,
+            frontmatter=fm,
+            body=body,
+            directory=directory,
+            filename=filename,
+            note_type=note_type,
+            tags=self._tags_of(fm),
+            actor=Actor.AGENT,
+            mode=WriteMode.CREATE,
+            touches_body=True,
+            touched_fields=None,
         )
         for finding in self._linter.lint(candidate).errors:
-            drift.append({"category": finding.code.value, "field": finding.field, "detail": finding.message})
+            drift.append(
+                {
+                    "category": finding.code.value,
+                    "field": finding.field,
+                    "detail": finding.message,
+                }
+            )
         try:
             correct = self._schema.resolve_directory(
                 note_type=note_type, pillar=fm.get("pillar"), attrs=fm
             )
             if correct != directory:
                 drift.append(
-                    {"category": "routing", "detail": f"in {directory!r}, should be {correct!r}", "target": correct}
+                    {
+                        "category": "routing",
+                        "detail": f"in {directory!r}, should be {correct!r}",
+                        "target": correct,
+                    }
                 )
         except RouteError:
             pass  # no resolvable route — not a routing-drift signal
@@ -773,7 +897,9 @@ class ConventionGate:
         if "status" in new_fm:
             repaired = self._schema.normalize_status(new_fm["status"])
             if repaired != new_fm["status"]:
-                corrections.append(f"status {new_fm['status']!r} -> {repaired!r}")
+                corrections.append(
+                    f"status {new_fm['status']!r} -> {repaired!r}"
+                )
                 new_fm["status"] = repaired
 
         try:
@@ -788,9 +914,16 @@ class ConventionGate:
         write_dir = directory if collision else target_dir
 
         candidate = LintCandidate(
-            frontmatter=new_fm, body=body, directory=write_dir, filename=filename,
-            note_type=note_type, tags=self._tags_of(new_fm), actor=Actor.AGENT,
-            mode=WriteMode.CREATE, touches_body=True, touched_fields=None,
+            frontmatter=new_fm,
+            body=body,
+            directory=write_dir,
+            filename=filename,
+            note_type=note_type,
+            tags=self._tags_of(new_fm),
+            actor=Actor.AGENT,
+            mode=WriteMode.CREATE,
+            touches_body=True,
+            touched_fields=None,
         )
         result = self._linter.lint(candidate)
         remaining = [f.message for f in result.errors]
@@ -800,17 +933,29 @@ class ConventionGate:
             remaining.append(f"routing target {new_path!r} already exists")
 
         if not result.ok:
-            return {"corrected": False, "corrections": corrections, "remaining": remaining}
+            return {
+                "corrected": False,
+                "corrections": corrections,
+                "remaining": remaining,
+            }
 
         rendered = _render_note(new_fm, body)
         if moving and not collision:
             self._write(new_path, rendered, created=True)
             self._io.delete_note(path)
             corrections.append(f"moved {directory!r} -> {target_dir!r}")
-            return {"corrected": True, "corrections": corrections, "remaining": remaining}
+            return {
+                "corrected": True,
+                "corrections": corrections,
+                "remaining": remaining,
+            }
         if corrections:
             self._write(path, rendered, created=False)
-            return {"corrected": True, "corrections": corrections, "remaining": remaining}
+            return {
+                "corrected": True,
+                "corrections": corrections,
+                "remaining": remaining,
+            }
         return {"corrected": False, "corrections": [], "remaining": remaining}
 
     # --- Dry-run validation (Feature: lint() tool) -------------------------
@@ -901,7 +1046,9 @@ class ConventionGate:
             schema.updated_field,
         }
         if note_type is not None:
-            fm["note_type"] = _title_case_note_type(note_type)  # FR: Title-Case note_type
+            fm["note_type"] = _title_case_note_type(
+                note_type
+            )  # FR: Title-Case note_type
         if pillar is not None:
             fm["pillar"] = pillar
         if len(tags) > 0:
@@ -912,7 +1059,9 @@ class ConventionGate:
                     continue  # governance fields are Gate-stamped, never caller-set
                 fm[key] = value
 
-        self._migrate_keys(fm)  # rename deprecated keys + drop dead keys (before defaults)
+        self._migrate_keys(
+            fm
+        )  # rename deprecated keys + drop dead keys (before defaults)
 
         # identifier defaults to a kebab slug of the label; caller override wins.
         if fm.get("identifier") in (None, ""):
@@ -954,7 +1103,11 @@ class ConventionGate:
 
     # --- Write observability (Feature: Write observability) ----------------
     def _emit_diff(
-        self, path: str, op: str, fields_changed: list[str], provenance: Provenance
+        self,
+        path: str,
+        op: str,
+        fields_changed: list[str],
+        provenance: Provenance,
     ) -> None:
         """Emit a structured write diff. Emission never blocks or reverts a write."""
         if self._diff_sink is None:

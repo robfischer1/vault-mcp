@@ -11,6 +11,7 @@ diff-sink contract — "emission failure never blocks the write"). Identity is s
 per-commit via ``-c user.name/-c user.email`` so the global git config is never
 touched and the bot author stays visually distinct from Rob's hand commits.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,8 +36,12 @@ def committer_from_env(repo_root: Path | str) -> GitCommitter:
     """
     return GitCommitter(
         repo_root,
-        author_name=os.environ.get("VAULT_MCP_GIT_AUTHOR_NAME", DEFAULT_BOT_NAME),
-        author_email=os.environ.get("VAULT_MCP_GIT_AUTHOR_EMAIL", DEFAULT_BOT_EMAIL),
+        author_name=os.environ.get(
+            "VAULT_MCP_GIT_AUTHOR_NAME", DEFAULT_BOT_NAME
+        ),
+        author_email=os.environ.get(
+            "VAULT_MCP_GIT_AUTHOR_EMAIL", DEFAULT_BOT_EMAIL
+        ),
         enabled=os.environ.get("VAULT_MCP_GIT_COMMIT", "0") == "1",
         push_enabled=os.environ.get("VAULT_MCP_GIT_PUSH", "0") == "1",
     )
@@ -74,7 +79,14 @@ class GitCommitter:
         # construction — every invocation also passes ``-C repo_root``, so git
         # only ever operates on the one trusted repo.
         return subprocess.run(
-            [self._git, "-C", str(self.repo_root), "-c", "safe.directory=*", *args],
+            [
+                self._git,
+                "-C",
+                str(self.repo_root),
+                "-c",
+                "safe.directory=*",
+                *args,
+            ],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -148,13 +160,21 @@ class GitCommitter:
                         self._wait_for_path(self.repo_root / rel)
                 add = self._run("add", "--", *paths)
                 if add.returncode != 0:
-                    log.warning("git add failed for %s: %s", paths, add.stderr.strip())
+                    log.warning(
+                        "git add failed for %s: %s", paths, add.stderr.strip()
+                    )
                     return None
                 if not self._has_staged():
                     return None
-                commit = self._run(*self._identity_args(), "commit", "-m", message)
+                commit = self._run(
+                    *self._identity_args(), "commit", "-m", message
+                )
                 if commit.returncode != 0:
-                    log.warning("git commit failed for %s: %s", paths, commit.stderr.strip())
+                    log.warning(
+                        "git commit failed for %s: %s",
+                        paths,
+                        commit.stderr.strip(),
+                    )
                     return None
                 return self.head_sha()
         except Exception as exc:
@@ -178,13 +198,19 @@ class GitCommitter:
             with self._git_lock:
                 add = self._run("add", "-A")
                 if add.returncode != 0:
-                    log.warning("sweep git add -A failed: %s", add.stderr.strip())
+                    log.warning(
+                        "sweep git add -A failed: %s", add.stderr.strip()
+                    )
                     return {"committed": False, "reason": "add_failed"}
                 if not self._has_staged():
                     return {"committed": False, "reason": "nothing_to_commit"}
-                commit = self._run(*self._identity_args(), "commit", "-m", message)
+                commit = self._run(
+                    *self._identity_args(), "commit", "-m", message
+                )
                 if commit.returncode != 0:
-                    log.warning("sweep commit failed: %s", commit.stderr.strip())
+                    log.warning(
+                        "sweep commit failed: %s", commit.stderr.strip()
+                    )
                     return {"committed": False, "reason": "commit_failed"}
                 sha = self.head_sha()
                 pushed = self.push() if self.push_enabled else False

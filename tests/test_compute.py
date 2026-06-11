@@ -86,7 +86,10 @@ class TestRendering:
         rcv2, _, v2 = _receiver()
         rcv1.receive(_payload(), created="2026-05-30")
         rcv2.receive(_payload(), created="2026-05-30")
-        assert v1.store["Atlas/Atlas Rollup.md"] == v2.store["Atlas/Atlas Rollup.md"]
+        assert (
+            v1.store["Atlas/Atlas Rollup.md"]
+            == v2.store["Atlas/Atlas Rollup.md"]
+        )
 
     def test_body_substitutes_template_fields(self):
         rcv, _, vault = _receiver()

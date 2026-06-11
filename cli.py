@@ -8,6 +8,7 @@ Usage:
     python cli.py --tool recent_edits --json '{"since": "2026-05-01"}'
     python cli.py --tool find_by_filename --json '{"pattern": "2026-05-*"}'
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,25 +37,29 @@ TOOLS: dict[str, object] = {
 
 # REST tools (Phases 6-7) — only present when REST is enabled
 if not _srv.REST_DISABLE:
-    TOOLS.update({
-        "rest_health": _srv.rest_health,
-        "active_note": _srv.active_note,
-        "periodic_note": _srv.periodic_note,
-        "unsaved_buffer": _srv.unsaved_buffer,
-        "obsidian_search": _srv.obsidian_search,
-        "execute_command": _srv.execute_command,
-        "dataview_query": _srv.dataview_query,
-        "jsonlogic_search": _srv.jsonlogic_search,
-        "vault_tags": _srv.vault_tags,
-        "list_directory": _srv.list_directory,
-        "open_in_obsidian": _srv.open_in_obsidian,
-        "document_map": _srv.document_map,
-    })
+    TOOLS.update(
+        {
+            "rest_health": _srv.rest_health,
+            "active_note": _srv.active_note,
+            "periodic_note": _srv.periodic_note,
+            "unsaved_buffer": _srv.unsaved_buffer,
+            "obsidian_search": _srv.obsidian_search,
+            "execute_command": _srv.execute_command,
+            "dataview_query": _srv.dataview_query,
+            "jsonlogic_search": _srv.jsonlogic_search,
+            "vault_tags": _srv.vault_tags,
+            "list_directory": _srv.list_directory,
+            "open_in_obsidian": _srv.open_in_obsidian,
+            "document_map": _srv.document_map,
+        }
+    )
 
 
 def main() -> None:
     """Run a single vault-mcp tool from the CLI for smoke-testing."""
-    parser = argparse.ArgumentParser(description="vault-mcp CLI smoke-test runner")
+    parser = argparse.ArgumentParser(
+        description="vault-mcp CLI smoke-test runner"
+    )
     parser.add_argument("--tool", required=True, choices=list(TOOLS.keys()))
     parser.add_argument("--json", default="{}", help="JSON kwargs for the tool")
     args = parser.parse_args()

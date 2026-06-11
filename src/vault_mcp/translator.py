@@ -23,19 +23,36 @@ from typing import Any
 # Schema.org @types preserved verbatim as documents.schema_type; anything else
 # falls back to DigitalDocument. Dataset + CollectionPage were added for the
 # Records pillar (source-material manifests and collection manifests).
-_DOC_SCHEMA_TYPES = frozenset({
-    "DigitalDocument", "CreativeWork", "Article", "Message",
-    "SocialMediaPosting", "EmailMessage", "Book", "Observation",
-    "Dataset", "CollectionPage",
-    "Restaurant", "CafeOrCoffeeShop", "SoftwareApplication",
-})
+_DOC_SCHEMA_TYPES = frozenset(
+    {
+        "DigitalDocument",
+        "CreativeWork",
+        "Article",
+        "Message",
+        "SocialMediaPosting",
+        "EmailMessage",
+        "Book",
+        "Observation",
+        "Dataset",
+        "CollectionPage",
+        "Restaurant",
+        "CafeOrCoffeeShop",
+        "SoftwareApplication",
+    }
+)
 
 # Entity @types that route to phdb's typed entity tables instead of documents.
 # Must match phdb's EntitySchema registry schema_type values.
-_ENTITY_SCHEMA_TYPES = frozenset({
-    "WebPage", "Book", "VideoGame", "Movie", "TVSeries",
-    "PodcastSeries",
-})
+_ENTITY_SCHEMA_TYPES = frozenset(
+    {
+        "WebPage",
+        "Book",
+        "VideoGame",
+        "Movie",
+        "TVSeries",
+        "PodcastSeries",
+    }
+)
 
 _ENTITY_TABLE_MAP: dict[str, str] = {
     "WebPage": "web_pages",
@@ -47,11 +64,24 @@ _ENTITY_TABLE_MAP: dict[str, str] = {
 }
 
 # Vault-internal frontmatter keys that are not entity data.
-_VAULT_INTERNAL_KEYS = frozenset({
-    "note_type", "author_type", "author_level", "tags", "aliases",
-    "cssclasses", "pillar", "up", "nn_icon", "permalink",
-    "@type", "type", "created", "updated",
-})
+_VAULT_INTERNAL_KEYS = frozenset(
+    {
+        "note_type",
+        "author_type",
+        "author_level",
+        "tags",
+        "aliases",
+        "cssclasses",
+        "pillar",
+        "up",
+        "nn_icon",
+        "permalink",
+        "@type",
+        "type",
+        "created",
+        "updated",
+    }
+)
 
 DOC_ENDPOINT = "/write/document"
 PLAN_ENDPOINT = "/write/plan"
@@ -104,15 +134,17 @@ def note_to_payloads(
 
     # Entity-typed notes → entity table instead of documents.
     if raw_at and raw_at in _ENTITY_SCHEMA_TYPES:
-        return [{
-            "endpoint": ENTITY_ENDPOINT,
-            "payload": {
-                "schema_type": raw_at,
-                "source_path": source_path,
-                "fields": _entity_fields(frontmatter, body),
-                "file_path": file_path,
-            },
-        }]
+        return [
+            {
+                "endpoint": ENTITY_ENDPOINT,
+                "payload": {
+                    "schema_type": raw_at,
+                    "source_path": source_path,
+                    "fields": _entity_fields(frontmatter, body),
+                    "file_path": file_path,
+                },
+            }
+        ]
 
     doc_payload: dict[str, Any] = {
         "source_path": source_path,
@@ -128,28 +160,32 @@ def note_to_payloads(
     if fm_created:
         doc_payload["ctime"] = str(fm_created)
 
-    payloads: list[dict[str, Any]] = [{
-        "endpoint": DOC_ENDPOINT,
-        "payload": doc_payload,
-    }]
+    payloads: list[dict[str, Any]] = [
+        {
+            "endpoint": DOC_ENDPOINT,
+            "payload": doc_payload,
+        }
+    ]
 
     if note_type == "plan":
-        payloads.append({
-            "endpoint": PLAN_ENDPOINT,
-            "payload": {
-                "source_path": source_path,
-                "name": _subject(frontmatter) or "",
-                "identifier": frontmatter.get("identifier") or None,
-                "description": frontmatter.get("description"),
-                "status": frontmatter.get("status") or "draft",
-                "phase": frontmatter.get("phase"),
-                "effort": frontmatter.get("effort"),
-                "maintenance": frontmatter.get("maintenance"),
-                "created": frontmatter.get("created"),
-                "updated": frontmatter.get("updated"),
-                "file_path": file_path,
-            },
-        })
+        payloads.append(
+            {
+                "endpoint": PLAN_ENDPOINT,
+                "payload": {
+                    "source_path": source_path,
+                    "name": _subject(frontmatter) or "",
+                    "identifier": frontmatter.get("identifier") or None,
+                    "description": frontmatter.get("description"),
+                    "status": frontmatter.get("status") or "draft",
+                    "phase": frontmatter.get("phase"),
+                    "effort": frontmatter.get("effort"),
+                    "maintenance": frontmatter.get("maintenance"),
+                    "created": frontmatter.get("created"),
+                    "updated": frontmatter.get("updated"),
+                    "file_path": file_path,
+                },
+            }
+        )
 
     return payloads
 

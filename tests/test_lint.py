@@ -113,20 +113,29 @@ class TestDeltaAwareSeverity:
         )
         res = _linter().lint(c)
         assert res.ok
-        assert any(f.code is Code.TAG and f.severity is Severity.WARNING for f in res.warnings)
+        assert any(
+            f.code is Code.TAG and f.severity is Severity.WARNING
+            for f in res.warnings
+        )
 
     def test_touched_fault_stays_error(self):
         c = _candidate(tags=["topic/nope"], touched_fields={"tags"})
         res = _linter().lint(c)
         assert not res.ok
-        assert any(f.code is Code.TAG and f.severity is Severity.ERROR for f in res.errors)
+        assert any(
+            f.code is Code.TAG and f.severity is Severity.ERROR
+            for f in res.errors
+        )
 
     def test_structural_fault_not_downgraded_on_update(self):
         # protection is structural (field=None) -> stays ERROR even when untouched
         c = _candidate(directory="Artifacts", touched_fields={"status"})
         res = _linter().lint(c)
         assert not res.ok
-        assert any(f.code is Code.PROTECTION and f.severity is Severity.ERROR for f in res.errors)
+        assert any(
+            f.code is Code.PROTECTION and f.severity is Severity.ERROR
+            for f in res.errors
+        )
 
 
 class TestTargetStateEvaluation:
@@ -167,7 +176,9 @@ class TestGateIntegrationBugFix:
         )
         result = gate.update_note("Knowledge/Notes/n.md", body="new body")
         assert "new body" in vault.store["Knowledge/Notes/n.md"]
-        assert any("prev" in w for w in result.warnings)  # surfaced, not blocked
+        assert any(
+            "prev" in w for w in result.warnings
+        )  # surfaced, not blocked
 
     def test_new_bad_value_on_update_still_blocks(self):
         gate, vault = self._gate()

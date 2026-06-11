@@ -45,8 +45,17 @@ class TestListTags:
 class TestListKeys:
     def test_unions_type_fields_and_frontmatter_and_status(self):
         keys = set(_schema().list_keys())
-        assert {"title", "created", "author_type", "author_level"} <= keys  # required_frontmatter
-        assert {"serial", "vendor", "condition"} <= keys  # Gadget fields + constraint key
+        assert {
+            "title",
+            "created",
+            "author_type",
+            "author_level",
+        } <= keys  # required_frontmatter
+        assert {
+            "serial",
+            "vendor",
+            "condition",
+        } <= keys  # Gadget fields + constraint key
         assert "coords" in keys  # Spot format key
         assert "status" in keys  # vocabulary exists
         assert keys == set(keys)  # returned sorted

@@ -1,4 +1,5 @@
 """Unit tests for vault_mcp.rest_client with mocked httpx.Client."""
+
 from __future__ import annotations
 
 import sys
@@ -14,7 +15,9 @@ import httpx
 from vault_mcp.rest_client import ObsidianRESTClient
 
 
-def _mock_response(status: int = 200, json_data=None, text: str = "", headers=None):
+def _mock_response(
+    status: int = 200, json_data=None, text: str = "", headers=None
+):
     resp = MagicMock(spec=httpx.Response)
     resp.status_code = status
     resp.text = text
@@ -74,7 +77,9 @@ class TestRequest:
         client._reachable = True
         client._last_probed = time.time()
         client._client = MagicMock()
-        client._client.request.return_value = _mock_response(404, text="Not Found")
+        client._client.request.return_value = _mock_response(
+            404, text="Not Found"
+        )
         result = client.get("/vault/missing.md")
         assert result["ok"] is False
         assert result["error"] == "rest_not_found"
@@ -85,7 +90,9 @@ class TestRequest:
         client._reachable = True
         client._last_probed = time.time()
         client._client = MagicMock()
-        client._client.request.return_value = _mock_response(401, text="Unauthorized")
+        client._client.request.return_value = _mock_response(
+            401, text="Unauthorized"
+        )
         result = client.get("/")
         assert result["ok"] is False
         assert result["error"] == "rest_unauthorized"
@@ -96,7 +103,9 @@ class TestRequest:
         client._reachable = True
         client._last_probed = time.time()
         client._client = MagicMock()
-        client._client.request.return_value = _mock_response(500, text="Internal Error")
+        client._client.request.return_value = _mock_response(
+            500, text="Internal Error"
+        )
         result = client.get("/")
         assert result["ok"] is False
         assert result["error"] == "rest_obsidian_error"
@@ -186,7 +195,10 @@ class TestContentTypes:
         assert result["ok"] is True
         assert len(result["data"]) == 1
         call_kwargs = client._client.request.call_args
-        assert call_kwargs[1]["headers"]["Content-Type"] == "application/vnd.olrapi.dataview.dql+txt"
+        assert (
+            call_kwargs[1]["headers"]["Content-Type"]
+            == "application/vnd.olrapi.dataview.dql+txt"
+        )
 
     def test_post_with_jsonlogic_content_type(self):
         client = ObsidianRESTClient(key_path=None)
@@ -225,7 +237,8 @@ class TestContentTypes:
         client._last_probed = time.time()
         client._client = MagicMock()
         client._client.request.return_value = _mock_response(
-            200, {"headings": ["H1"], "blocks": [], "frontmatterFields": ["title"]}
+            200,
+            {"headings": ["H1"], "blocks": [], "frontmatterFields": ["title"]},
         )
         result = client.get(
             "/active/",
@@ -234,7 +247,10 @@ class TestContentTypes:
         assert result["ok"] is True
         assert result["data"]["headings"] == ["H1"]
         call_kwargs = client._client.request.call_args
-        assert call_kwargs[1]["headers"]["Accept"] == "application/vnd.olrapi.document-map+json"
+        assert (
+            call_kwargs[1]["headers"]["Accept"]
+            == "application/vnd.olrapi.document-map+json"
+        )
 
 
 class TestKeyLoading:

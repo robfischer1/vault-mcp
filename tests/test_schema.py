@@ -39,12 +39,16 @@ class TestLoad:
         assert "Projects" in schema.pillars
 
     def test_explicit_path_overrides_env(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("VAULT_MCP_SCHEMA", str(FIXTURES / "does-not-exist.yml"))
+        monkeypatch.setenv(
+            "VAULT_MCP_SCHEMA", str(FIXTURES / "does-not-exist.yml")
+        )
         # explicit valid path must win over the (broken) env var
         schema = load_schema(VALID)
         assert "Knowledge" in schema.pillars
 
-    def test_missing_env_names_the_variable(self, monkeypatch: pytest.MonkeyPatch):
+    def test_missing_env_names_the_variable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.delenv("VAULT_MCP_SCHEMA", raising=False)
         with pytest.raises(SchemaConfigError) as exc:
             load_schema()
@@ -88,7 +92,10 @@ class TestTagGlossary:
 class TestPillarRouting:
     def test_resolve_by_type_and_pillar(self):
         schema = load_schema(VALID)
-        assert schema.resolve_directory(note_type="note", pillar="Knowledge") == "Knowledge/Notes"
+        assert (
+            schema.resolve_directory(note_type="note", pillar="Knowledge")
+            == "Knowledge/Notes"
+        )
 
     def test_resolve_by_pillar_only(self):
         schema = load_schema(VALID)
@@ -119,7 +126,9 @@ class TestDiscriminatorRouting:
 
     def test_falls_back_to_bare_when_no_discriminator_value(self):
         schema = load_schema(self.ROUTING)
-        got = schema.resolve_directory(note_type="Widget", pillar="Shop", attrs={})
+        got = schema.resolve_directory(
+            note_type="Widget", pillar="Shop", attrs={}
+        )
         assert got == "Shop"
 
     def test_unmatched_discriminator_value_falls_back_to_bare(self):
@@ -131,8 +140,13 @@ class TestDiscriminatorRouting:
 
     def test_explicit_subtype_routes(self):
         schema = load_schema(self.ROUTING)
-        assert schema.resolve_directory("Tome", "Library") == "Library/Index/Tome"
-        assert schema.resolve_directory("Scroll", "Library") == "Library/Index/Scroll"
+        assert (
+            schema.resolve_directory("Tome", "Library") == "Library/Index/Tome"
+        )
+        assert (
+            schema.resolve_directory("Scroll", "Library")
+            == "Library/Index/Scroll"
+        )
 
     def test_equally_specific_overlap_is_ambiguous(self):
         schema = load_schema(self.ROUTING)

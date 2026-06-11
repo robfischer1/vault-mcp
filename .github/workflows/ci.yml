@@ -28,8 +28,11 @@ jobs:
       - name: Lint + hygiene (same hooks as local pre-commit)
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
-      - name: Type check
-        run: uv run mypy src/
+      - name: Type check (mypy)
+        run: uv run mypy src tests
+
+      - name: Type check (pyright)
+        run: uv run pyright
 
       - name: Test
         run: uv run pytest --tb=short -q

@@ -165,7 +165,9 @@ def _strip_code(text: str) -> str:
 class Linter:
     """Schema-aware, collect-all validator. No IO except the link predicate."""
 
-    def __init__(self, schema: VaultSchema, note_exists: NoteExists | None = None) -> None:
+    def __init__(
+        self, schema: VaultSchema, note_exists: NoteExists | None = None
+    ) -> None:
         """Build a linter over a schema with an optional note-exists predicate."""
         self._schema = schema
         self._note_exists = note_exists or (lambda _t: True)
@@ -187,7 +189,9 @@ class Linter:
             self._check_body(candidate, findings)
         self._check_links(candidate, findings)
         self._check_filename(candidate, findings)
-        return LintResult(findings=[self._adjust(candidate, f) for f in findings])
+        return LintResult(
+            findings=[self._adjust(candidate, f) for f in findings]
+        )
 
     # --- Delta-aware severity ---------------------------------------------
     def _adjust(self, candidate: LintCandidate, finding: Finding) -> Finding:
@@ -208,7 +212,11 @@ class Linter:
 
     # --- Individual checks (each appends findings; none raise) -------------
     def _check_write_mode(self, c: LintCandidate, out: list[Finding]) -> None:
-        tc = self._schema.type_config(c.note_type) if c.note_type is not None else None
+        tc = (
+            self._schema.type_config(c.note_type)
+            if c.note_type is not None
+            else None
+        )
         if tc is None:
             return
         if tc.write_mode == "pure-DB":
@@ -219,7 +227,10 @@ class Linter:
                     f"not a vault write",
                 )
             )
-        elif tc.write_mode == "materialize-only" and c.mode is not WriteMode.COMPUTE:
+        elif (
+            tc.write_mode == "materialize-only"
+            and c.mode is not WriteMode.COMPUTE
+        ):
             out.append(
                 Finding(
                     Code.WRITE_MODE,
@@ -235,7 +246,9 @@ class Linter:
         hints = []
         for tag in unknown:
             near = self._schema.nearest_tags(tag)
-            hints.append(f"{tag!r} (did you mean: {', '.join(near) or 'no close match'})")
+            hints.append(
+                f"{tag!r} (did you mean: {', '.join(near) or 'no close match'})"
+            )
         out.append(
             Finding(
                 Code.TAG,
@@ -248,7 +261,9 @@ class Linter:
 
     def _protection_for(self, directory: str) -> WriteProtectionRule | None:
         for rule in self._schema.write_protection:
-            if directory == rule.directory or directory.startswith(rule.directory + "/"):
+            if directory == rule.directory or directory.startswith(
+                rule.directory + "/"
+            ):
                 return rule
         return None
 
@@ -268,8 +283,8 @@ class Linter:
     def _check_directory(self, c: LintCandidate, out: list[Finding]) -> None:
         top = c.directory.split("/", 1)[0]
         for forbidden in self._schema.forbidden_dirs:
-            if (
-                forbidden in (c.directory, top) or c.directory.startswith(forbidden + "/")
+            if forbidden in (c.directory, top) or c.directory.startswith(
+                forbidden + "/"
             ):
                 out.append(
                     Finding(
@@ -279,8 +294,14 @@ class Linter:
                 )
                 return
 
-    def _check_required_frontmatter(self, c: LintCandidate, out: list[Finding]) -> None:
-        missing = [r for r in self._schema.required_frontmatter if c.frontmatter.get(r) in (None, "")]
+    def _check_required_frontmatter(
+        self, c: LintCandidate, out: list[Finding]
+    ) -> None:
+        missing = [
+            r
+            for r in self._schema.required_frontmatter
+            if c.frontmatter.get(r) in (None, "")
+        ]
         if missing:
             out.append(
                 Finding(
@@ -311,7 +332,11 @@ class Linter:
         )
 
     def _check_type_rules(self, c: LintCandidate, out: list[Finding]) -> None:
-        tc = self._schema.type_config(c.note_type) if c.note_type is not None else None
+        tc = (
+            self._schema.type_config(c.note_type)
+            if c.note_type is not None
+            else None
+        )
         if tc is None:
             return
         fm = c.frontmatter
@@ -338,7 +363,9 @@ class Linter:
                 )
         for field_name, fmt in tc.formats:
             value = fm.get(field_name)
-            if value is not None and not self._schema.is_valid_format(fmt, value):
+            if value is not None and not self._schema.is_valid_format(
+                fmt, value
+            ):
                 out.append(
                     Finding(
                         Code.FIELD,
@@ -349,7 +376,11 @@ class Linter:
                 )
 
     def _check_body(self, c: LintCandidate, out: list[Finding]) -> None:
-        tc = self._schema.type_config(c.note_type) if c.note_type is not None else None
+        tc = (
+            self._schema.type_config(c.note_type)
+            if c.note_type is not None
+            else None
+        )
         if tc is not None and tc.body_empty and c.body.strip() != "":
             out.append(
                 Finding(
@@ -358,7 +389,9 @@ class Linter:
                     field="body",
                 )
             )
-        if c.directory.startswith("System/Templates") and c.body.lstrip().startswith("---"):
+        if c.directory.startswith(
+            "System/Templates"
+        ) and c.body.lstrip().startswith("---"):
             out.append(
                 Finding(
                     Code.BODY,
