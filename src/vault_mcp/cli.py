@@ -2,11 +2,11 @@
 """Local smoke-test CLI for vault-mcp tools.
 
 Usage:
-    python cli.py --tool find_notes_by_frontmatter --json '{"filters": {"note_type": "handoff"}}'
-    python cli.py --tool read_note --json '{"stem_or_path": "AGENTS"}'
-    python cli.py --tool reindex
-    python cli.py --tool recent_edits --json '{"since": "2026-05-01"}'
-    python cli.py --tool find_by_filename --json '{"pattern": "2026-05-*"}'
+    vault-mcp-cli--tool find_notes_by_frontmatter --json '{"filters": {"note_type": "handoff"}}'
+    vault-mcp-cli--tool read_note --json '{"stem_or_path": "AGENTS"}'
+    vault-mcp-cli--tool reindex
+    vault-mcp-cli--tool recent_edits --json '{"since": "2026-05-01"}'
+    vault-mcp-cli--tool find_by_filename --json '{"pattern": "2026-05-*"}'
 """
 
 from __future__ import annotations
@@ -14,15 +14,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-_src = Path(__file__).resolve().parent / "src"
-if str(_src) not in sys.path:
-    sys.path.insert(0, str(_src))
+from vault_mcp import server as _srv
 
-import server as _srv  # noqa: E402
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
 
-TOOLS: dict[str, object] = {
+TOOLS: dict[str, Callable[..., Any]] = {
     "find_notes_by_frontmatter": _srv.find_notes_by_frontmatter,
     "find_by_filename": _srv.find_by_filename,
     "recent_edits": _srv.recent_edits,

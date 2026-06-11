@@ -134,10 +134,13 @@ patterns:
    connected. Always validate before adding to a collection that outlives the
    request — especially for long-lived server-side state.
 
-5. **`from server import ...` fails when server.py is at repo root.** Python
-   doesn't treat the repo root as a package by default. Fix: add
-   `pythonpath = ["."]` to `[tool.pytest.ini_options]` in `pyproject.toml`.
-   This bit every feature that needed to import from `server.py` in tests.
+5. **Import the server as `vault_mcp.server`.** `server.py` lives in the package
+   at `src/vault_mcp/server.py` (SRSC normalization, #1318); import it as
+   `from vault_mcp.server import ...`, and the console entry point is `vault-mcp`.
+   Tests use `pythonpath = ["src"]`. A thin transitional `server.py` shim remains
+   at the repo root only to keep the live `python server.py` service alive until
+   cutover. (Historically the server was a repo-root script, which Python doesn't
+   treat as a package — the source of much past import pain.)
 
 6. **pytest-asyncio must be a dev dependency.** Async test fixtures and
    `@pytest.mark.asyncio` silently skip or error without it. Add to

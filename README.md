@@ -19,7 +19,7 @@ cd vault-mcp
 uv venv && uv pip install -e ".[dev]"
 
 # Run the MCP server
-uv run python server.py
+uv run vault-mcp
 ```
 
 See [docs/fresh-start.md](docs/fresh-start.md) for a complete walkthrough.

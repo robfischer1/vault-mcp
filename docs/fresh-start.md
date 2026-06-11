@@ -22,7 +22,7 @@ uv pip install -e ".[dev]"
 Start the MCP server:
 
 ```bash
-uv run python server.py
+uv run vault-mcp
 ```
 
 See [configuration.md](configuration.md) for Claude Code and Claude Desktop setup.

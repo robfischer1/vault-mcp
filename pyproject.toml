@@ -29,6 +29,10 @@ Homepage = "https://github.com/robfischer1/vault-mcp"
 Documentation = "https://github.com/robfischer1/vault-mcp/tree/main/docs"
 Repository = "https://github.com/robfischer1/vault-mcp"
 
+[project.scripts]
+vault-mcp = "vault_mcp.server:main"
+vault-mcp-cli = "vault_mcp.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0.3",
@@ -114,7 +118,7 @@ disable_error_code = ["attr-defined", "arg-type", "type-arg", "union-attr", "ind
 # while the values are runtime-dynamic Any. Structural checks (type-arg,
 # untyped-def, etc.) stay on; only the inherent boundary-Any return is relaxed.
 [[tool.mypy.overrides]]
-module = "server"
+module = "vault_mcp.server"
 disable_error_code = ["no-any-return"]
 
 # pyright runs strict as a peer to mypy (the authoritative type gate). mypy owns
@@ -122,12 +126,14 @@ disable_error_code = ["no-any-return"]
 # is off. The carve-outs below are the strict reportX rules that fight mypy's
 # documented variance, the Any it permits, or ruff's lint domain.
 # server.py is checked by mypy (which ignores the optional phdb sibling via
-# ignore_missing_imports); pyright can't resolve phdb on a clean checkout, so it
-# scopes to the resolvable package + tests. server.py stays covered by the gate.
+# ignore_missing_imports); pyright can't resolve phdb on a clean checkout. Now that
+# server.py lives under src/ (#1318) it is excluded here explicitly — mypy is its
+# sole gate (it imports phdb.* directly for the dissolution/vault_notes tools). The
+# rest of the package + tests stay on the pyright peer gate.
 [tool.pyright]
 include = ["src", "tests"]
-exclude = ["**/__pycache__", ".venv"]
-extraPaths = ["."]
+exclude = ["**/__pycache__", ".venv", "src/vault_mcp/server.py"]
+extraPaths = ["src"]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"
 venvPath = "."
@@ -165,7 +171,7 @@ reportIncompatibleMethodOverride = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 
 [tool.pytest-asyncio]
 mode = "auto"

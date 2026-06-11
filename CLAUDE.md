@@ -22,7 +22,7 @@ uv run ruff check src/ tests/     # lint
 uv run ruff format src/ tests/    # auto-format
 uv run mypy src/                  # strict type check
 
-uv run python server.py           # run the MCP server
+uv run vault-mcp                  # run the MCP server (console entry)
 ```
 
 Always invoke via `uv run` — never activate the venv manually, never use global pip.

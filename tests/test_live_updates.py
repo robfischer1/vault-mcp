@@ -6,8 +6,8 @@ import pytest
 mcp = pytest.importorskip("mcp", reason="requires the 'server' extra (mcp)")
 
 os.environ["VAULT_MCP_PATH"] = "."
-from server import SubscriptionManager
 from vault_mcp.index import VaultIndex
+from vault_mcp.server import SubscriptionManager
 
 
 @pytest.fixture
@@ -48,14 +48,14 @@ async def test_notification_triggered(sub_mgr, tmp_path):
     idx.reindex()
 
     session = AsyncMock()
-    from server import _active_sessions
+    from vault_mcp.server import _active_sessions
 
     _active_sessions.clear()
     _active_sessions.add(session)
 
     handle = sub_mgr.add("Projects.md", None, 0)
 
-    import server
+    from vault_mcp import server
 
     original_get_index = server._get_index
     server._get_index = lambda: idx
@@ -109,14 +109,14 @@ async def test_no_notification_if_result_unchanged(sub_mgr, tmp_path):
     idx.reindex()
 
     session = AsyncMock()
-    from server import _active_sessions
+    from vault_mcp.server import _active_sessions
 
     _active_sessions.clear()
     _active_sessions.add(session)
 
     handle = sub_mgr.add("Projects.md", None, 0)
 
-    import server
+    from vault_mcp import server
 
     original_get_index = server._get_index
     server._get_index = lambda: idx

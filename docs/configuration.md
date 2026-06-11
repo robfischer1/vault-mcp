@@ -19,7 +19,7 @@ Add to your project's `.claude/settings.json`:
   "mcpServers": {
     "vault-mcp": {
       "command": "uv",
-      "args": ["--directory", "/path/to/vault-mcp", "run", "python", "server.py"]
+      "args": ["--directory", "/path/to/vault-mcp", "run", "vault-mcp"]
     }
   }
 }
@@ -34,7 +34,7 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
   "mcpServers": {
     "vault-mcp": {
       "command": "uv",
-      "args": ["--directory", "/path/to/vault-mcp", "run", "python", "server.py"]
+      "args": ["--directory", "/path/to/vault-mcp", "run", "vault-mcp"]
     }
   }
 }
