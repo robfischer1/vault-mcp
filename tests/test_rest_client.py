@@ -253,6 +253,68 @@ class TestContentTypes:
         )
 
 
+class TestPatchTargetEncoding:
+    """Issue #278: non-ASCII heading targets must be URL-encoded, not sent raw."""
+
+    def _client(self):
+        client = ObsidianRESTClient(key_path=None)
+        client._api_key = "test-key"
+        client._reachable = True
+        client._last_probed = time.time()
+        client._client = MagicMock()
+        client._client.request.return_value = _mock_response(200, {"ok": True})
+        return client
+
+    def test_em_dash_target_is_percent_encoded(self):
+        client = self._client()
+        result = client.patch(
+            "/vault/Note.md",
+            content="x",
+            extra_headers={
+                "Target-Type": "heading",
+                "Operation": "replace",
+                "Target": "Checkpoint — RFC::As-built (2026-06-04)",
+            },
+        )
+        assert result["ok"] is True
+        sent = client._client.request.call_args[1]["headers"]["Target"]
+        # em-dash gone, encoded as its UTF-8 bytes; ASCII structure preserved
+        assert "—" not in sent
+        assert "%E2%80%94" in sent
+        assert "::" in sent
+        assert "(2026-06-04)" in sent
+        # the header is now latin-1 safe — httpx would no longer raise
+        sent.encode("latin-1")
+
+    def test_literal_percent_is_encoded(self):
+        client = self._client()
+        client.patch(
+            "/vault/Note.md",
+            content="x",
+            extra_headers={
+                "Target-Type": "heading",
+                "Operation": "replace",
+                "Target": "50% Done",
+            },
+        )
+        sent = client._client.request.call_args[1]["headers"]["Target"]
+        assert sent == "50%25 Done"
+
+    def test_ascii_target_unchanged(self):
+        client = self._client()
+        client.patch(
+            "/vault/Note.md",
+            content="x",
+            extra_headers={
+                "Target-Type": "heading",
+                "Operation": "replace",
+                "Target": "## Plain::Nested Heading",
+            },
+        )
+        sent = client._client.request.call_args[1]["headers"]["Target"]
+        assert sent == "## Plain::Nested Heading"
+
+
 class TestKeyLoading:
     def test_loads_key_from_file(self, tmp_path):
         key_file = tmp_path / "key.txt"
