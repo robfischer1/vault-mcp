@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,27 @@ log = logging.getLogger(__name__)
 DEFAULT_REST_URL = "http://127.0.0.1:27123"
 
 _BACKOFF_STEPS = [30, 300, 1800]
+
+# Printable ASCII punctuation + space kept literal in a PATCH ``Target`` header
+# so the ``::`` nesting delimiter and heading markup survive URL-decoding; ``%``
+# is deliberately excluded so any literal percent is itself encoded (-> ``%25``).
+_TARGET_SAFE = " !#$&'()*+,-./:;<=>?@[]^_`{|}~"
+
+
+def _encode_target(value: str) -> str:
+    """Percent-encode a PATCH ``Target`` header value for the Obsidian REST API.
+
+    HTTP header values are latin-1 only, so a heading path containing an em-dash
+    (or any char > U+00FF) otherwise raises ``UnicodeEncodeError`` in httpx. The
+    Obsidian Local REST API requires the ``Target`` be URL-encoded when it
+    carries non-ASCII characters and URL-decodes it server-side, so we
+    percent-encode the UTF-8 bytes of every non-ASCII char while leaving ASCII
+    structure (the ``::`` delimiter, ``#``, spaces) intact. ASCII values with no
+    literal ``%`` are returned unchanged, preserving existing behaviour.
+    """
+    if value.isascii() and "%" not in value:
+        return value
+    return urllib.parse.quote(value, safe=_TARGET_SAFE)
 
 
 class ObsidianRESTClient:
@@ -285,7 +307,17 @@ class ObsidianRESTClient:
         accept: str = "application/json",
         extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """PATCH a note section. Headers select target + operation."""
+        """PATCH a note section. Headers select target + operation.
+
+        A non-ASCII ``Target`` (e.g. a heading path with an em-dash) is
+        percent-encoded so it survives latin-1 header encoding; the Obsidian
+        REST API URL-decodes it back server-side. See ``_encode_target``.
+        """
+        if extra_headers and "Target" in extra_headers:
+            extra_headers = {
+                **extra_headers,
+                "Target": _encode_target(extra_headers["Target"]),
+            }
         return self._request(
             "PATCH",
             path,
