@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -277,7 +278,7 @@ class TestPatchTargetEncoding:
             },
         )
         assert result["ok"] is True
-        sent = client._client.request.call_args[1]["headers"]["Target"]
+        sent = cast("MagicMock", client._client.request).call_args[1]["headers"]["Target"]
         # em-dash gone, encoded as its UTF-8 bytes; ASCII structure preserved
         assert "—" not in sent
         assert "%E2%80%94" in sent
@@ -297,7 +298,7 @@ class TestPatchTargetEncoding:
                 "Target": "50% Done",
             },
         )
-        sent = client._client.request.call_args[1]["headers"]["Target"]
+        sent = cast("MagicMock", client._client.request).call_args[1]["headers"]["Target"]
         assert sent == "50%25 Done"
 
     def test_ascii_target_unchanged(self):
@@ -311,7 +312,7 @@ class TestPatchTargetEncoding:
                 "Target": "## Plain::Nested Heading",
             },
         )
-        sent = client._client.request.call_args[1]["headers"]["Target"]
+        sent = cast("MagicMock", client._client.request).call_args[1]["headers"]["Target"]
         assert sent == "## Plain::Nested Heading"
 
 
