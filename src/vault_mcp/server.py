@@ -96,6 +96,8 @@ REST_KEY_PATH = os.environ.get(
     "VAULT_MCP_REST_KEY_PATH",
     "",
 )
+# Direct key injection (e.g. from a secrets manager); takes precedence over the path.
+REST_KEY = os.environ.get("VAULT_MCP_REST_KEY", "")
 
 # ---------------------------------------------------------------------------
 # Subscriptions
@@ -307,7 +309,7 @@ def _get_rest_client() -> ObsidianRESTClient:
         from vault_mcp.rest_client import ObsidianRESTClient
 
         _rest_client = ObsidianRESTClient(
-            base_url=REST_URL, key_path=REST_KEY_PATH or None
+            base_url=REST_URL, key_path=REST_KEY_PATH or None, api_key=REST_KEY or None
         )
         _rest_client.probe()
     return _rest_client
