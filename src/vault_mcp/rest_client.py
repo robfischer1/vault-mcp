@@ -60,13 +60,20 @@ class ObsidianRESTClient:
         self,
         base_url: str = DEFAULT_REST_URL,
         key_path: str | Path | None = None,
+        api_key: str | None = None,
     ):
-        """Build a REST client for `base_url`, loading the API key from `key_path` if given."""
+        """Build a REST client for `base_url`.
+
+        The API key is taken from `api_key` if provided (e.g. injected from a
+        secrets manager), otherwise read from `key_path` if given.
+        """
         self._base_url = base_url.rstrip("/")
         self._api_key: str | None = None
         self._key_error: str | None = None
 
-        if key_path is not None:
+        if api_key:
+            self._api_key = api_key.strip()
+        elif key_path is not None:
             kp = Path(key_path).expanduser()
             try:
                 self._api_key = kp.read_text(encoding="utf-8").strip()

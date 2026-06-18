@@ -327,3 +327,13 @@ class TestKeyLoading:
         client = ObsidianRESTClient(key_path=tmp_path / "nonexistent.txt")
         assert client._api_key is None
         assert client._key_error is not None
+
+    def test_loads_key_from_api_key_arg(self):
+        client = ObsidianRESTClient(api_key="injected-key\n")  # pragma: allowlist secret
+        assert client._api_key == "injected-key"  # pragma: allowlist secret
+
+    def test_api_key_takes_precedence_over_path(self, tmp_path):
+        key_file = tmp_path / "key.txt"
+        key_file.write_text("file-key\n")  # pragma: allowlist secret
+        client = ObsidianRESTClient(key_path=key_file, api_key="injected-key")  # pragma: allowlist secret
+        assert client._api_key == "injected-key"  # pragma: allowlist secret
