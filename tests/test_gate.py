@@ -880,6 +880,61 @@ class TestProvenanceThreeProperty:
         assert result.frontmatter["author_type"] == "ai"  # no-downgrade
 
 
+class TestStaleAuthorTypeSelfHeal:
+    """obsidian-vault#1021 — a stale pre-enum author_type must not block update."""
+
+    def _seed_stale(self, vault, value):
+        vault.store["Knowledge/Notes/stale.md"] = (
+            f"---\ntitle: stale\nauthor_type: {value}\n---\n\nbody\n"
+        )
+
+    def test_stale_value_repaired_not_rejected(self):
+        gate, vault = _gate()
+        self._seed_stale(vault, "ai-generated")
+        result = gate.update_note(
+            "Knowledge/Notes/stale.md",
+            fields={"status": "Active"},
+            actor=Actor.AGENT,
+        )
+        # Pre-fix this raised ProvenanceError before the lint stage ran.
+        assert result.frontmatter["author_type"] == "ai"
+        assert result.frontmatter["status"] == "Active"
+
+    def test_repair_surfaces_as_warning(self):
+        gate, vault = _gate()
+        self._seed_stale(vault, "ai-generated")
+        result = gate.update_note(
+            "Knowledge/Notes/stale.md",
+            fields={"status": "Active"},
+            actor=Actor.AGENT,
+        )
+        assert any(
+            "author_type" in w and "ai-generated" in w for w in result.warnings
+        )
+
+    def test_valid_value_produces_no_repair_warning(self):
+        gate, vault = _gate()
+        self._seed_stale(vault, "ai")
+        result = gate.update_note(
+            "Knowledge/Notes/stale.md",
+            fields={"status": "Active"},
+            actor=Actor.AGENT,
+        )
+        assert not any("repaired" in w for w in result.warnings)
+
+    def test_unmappable_value_falls_back_to_derived(self):
+        gate, vault = _gate()
+        self._seed_stale(vault, "totally-bogus")
+        result = gate.update_note(
+            "Knowledge/Notes/stale.md",
+            fields={"status": "Active"},
+            actor=Actor.AGENT,
+        )
+        # An off-map value re-derives from author_level rather than blocking.
+        assert result.frontmatter["author_type"] in {"human", "ai", "external"}
+        assert any("totally-bogus" in w for w in result.warnings)
+
+
 class TestProtection:
     def test_create_into_body_immutable_rejected(self):
         gate, writer = _gate()

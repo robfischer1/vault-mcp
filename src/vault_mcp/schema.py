@@ -185,6 +185,8 @@ class VaultSchema:
     status_values: tuple[str, ...] = ()
     status_default: str = "Pending"
     status_repairs: tuple[tuple[str, str], ...] = ()
+    author_type_values: tuple[str, ...] = ()
+    author_type_repairs: tuple[tuple[str, str], ...] = ()
     deprecated_renames: tuple[tuple[str, str], ...] = ()
     dead_keys: frozenset[str] = frozenset()
     reserved_tags: frozenset[str] = frozenset()
@@ -230,6 +232,30 @@ class VaultSchema:
         if len(self.status_values) == 0:
             return True  # no vocabulary configured -> nothing to enforce
         return value in self.status_values
+
+    # --- author_type vocabulary (Feature: Value Vocabularies) --------------
+    def normalize_author_type(self, value: object) -> str:
+        """Repair an author_type value: unwrap singleton lists, apply rename repairs.
+
+        Mirrors ``normalize_status`` but injects no default — a blank value is
+        returned blank so the caller can re-derive it from author_level. Does
+        not check validity (an unmapped value is returned unchanged).
+        """
+        if isinstance(value, list):
+            value = value[0] if len(value) == 1 else ""
+        text = "" if value is None else str(value).strip()
+        if text == "":
+            return text
+        for frm, to in self.author_type_repairs:
+            if text == frm:
+                return to
+        return text
+
+    def is_valid_author_type(self, value: str) -> bool:
+        """Report whether ``value`` is in the configured author_type vocabulary."""
+        if len(self.author_type_values) == 0:
+            return True  # no vocabulary configured -> nothing to enforce
+        return value in self.author_type_values
 
     # --- value formats (Feature: Value Vocabularies) -----------------------
     def is_valid_format(self, format_name: str, value: object) -> bool:
@@ -479,6 +505,11 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
     status_repairs = tuple(
         (frm, to) for frm, to in (status_cfg.get("repairs", {}) or {}).items()
     )
+    author_type_cfg = vocab.get("author_type", {}) or {}
+    author_type_values = tuple(author_type_cfg.get("values", []) or [])
+    author_type_repairs = tuple(
+        (frm, to) for frm, to in (author_type_cfg.get("repairs", {}) or {}).items()
+    )
 
     dep = raw.get("deprecated_keys", {}) or {}
     deprecated_renames = tuple(
@@ -502,6 +533,8 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
         status_values=status_values,
         status_default=status_default,
         status_repairs=status_repairs,
+        author_type_values=author_type_values,
+        author_type_repairs=author_type_repairs,
         deprecated_renames=deprecated_renames,
         dead_keys=dead_keys,
         reserved_tags=reserved_tags,

@@ -106,6 +106,14 @@ value_vocabularies:
     repairs:
       Archive: Archived
       done: Completed
+  author_type:
+    values: [human, ai, external]
+    repairs:
+      ai-generated: ai
+      ai-assisted: ai
+      ai-compiled: ai
+      human-ai-collaboration: ai
+      original: human
 
 deprecated_keys:
   rename:

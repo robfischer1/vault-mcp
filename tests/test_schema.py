@@ -247,6 +247,41 @@ class TestStatusVocabulary:
         assert schema.is_valid_status("Bogus") is False
 
 
+class TestAuthorTypeVocabulary:
+    def test_explicit_repair(self):
+        schema = load_schema(VALID)
+        assert schema.normalize_author_type("ai-generated") == "ai"
+        assert schema.normalize_author_type("ai-compiled") == "ai"
+        assert schema.normalize_author_type("human-ai-collaboration") == "ai"
+        assert schema.normalize_author_type("original") == "human"
+
+    def test_valid_value_unchanged(self):
+        schema = load_schema(VALID)
+        assert schema.normalize_author_type("ai") == "ai"
+        assert schema.normalize_author_type("human") == "human"
+        assert schema.normalize_author_type("external") == "external"
+
+    def test_blank_returns_blank_no_default(self):
+        # Unlike status, author_type injects no default — a blank value is left
+        # blank so the Gate can re-derive it from author_level.
+        schema = load_schema(VALID)
+        assert schema.normalize_author_type("") == ""
+        assert schema.normalize_author_type(None) == ""
+
+    def test_unmapped_value_unchanged(self):
+        schema = load_schema(VALID)
+        assert schema.normalize_author_type("totally-bogus") == "totally-bogus"
+
+    def test_singleton_list_unwrapped(self):
+        schema = load_schema(VALID)
+        assert schema.normalize_author_type(["ai-generated"]) == "ai"
+
+    def test_valid_and_invalid(self):
+        schema = load_schema(VALID)
+        assert schema.is_valid_author_type("ai") is True
+        assert schema.is_valid_author_type("ai-generated") is False
+
+
 class TestValueFormats:
     def test_geo_valid(self):
         schema = load_schema(VALID)
