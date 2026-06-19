@@ -29,6 +29,7 @@ from .provenance import (
     Actor,
     AuthorType,
     Provenance,
+    ProvenanceError,
     WriteMode,
     author_type_for,
     parse,
@@ -488,12 +489,27 @@ class ConventionGate:
             if isinstance(raw_level, str) and raw_level
             else Provenance.HUMAN
         )
+        # Resolve the current author_type, self-healing a stale value rather
+        # than hard-blocking the update (obsidian-vault#1021). A pre-tightening
+        # value (e.g. `ai-generated`) is first run through the schema repair
+        # map; anything still off-category is re-derived from author_level. The
+        # repair surfaces as a warning, never a rejection — so an unrelated edit
+        # is no longer wedged by a note's legacy author_type.
         raw_at = current_fm.get("author_type")
-        current_at = (
-            parse_author_type(raw_at)
-            if isinstance(raw_at, str) and raw_at
-            else author_type_for(current_level)
-        )
+        provenance_warnings: list[str] = []
+        if isinstance(raw_at, str) and raw_at:
+            normalized_at = self._schema.normalize_author_type(raw_at)
+            try:
+                current_at = parse_author_type(normalized_at)
+            except ProvenanceError:
+                current_at = author_type_for(current_level)
+            if current_at.value != raw_at:
+                provenance_warnings.append(
+                    f"author_type {raw_at!r} repaired to {current_at.value!r} "
+                    f"(stale pre-enum value)"
+                )
+        else:
+            current_at = author_type_for(current_level)
 
         # Provenance-based body protection (FR-29): an AI agent may not rewrite the
         # body of human/external-authored content (metadata edits stay OK). Exception:
@@ -524,9 +540,12 @@ class ConventionGate:
         if "provenance" in new_fm:
             del new_fm["provenance"]  # retire the legacy single-axis key
             changed.append("provenance")
-        if new_level is not current_level:
+        # Compare against the on-disk values so a self-heal repair (which changes
+        # the stored string even when the resolved enum is otherwise unchanged)
+        # is recorded as a real field change.
+        if new_fm.get("author_level") != current_fm.get("author_level"):
             changed.append("author_level")
-        if new_at is not current_at:
+        if new_fm.get("author_type") != current_fm.get("author_type"):
             changed.append("author_type")
         if ai_model is not None and actor is Actor.AGENT:
             new_fm["ai_model"] = ai_model
@@ -583,7 +602,8 @@ class ConventionGate:
             author_type=new_at,
             ai_model=new_fm.get("ai_model"),
             created=False,
-            warnings=self._tag_warnings(tags if tags is not None else [], actor)
+            warnings=provenance_warnings
+            + self._tag_warnings(tags if tags is not None else [], actor)
             + self._link_warnings(directory, title, new_fm)
             + [f.message for f in lint_result.warnings],
         )
