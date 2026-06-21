@@ -1,110 +1,91 @@
-# vault-mcp Constitution
+<!--
+Sync Impact Report — v1.0.0 (initial draft, corrected)
+- Version: (none) → 1.0.0
+- Source: Forge planning governance (gap-protocol, binding/deferral, conformance —
+  turns 1-3 of the spec-kit-adoption session). Code-stage rules are NOT sourced here;
+  they live in the repo's own `.claude/rules/` (path-scoped, on-demand).
+- Correction vs first draft: removed the embedded Type-Soundness / Simplicity
+  articles and the `Code-Standards.md` reference. Those restated the code-scoped
+  `.claude/rules` — which are the operative source and load on-demand. `Code-Standards.md`
+  is the human-readable compilation of them, not agent-loaded and not present in a
+  stamped repo, so the constitution must not depend on it.
+- Principles: I Spec-Is-Law · II Deferral-Terminates · III Contracts-Named ·
+  IV Conformance-Checkable · V Verify-Before-Done
+- Templates aligned: plan-template.md (I-IV) ✅ · tasks-template.md (IV + I/II) ✅ ·
+  spec-template.md (I) ✅
+- Deferred: RATIFICATION_DATE = today (first adoption). Revisit if backdating to the
+  first spec-kit pilot (2026-05-15) is preferred.
+-->
+# Forge Pipeline Constitution
 
-vault-mcp is a FastMCP server that exposes an Obsidian-compatible vault as
-read-only (and selectively write-allowlisted) query tools over MCP. This
-constitution governs how the project is specified, planned, and built. It is
-**self-contained**: it does not import from any external governance system. That
-isolation is deliberate — vault-mcp is publish-track (MIT) and must stand on its
-own when consumed outside its current workspace.
+The architectural DNA the `analyze` gate enforces at plan-stage — how a spec becomes
+a binding, executor-ready plan. Code-stage engineering rules are governed separately
+and load on-demand from this repo's own `.claude/rules/` (see Engineering Standards);
+they are not restated here.
 
 ## Core Principles
 
-### I. Sibling, Not Subordinate
+### I. The Spec Is Law (No Convention)
+Every point a plan touches is exactly one of `decided` (the spec licenses it — the
+executor MUST follow), `[OPEN]` (the spec is silent and it matters — SURFACE it,
+never resolve by inventing), or `non-goal` (out of frame). There is no fourth
+state. "Use judgment" / "how the repo does it" is a violation. **There is no
+convention, only the spec.** Rationale: frontloading relocates confabulation from
+silent mid-execution to a loud, inspectable plan-time gate.
 
-vault-mcp is a standalone Python package. The Obsidian vault it most often
-consumes is *a* consumer, not its parent. No vault-specific paths, identifiers,
-or assumptions may be hardcoded in `src/vault_mcp/`. Fixtures and tests must
-work against any Obsidian-compatible directory, not a specific personal vault.
-Publishing readiness is checked continuously, not retrofitted at release.
+### II. Deferral Terminates in the Plan
+A decision deferred to the planner is decided concretely and written binding,
+provenance-tagged (Rob / Default / Claude) — never passed down to the executor as
+implicit discretion. A reasonable default the author picked is BINDING, not a hint
+the executor may re-open. Rationale: laissez-faire compounds downward; the plan is
+where the deferral chain dies.
 
-### II. REST API Augments, Never Foundations
+### III. Contracts Are Named, Not Pointed-At
+Every interface a unit **exposes** AND **consumes** is specified by shape —
+signature, DDL, payload, port — not merely a pointer to where it lives. Both sides
+of every seam are pinned. Rationale: the consumed/required side is the dependency
+edge; an executor given only the provided side re-derives it or drifts.
 
-The parser layer (Phases 1–5) must work without an Obsidian instance running.
-The REST-backed tools added in Phase 6 — `active_note`, `obsidian_search`,
-allowlisted `execute_command` — are *additive* capabilities. When the Local
-REST API at `127.0.0.1:27123` is unreachable (e.g., from a sandbox or a host
-where Obsidian isn't running), REST-backed tools must degrade gracefully with a
-clear error, not crash, and the rest of the server must continue functioning.
+### IV. Conformance Is Checkable
+Every unit's Acceptance is a falsifiable conformance target. The implementation is
+diffed against Acceptance + Touches + State before the unit counts done. Rationale:
+bindingness without an enforcement diff is hope; the gate is what makes "decided"
+real.
 
-### III. Test-First, Single-File Fixtures (NON-NEGOTIABLE)
+### V. Verify Before Done
+"Done" means the work was read back / run / row-counted AND what was observed is
+reported. "I changed it" without a check is insufficient. Code that compiles is not
+code that works. Every bug and error is the author's work — no deferral to the
+framework or a prior session.
 
-Pure parsers and index logic get unit tests with single-file fixtures —
-exactly one fixture file per test where possible. No multi-file or multi-DB
-test setups for parser logic. REST-backed tools require integration tests
-against a recorded fixture or mock — **never** a live Obsidian instance.
-Tests precede implementation: red → green → refactor. CI must be green on
-every commit to `main`.
+## Engineering Standards (code-stage)
 
-### IV. Publish-Ready Hygiene
+Code-quality rules are **not** restated here. They load **on-demand via this repo's
+own `.claude/rules/`** — path-scoped `.md` rules (e.g. `python-style`, `typescript`,
+`docker`, `frontend`, `file-length`, `worktree-check`) that an agent loads when it
+touches a matching file — and are enforced by per-repo linters + CI on a **strict
+ratchet** (a touched file's debt blocks; pre-existing debt is grandfathered until
+that file is next edited).
 
-MIT-licensed. Every fixture must be either originally authored for this repo
-or generic — no real PII, no personal vault notes, no identifying paths. Docs
-use synthetic examples. Before any release tag: run the publish-readiness
-checks inherited from the personal-history-db pattern (PII audit, docs walk,
-import-graph dup detection, cross-platform smoke). Public surface area changes
-require an entry in `DECISIONS.md`.
-
-### V. Strict Quality Tooling, No Warnings
-
-Type-checked with `mypy --strict`; lint-clean under `ruff`; tests green under
-`pytest`. CI fails on any warning, not just errors. No `# type: ignore`
-without a one-line comment justifying it. No `noqa` without a reason.
-Dependency management is `uv` only — never global `pip`, always per-project
-`.venv/`.
-
-## Technical Constraints
-
-- **Python 3.11+** (typing.Self, exception groups, asyncio-task-groups available).
-- **FastMCP** framework (not raw stdio MCP); the server stays inside the
-  FastMCP idioms rather than dropping to low-level transport.
-- **HTTP client centralized** in `src/vault_mcp/rest_client.py`; no scattered
-  `requests`/`httpx` calls across modules.
-- **Module count discipline** — current shape is 4 modules
-  (`index`, `parsers`, `rest_client`, `watcher`) + `server.py`. Splitting or
-  adding modules requires explicit justification in a plan.
-- **Filesystem watcher** invalidates the TTL-cached index incrementally; the
-  index is never re-scanned in full on a single-file change.
+The stamped repo carries its own `.claude/rules/`; `Code-Standards.md` is the
+human-readable compilation of those rules (a digest — not agent-loaded, and not
+present in this repo). Target shape for new services: the container-ready Forge MCP
+service (`service-repo-template`).
 
 ## Development Workflow
 
-Substantive feature work flows through spec-kit:
-
-```
-/speckit-constitution   (only when amending the constitution itself)
-/speckit-specify        → spec.md in specs/<NNN-feature>/
-/speckit-clarify        → de-risk ambiguities before planning
-/speckit-plan           → plan.md, research.md, data-model.md, contracts/, quickstart.md
-/speckit-tasks          → tasks.md with [P] parallel markers
-/speckit-analyze        → cross-artifact consistency check
-/speckit-implement      → executes tasks.md in dependency order
-```
-
-Quick fixes, typo corrections, single-file refactors, dependency bumps, and
-documentation-only changes skip the full ceremony. The threshold is roughly:
-*if it would take more than 30 minutes to write or touches more than 3 files,
-flow through spec-kit*. A TinySpec preset may be adopted later for a middle tier.
-
-Before merging any feature work:
-- `uv run pytest` green
-- `uv run ruff check src/ tests/` clean
-- `uv run mypy src/` strict-clean
-- Constitution-compliance verified by `/speckit-analyze`
+- The board is the source of truth for work items; plans project onto it.
+- git-guarded repos: branch per work item → PR → disposition; the default branch is
+  not a work surface.
+- Each scoped commit carries its proof-of-work; a plan passes its Definition of
+  Ready and the `analyze` gate before `implement`.
 
 ## Governance
 
-This constitution supersedes other practices in this repo. Amendments require:
-1. A `/speckit-constitution` invocation that updates this file.
-2. A corresponding entry in `DECISIONS.md` (to be created when the first
-   amendment lands) recording the why.
-3. A version bump per semver: PATCH for typo/clarification, MINOR for
-   non-breaking principle addition, MAJOR for principle removal or
-   incompatible change.
+This constitution supersedes ad-hoc practice for the planning pipeline. The
+`analyze` gate validates a plan against Articles I-IV (plan-stage); the repo's
+`.claude/rules/` + CI enforce code-stage quality; Article V is the author's standing
+duty. Amendments require a documented rationale and a semantic version bump (MAJOR:
+principle removal/redefinition; MINOR: new principle/section; PATCH: clarification).
 
-**Pilot Status (2026-05-15):** vault-mcp is the spec-kit pilot repo for this
-workspace. The decision to keep this constitution self-contained — rather than
-importing the parent workspace's AGENTS.md governance — is intentional, so the
-spec-kit methodology can be evaluated on its own ergonomics. If the pilot
-succeeds and spec-kit becomes the default for new substantive projects, future
-repos may follow the same self-contained pattern.
-
-**Version**: 1.0.0 | **Ratified**: 2026-05-15 | **Last Amended**: 2026-05-15
+**Version**: 1.0.0 | **Ratified**: 2026-06-16 | **Last Amended**: 2026-06-16
