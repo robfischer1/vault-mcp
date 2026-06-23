@@ -1,0 +1,37 @@
+# Forgejo Actions: CI gate for vault-mcp on the nas01 self-hosted runner.
+# This Forgejo instance scans ONLY .forgejo/workflows -- the GitHub-flavored
+# .github/workflows/ci.yml runs on the GitHub mirror, never here. Same
+# lint/type/test checks as that workflow, adapted for the act-runner:
+#   - runs-on: nas01 (the registered self-hosted runner label, not ubuntu-latest)
+#   - actions referenced by full URL (a bare actions/* resolves against the
+#     Forgejo instance, which has no action registry -> 404)
+#   - uv via its install script (astral-sh/setup-uv 403s on Forgejo)
+# Single Python version here; the GitHub mirror keeps the 3.11-3.13 matrix, but
+# the nas01 runner is one host, so a matrix would only serialize.
+
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: nas01
+    container:
+      image: catthehacker/ubuntu:act-22.04   # glibc for the uv installer
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+
+      - name: Install uv
+        env:
+          UV_INSTALL_DIR: /usr/local/bin
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Gate — lint / hygiene / type / test
+        run: |
+          uv sync --all-extras
+          uv run pre-commit run --all-files --show-diff-on-failure
+          uv run mypy src tests
+          uv run pyright
+          uv run pytest --tb=short -q
