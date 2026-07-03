@@ -1399,6 +1399,12 @@ PHDB_DB_PATH = os.environ.get("PHDB_DB_PATH", "")
 PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip(
     "/"
 )
+# The Hades gateway — strangled phdb concerns route here instead (entity
+# writes -> harmonia_write_entity_typed). Unset HADES_URL = legacy phdb
+# routing for everything (safe: post-deregister phdb answers 404 and the
+# dissolve halts rather than half-writing).
+HADES_URL = os.environ.get("HADES_URL", "").rstrip("/")
+HADES_TOKEN = os.environ.get("HADES_TOKEN", "")
 _phdb_conn = None
 
 
@@ -1407,7 +1413,18 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
 
     Never raises across the verb boundary — an unreachable phdb or a non-200
     becomes {"ok": False, "error": ...} so dissolve halts before deleting.
+
+    Strangled concerns route to their sovereign star over Hades instead:
+    entity writes (``/write/entity``) call ``harmonia_write_entity_typed``
+    when ``HADES_URL`` is configured — same payload, same result contract.
     """
+    if endpoint == "/write/entity" and HADES_URL:
+        from vault_mcp.hades_client import write_entity_typed
+
+        return write_entity_typed(
+            payload, url=f"{HADES_URL}/", token=HADES_TOKEN
+        )
+
     import httpx
 
     try:
