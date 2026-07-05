@@ -77,23 +77,23 @@ def test_dissolve_writes_both_then_declares_then_deletes() -> None:
 
     assert res["ok"] is True and res["deleted"] is True
     assert res["dissolution_id"] == 7
-    assert [w["table"] for w in res["written"]] == ["documents", "plans"]
-    # Ordering: both writes + declare happened, delete is last (state set only at end).
+    # C3: plan notes dissolve document-only (the plans sink is retired).
+    assert [w["table"] for w in res["written"]] == ["documents"]
+    # Ordering: the write + declare happened, delete is last (state set only at end).
     assert poster.calls == [
         "/write/document",
-        "/write/plan",
         "/dissolution/declare",
     ]
     assert state["deleted"] is True
 
 
 def test_write_failure_does_not_delete() -> None:
-    poster = FakePoster(fail_endpoint="/write/plan")
+    poster = FakePoster(fail_endpoint="/write/document")
     res, state = _run(poster)
 
     assert res["ok"] is False and res["stage"] == "write"
-    assert res["endpoint"] == "/write/plan"
-    # The document write succeeded but the file must remain (content recoverable).
+    assert res["endpoint"] == "/write/document"
+    # The write failed so the file must remain (content recoverable).
     assert state["deleted"] is False
     assert "/dissolution/declare" not in poster.calls  # never reached declare
 

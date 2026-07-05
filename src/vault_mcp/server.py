@@ -58,9 +58,7 @@ from vault_mcp.rest_client import DEFAULT_REST_URL
 # Resolved from the repo root: parents[3] is the Forge workspace dir now that
 # this module lives at src/vault_mcp/. TODO(SRSC isolation #1317): replace this
 # sys.path sibling import with a config-addressed call (no cross-tree import).
-_phdb_src = (
-    Path(__file__).resolve().parents[3] / "personal-history-db" / "src"
-)
+_phdb_src = Path(__file__).resolve().parents[3] / "personal-history-db" / "src"
 if str(_phdb_src) not in sys.path:
     sys.path.insert(0, str(_phdb_src))
 
@@ -309,7 +307,9 @@ def _get_rest_client() -> ObsidianRESTClient:
         from vault_mcp.rest_client import ObsidianRESTClient
 
         _rest_client = ObsidianRESTClient(
-            base_url=REST_URL, key_path=REST_KEY_PATH or None, api_key=REST_KEY or None
+            base_url=REST_URL,
+            key_path=REST_KEY_PATH or None,
+            api_key=REST_KEY or None,
         )
         _rest_client.probe()
     return _rest_client
@@ -1424,6 +1424,11 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         return write_entity_typed(
             payload, url=f"{HADES_URL}/", token=HADES_TOKEN
         )
+
+    if endpoint == "/write/document" and HADES_URL:
+        from vault_mcp.hades_client import write_document
+
+        return write_document(payload, url=f"{HADES_URL}/", token=HADES_TOKEN)
 
     import httpx
 

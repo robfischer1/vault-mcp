@@ -508,7 +508,8 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
     author_type_cfg = vocab.get("author_type", {}) or {}
     author_type_values = tuple(author_type_cfg.get("values", []) or [])
     author_type_repairs = tuple(
-        (frm, to) for frm, to in (author_type_cfg.get("repairs", {}) or {}).items()
+        (frm, to)
+        for frm, to in (author_type_cfg.get("repairs", {}) or {}).items()
     )
 
     dep = raw.get("deprecated_keys", {}) or {}

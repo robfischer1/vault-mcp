@@ -154,3 +154,28 @@ def write_entity_typed(
         token=token,
         transport=transport,
     )
+
+
+def write_document(
+    payload: dict[str, Any],
+    *,
+    url: str,
+    token: str,
+    transport: Transport | None = None,
+) -> dict[str, Any]:
+    """Route one ``/write/document`` payload to Calliope's ``write_document``.
+
+    The payload shape is the phdb HTTP contract the translator already
+    emits — ``{source_path, body_text, schema_type?, subject?, file_path?,
+    mtime?, ctime?}`` — and the Calliope verb takes exactly those parameters
+    (C3, the prose strangle), so this is a passthrough. ``None`` values are
+    dropped: the verb's optional fields are absent-or-string.
+    """
+    args = {k: v for k, v in payload.items() if v is not None}
+    return call_verb(
+        "write_document",
+        args,
+        url=url,
+        token=token,
+        transport=transport,
+    )

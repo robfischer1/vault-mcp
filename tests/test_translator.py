@@ -5,7 +5,6 @@ from __future__ import annotations
 from vault_mcp.translator import (
     DOC_ENDPOINT,
     ENTITY_ENDPOINT,
-    PLAN_ENDPOINT,
     note_to_payloads,
     row_to_payload,
     target_tables,
@@ -26,7 +25,7 @@ PLAN_FM = {
 FENCED_BODY = "Context before.\n\n```\nmaster (Sonnet)\n```\n\nGoal after.\n"
 
 
-def test_plan_note_yields_document_and_plan() -> None:
+def test_plan_note_yields_document_only() -> None:
     payloads = note_to_payloads(
         PLAN_FM,
         FENCED_BODY,
@@ -34,20 +33,14 @@ def test_plan_note_yields_document_and_plan() -> None:
         file_path="Roadmap Skill.md",
     )
     endpoints = [p["endpoint"] for p in payloads]
-    assert endpoints == [DOC_ENDPOINT, PLAN_ENDPOINT]  # document first
+    # C3: document only — the plan sink is RETIRED-superseded.
+    assert endpoints == [DOC_ENDPOINT]
 
     doc = payloads[0]["payload"]
     assert doc["body_text"] == FENCED_BODY  # verbatim — no fence-extraction
     assert doc["schema_type"] == "DigitalDocument"
     assert doc["subject"] == "Roadmap Skill"
     assert doc["source_path"] == "/vault/Plans/Roadmap Skill.md"
-
-    plan = payloads[1]["payload"]
-    assert plan["name"] == "Roadmap Skill"
-    assert plan["identifier"] == "roadmap-skill-plan"
-    assert plan["status"] == "complete"
-    assert plan["phase"] == "complete"
-    assert plan["effort"] == "L"
 
 
 def test_non_plan_note_yields_only_document() -> None:
@@ -85,8 +78,10 @@ def test_records_types_preserved() -> None:
 
 
 def test_target_tables_derivation() -> None:
+    # C3: a plan note emits NO plan payload — the plans typed-table is
+    # RETIRED-superseded (plan structure lives on the graph; prose is the doc).
     payloads = note_to_payloads(PLAN_FM, "b", "/vault/p.md")
-    assert target_tables(payloads) == ["documents", "plans"]
+    assert target_tables(payloads) == ["documents"]
     doc_only = note_to_payloads(
         {"@type": "Article", "name": "A"}, "b", "/vault/a.md"
     )
