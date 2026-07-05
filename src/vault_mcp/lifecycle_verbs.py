@@ -26,7 +26,6 @@ from vault_mcp.translator import (
     ENTITY_ENDPOINT,
     PLAN_ENDPOINT,
     note_to_payloads,
-    target_tables,
 )
 
 if TYPE_CHECKING:
@@ -80,6 +79,9 @@ def dissolve_note(
     Returns {ok, written, dissolution_id, deleted}. On any write/declare failure
     returns {ok: False, error, stage, written} WITHOUT deleting the file.
     """
+    # The wave-declaration inputs are RETIRED with the bridge (C5) but stay
+    # in the verb signature for caller compatibility.
+    _ = (vault_rel_path, plan_slug, rationale, declared_by, repo)
     frontmatter = parse_frontmatter(raw_text)
     body = strip_frontmatter(raw_text)
     payloads = note_to_payloads(
@@ -106,32 +108,17 @@ def dissolve_note(
             }
         )
 
-    # 2. Declare the dissolution wave (with file provenance).
-    declare = post(
-        "/dissolution/declare",
-        {
-            "plan_slug": plan_slug,
-            "target_schemas": _target_schemas(payloads),
-            "target_tables": target_tables(payloads),
-            "rationale": rationale,
-            "declared_by": declared_by,
-            "repo": repo,
-            "dissolved_paths": [vault_rel_path] if vault_rel_path else None,
-        },
-    )
-    if not declare.get("ok"):
-        return {
-            "ok": False,
-            "stage": "declare",
-            "error": declare.get("error", "declare failed"),
-            "written": written,
-        }
+    # 2. (RETIRED 2026-07-04, C5) The dissolution-bridge's wave declaration is
+    # gone with the bridge — its registries are archived on Calliope
+    # (archive_dissolutions et al.) and the document store itself is the
+    # go-forward record of what dissolved when (source_path + created_at +
+    # dedup). The dissolve is now write → delete.
 
     # 3. Only now remove the vault original.
     delete_file()
     return {
         "ok": True,
         "written": written,
-        "dissolution_id": declare.get("dissolution_id"),
+        "dissolution_id": None,
         "deleted": True,
     }

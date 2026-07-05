@@ -76,13 +76,13 @@ def test_dissolve_writes_both_then_declares_then_deletes() -> None:
     res, state = _run(poster)
 
     assert res["ok"] is True and res["deleted"] is True
-    assert res["dissolution_id"] == 7
+    # C5: the bridge is retired — no wave is declared, no dissolution id.
+    assert res["dissolution_id"] is None
     # C3: plan notes dissolve document-only (the plans sink is retired).
     assert [w["table"] for w in res["written"]] == ["documents"]
-    # Ordering: the write + declare happened, delete is last (state set only at end).
+    # C5: no declare — write then delete.
     assert poster.calls == [
         "/write/document",
-        "/dissolution/declare",
     ]
     assert state["deleted"] is True
 
@@ -99,13 +99,13 @@ def test_write_failure_does_not_delete() -> None:
 
 
 def test_declare_failure_does_not_delete() -> None:
+    # C5: the declare step is RETIRED — a poster that would fail declare never
+    # gets the chance; the dissolve completes on the write alone.
     poster = FakePoster(fail_endpoint="/dissolution/declare")
     res, state = _run(poster)
 
-    assert res["ok"] is False and res["stage"] == "declare"
-    assert (
-        state["deleted"] is False
-    )  # writes happened, but no declare -> no delete
+    assert res["ok"] is True and res["deleted"] is True
+    assert state["deleted"] is True  # write succeeded -> delete proceeds
 
 
 def test_non_plan_note_writes_one_document() -> None:
@@ -122,5 +122,5 @@ def test_non_plan_note_writes_one_document() -> None:
         delete_file=lambda: state.__setitem__("deleted", True),
     )
     assert res["ok"] is True
-    assert poster.calls == ["/write/document", "/dissolution/declare"]
+    assert poster.calls == ["/write/document"]
     assert [w["table"] for w in res["written"]] == ["documents"]
