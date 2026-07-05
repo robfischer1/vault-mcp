@@ -129,7 +129,6 @@ def note_to_payloads(
     ``plans`` metadata payload.
     Returns ``[{"endpoint": str, "payload": dict}, ...]`` in write order.
     """
-    note_type = str(frontmatter.get("note_type") or "").strip().lower()
     raw_at = _raw_type(frontmatter)
 
     # Entity-typed notes → entity table instead of documents.
@@ -167,25 +166,10 @@ def note_to_payloads(
         }
     ]
 
-    if note_type == "plan":
-        payloads.append(
-            {
-                "endpoint": PLAN_ENDPOINT,
-                "payload": {
-                    "source_path": source_path,
-                    "name": _subject(frontmatter) or "",
-                    "identifier": frontmatter.get("identifier") or None,
-                    "description": frontmatter.get("description"),
-                    "status": frontmatter.get("status") or "draft",
-                    "phase": frontmatter.get("phase"),
-                    "effort": frontmatter.get("effort"),
-                    "maintenance": frontmatter.get("maintenance"),
-                    "created": frontmatter.get("created"),
-                    "updated": frontmatter.get("updated"),
-                    "file_path": file_path,
-                },
-            }
-        )
+    # C3: no plan payload. The plans typed-table is RETIRED-superseded — plan
+    # STRUCTURE lives on the project graph (athena) and plan PROSE is the
+    # document body above; a dissolving plan-note carries no extra metadata
+    # sink. (The PG backend never had a `plans` table; the write was dead.)
 
     return payloads
 

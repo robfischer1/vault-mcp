@@ -278,7 +278,9 @@ class TestPatchTargetEncoding:
             },
         )
         assert result["ok"] is True
-        sent = cast("MagicMock", client._client.request).call_args[1]["headers"]["Target"]
+        sent = cast("MagicMock", client._client.request).call_args[1][
+            "headers"
+        ]["Target"]
         # em-dash gone, encoded as its UTF-8 bytes; ASCII structure preserved
         assert "—" not in sent
         assert "%E2%80%94" in sent
@@ -298,7 +300,9 @@ class TestPatchTargetEncoding:
                 "Target": "50% Done",
             },
         )
-        sent = cast("MagicMock", client._client.request).call_args[1]["headers"]["Target"]
+        sent = cast("MagicMock", client._client.request).call_args[1][
+            "headers"
+        ]["Target"]
         assert sent == "50%25 Done"
 
     def test_ascii_target_unchanged(self):
@@ -312,7 +316,9 @@ class TestPatchTargetEncoding:
                 "Target": "## Plain::Nested Heading",
             },
         )
-        sent = cast("MagicMock", client._client.request).call_args[1]["headers"]["Target"]
+        sent = cast("MagicMock", client._client.request).call_args[1][
+            "headers"
+        ]["Target"]
         assert sent == "## Plain::Nested Heading"
 
 
@@ -329,11 +335,15 @@ class TestKeyLoading:
         assert client._key_error is not None
 
     def test_loads_key_from_api_key_arg(self):
-        client = ObsidianRESTClient(api_key="injected-key\n")  # pragma: allowlist secret
+        client = ObsidianRESTClient(
+            api_key="injected-key\n"
+        )  # pragma: allowlist secret
         assert client._api_key == "injected-key"  # pragma: allowlist secret
 
     def test_api_key_takes_precedence_over_path(self, tmp_path):
         key_file = tmp_path / "key.txt"
         key_file.write_text("file-key\n")  # pragma: allowlist secret
-        client = ObsidianRESTClient(key_path=key_file, api_key="injected-key")  # pragma: allowlist secret
+        client = ObsidianRESTClient(
+            key_path=key_file, api_key="injected-key"
+        )  # pragma: allowlist secret
         assert client._api_key == "injected-key"  # pragma: allowlist secret

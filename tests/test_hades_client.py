@@ -49,7 +49,9 @@ def test_parse_is_error_maps_to_ok_false() -> None:
     out = parse_tool_result(
         _rpc_result(
             {
-                "content": [{"type": "text", "text": "no star serves verb 'x'"}],
+                "content": [
+                    {"type": "text", "text": "no star serves verb 'x'"}
+                ],
                 "isError": True,
             }
         )
@@ -103,7 +105,11 @@ def test_call_verb_initializes_then_calls() -> None:
         _ok_pair({"structuredContent": {"ok": True}, "content": []})
     )
     out = call_verb(
-        "harmonia_ping", {}, url="http://h/mcp/", token="tok", transport=transport
+        "harmonia_ping",
+        {},
+        url="http://h/mcp/",
+        token="tok",
+        transport=transport,
     )
     assert out == {"ok": True}
     assert [b["method"] for _, b in transport.calls] == [
@@ -113,7 +119,9 @@ def test_call_verb_initializes_then_calls() -> None:
 
 
 def test_call_verb_transport_fault_never_raises() -> None:
-    def boom(url: str, headers: dict[str, str], body: dict[str, Any]) -> tuple[int, str]:
+    def boom(
+        url: str, headers: dict[str, str], body: dict[str, Any]
+    ) -> tuple[int, str]:
         raise OSError("connection refused")
 
     out = call_verb("x", {}, url="http://h/mcp/", token="t", transport=boom)
@@ -123,7 +131,9 @@ def test_call_verb_transport_fault_never_raises() -> None:
 
 def test_call_verb_non_200_maps_to_ok_false() -> None:
     transport = FakeTransport([(200, "{}"), (503, "down")])
-    out = call_verb("x", {}, url="http://h/mcp/", token="t", transport=transport)
+    out = call_verb(
+        "x", {}, url="http://h/mcp/", token="t", transport=transport
+    )
     assert out["ok"] is False
     assert "503" in out["error"]
 
@@ -160,4 +170,6 @@ def test_write_entity_typed_maps_the_phdb_payload() -> None:
     _, call_body = transport.calls[1]
     assert call_body["params"]["name"] == "harmonia_write_entity_typed"
     assert call_body["params"]["arguments"]["schema_type"] == "Book"
-    assert call_body["params"]["arguments"]["fields"]["author"] == "Frank Herbert"
+    assert (
+        call_body["params"]["arguments"]["fields"]["author"] == "Frank Herbert"
+    )
