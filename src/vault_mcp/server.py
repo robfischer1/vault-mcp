@@ -1823,7 +1823,11 @@ def revision_triple_deltas(rev_id: int) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+# RETIRED 2026-07-04 (C5, the dissolution-bridge retirement): de-tooled — the
+# bridge's registries are ARCHIVED on Calliope (archive_dissolutions /
+# archive_file_revision_dissolutions / archive_materialization_events, count
+# parity 441/935/31); historical queries go to the archive tables. Rollback =
+# re-register: restore the @mcp.tool() decorator.
 def dissolution_lookup(vault_path: str, repo: str = "vault") -> dict[str, Any]:
     """Full lifecycle for a vault path — dissolution + materialization events.
 
@@ -1852,7 +1856,7 @@ def dissolution_lookup(vault_path: str, repo: str = "vault") -> dict[str, Any]:
     return lookup_vault_path(conn, vault_path, repo=repo)
 
 
-@mcp.tool()
+# RETIRED 2026-07-04 (C5): de-tooled (see dissolution_lookup).
 def list_dissolution_waves(repo: str = "vault") -> dict[str, Any]:
     """Wave-level browse over the dissolution registry.
 
@@ -1877,7 +1881,7 @@ def list_dissolution_waves(repo: str = "vault") -> dict[str, Any]:
     return {"count": len(waves), "waves": waves}
 
 
-@mcp.tool()
+# RETIRED 2026-07-04 (C5): de-tooled (see dissolution_lookup).
 def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
     """Given a file_revisions row id, return its dissolution (if any).
 
