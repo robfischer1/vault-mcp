@@ -27,7 +27,7 @@ SCHEMA_ENV_VAR = "VAULT_MCP_SCHEMA"
 
 # Allowed write-protection rule kinds (Convention Gate enforces the semantics).
 PROTECTION_RULES: frozenset[str] = frozenset(
-    {"body-immutable", "fully-immutable", "compute-only", "voice-only"}
+    {"body-immutable", "fully-immutable", "compute-only", "voice-only", "exempt"}
 )
 
 # Per-@type write-mode: who may create a note of this type through the Gate.

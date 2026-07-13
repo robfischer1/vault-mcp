@@ -965,6 +965,18 @@ class TestProtection:
         gate, _ = _gate()
         gate.check_protection("Knowledge/Notes", Actor.AGENT, WriteMode.CREATE)
 
+    def test_exempt_carveout_beats_broader_rule(self):
+        # Atlas/Audits carries `exempt` ordered before Atlas's compute-only:
+        # first-match precedence lifts the broader rule for the subtree while
+        # the rest of Atlas stays compute-only.
+        gate, _ = _gate()
+        gate.check_protection("Atlas/Audits", Actor.AGENT, WriteMode.CREATE)
+        gate.check_protection("Atlas/Audits/sub", Actor.AGENT, WriteMode.CREATE)
+        with pytest.raises(ProtectionError):
+            gate.check_protection("Atlas", Actor.AGENT, WriteMode.CREATE)
+        with pytest.raises(ProtectionError):
+            gate.check_protection("Atlas/Periodic", Actor.AGENT, WriteMode.CREATE)
+
 
 class TestUpdateNote:
     def _seed(self, gate, vault) -> str:
