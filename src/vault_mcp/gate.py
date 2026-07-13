@@ -280,6 +280,10 @@ class ConventionGate:
         rule = self._protection_for(directory)
         if rule is None:
             return
+        if rule.rule == "exempt":
+            # A carve-out: _protection_for is first-match, so an exempt entry
+            # ordered before a broader rule lifts it for its subtree.
+            return
         if rule.rule == "fully-immutable":
             raise ProtectionError(rule.error)
         if rule.rule == "body-immutable" and touches_body:

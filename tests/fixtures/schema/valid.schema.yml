@@ -42,6 +42,9 @@ write_protection:
   - directory: Artifacts
     rule: fully-immutable
     error: "Artifacts are frozen version-locked summaries"
+  - directory: Atlas/Audits
+    rule: exempt
+    error: "unused — exempt lifts the broader Atlas rule for this subtree"
   - directory: Atlas
     rule: compute-only
     error: "Atlas notes are recomputed by scheduled jobs, not written by sessions"
