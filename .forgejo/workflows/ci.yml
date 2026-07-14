@@ -21,7 +21,7 @@ jobs:
     container:
       image: catthehacker/ubuntu:act-22.04   # glibc for the uv installer
     steps:
-      - uses: https://github.com/actions/checkout@v4
+      - uses: https://forgejo.notusmi.com/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Install uv
         env:
