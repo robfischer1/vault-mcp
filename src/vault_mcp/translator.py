@@ -193,6 +193,22 @@ def target_tables(payloads: list[dict[str, Any]]) -> list[str]:
     return seen
 
 
+def calliope_document_to_row(doc: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a Calliope ``documents`` row to the phdb documents-row shape (C6).
+
+    The reverse (materialize) leg now reads from Calliope, not the retired phdb.
+    Calliope's document row names the title column ``title``; the materialize
+    mapper (:func:`row_to_payload`) reads ``subject`` (the phdb name). Map the
+    one differing key so the un-dissolve path is source-agnostic.
+    """
+    return {
+        "subject": doc.get("subject") or doc.get("title"),
+        "schema_type": doc.get("schema_type"),
+        "body_text": doc.get("body_text"),
+        "source_path": doc.get("source_path"),
+    }
+
+
 def row_to_payload(
     row: dict[str, Any],
     table: str,

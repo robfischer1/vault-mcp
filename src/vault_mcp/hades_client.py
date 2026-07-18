@@ -179,3 +179,27 @@ def write_document(
         token=token,
         transport=transport,
     )
+
+
+def read_document(
+    doc_id: int,
+    *,
+    url: str,
+    token: str,
+    transport: Transport | None = None,
+) -> dict[str, Any]:
+    """Read one dissolved document back from Calliope's ``read_documents`` (C6).
+
+    The reverse (materialize / un-dissolve) leg: it reads the go-forward prose
+    store — **Calliope**, not the retired phdb — so un-dissolve is symmetric
+    with dissolve. Returns the star's ``{documents: [...]}`` contract on success
+    (a miss is an empty list) or ``{ok: False, error}`` on any transport / tool
+    failure. ``call_verb`` never raises across the boundary.
+    """
+    return call_verb(
+        "read_documents",
+        {"id": doc_id},
+        url=url,
+        token=token,
+        transport=transport,
+    )

@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Any, cast
 from mcp.server.fastmcp import Context, FastMCP
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
@@ -1856,28 +1858,46 @@ def dissolution_lookup(vault_path: str, repo: str = "vault") -> dict[str, Any]:
     return lookup_vault_path(conn, vault_path, repo=repo)
 
 
-# RETIRED 2026-07-04 (C5): de-tooled (see dissolution_lookup).
-def list_dissolution_waves(repo: str = "vault") -> dict[str, Any]:
-    """Wave-level browse over the dissolution registry.
+# RETIRED 2026-07-04 (C5): de-tooled (see dissolution_lookup). REPOINTED
+# 2026-07-17 (C6): the retired `phdb.dissolutions` import is gone — the
+# go-forward record of what dissolved when is the Calliope documents table
+# (source_path + created_at + dedup), so this reads Calliope's `read_documents`
+# over Hades and projects the rows into the wave view. Kept de-tooled (the MCP
+# surface stays retired per C5); the repoint is so the VDV audit code no longer
+# imports a dead module.
+def list_dissolution_waves(repo: str = "vault", limit: int = 200) -> dict[str, Any]:
+    """Wave-level browse over the dissolution record — now Calliope-backed.
 
     Args:
-        repo: Repo name (default "vault").
+        repo: Registry repo scope (retained for signature compatibility).
+        limit: Max rows to read from Calliope (newest first).
 
     Returns:
-        {"count": int, "waves": [...]} where each wave dict includes
-        plan_slug, migration_id, target_schemas/tables, dissolved_at,
-        and linked_files count.
+        {"count": int, "waves": [...]} — one wave per stored Calliope document,
+        or {"error": ...} when Calliope is not the wired target.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
+    _ = repo
+    if not HADES_URL:
         return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
+            "error": "hades_url_unset",
+            "detail": (
+                "HADES_URL unset — the dissolution record lives in Calliope "
+                "(the phdb.dissolutions registry is retired). Set HADES_URL."
+            ),
         }
-    from phdb.dissolutions import list_waves
+    from vault_mcp.carve import documents_to_waves
+    from vault_mcp.hades_client import call_verb
 
-    waves = list_waves(conn, repo=repo)
+    res = call_verb(
+        "read_documents",
+        {"limit": limit, "omit_body": True},
+        url=f"{HADES_URL}/",
+        token=HADES_TOKEN,
+    )
+    if res.get("ok") is False:
+        return {"error": "calliope_read_failed", "detail": str(res.get("error"))}
+    waves = documents_to_waves(res.get("documents") or [])
     return {"count": len(waves), "waves": waves}
 
 
@@ -2575,30 +2595,120 @@ def dissolve(
     return res
 
 
+def _vault_md_paths() -> Iterator[str]:
+    """Yield vault-relative POSIX paths of every ``.md`` in the vault."""
+    root = VAULT_PATH.resolve()
+    for p in sorted(root.rglob("*.md")):
+        yield p.relative_to(root).as_posix()
+
+
 @mcp.tool()
-def materialize(table: str, row_id: int) -> dict[str, Any]:
-    """Materialize a dissolved phdb row back into a Convention-Gate note (VDV F3).
+def dissolve_sweep(
+    dry_run: bool = True,
+    limit: int | None = None,
+    confirm: str = "",
+) -> dict[str, Any]:
+    """Bulk-carve the vault into Calliope under the scope policy (C6).
 
-    The inverse of ``dissolve``: reads a typed row (documents or plans) from phdb
-    over HTTP and writes it back through the shared ``Materializer`` with
-    ``mode=COMPUTE`` — the sanctioned path for materialize-only ``@type``s (e.g.
-    ``Plan``), which ordinary agent-create rejects. ``plans`` rows are
-    metadata-only: their prose comes from the paired ``documents`` row and their
-    metadata is restored into frontmatter. The target directory is resolved from
-    the note_type's schema route. Returns the Gate write result or a structured
-    error.
+    Takes the one-note ``dissolve`` (write -> verify -> delete, idempotent,
+    fail-safe) to a whole-vault sweep gated by a scope policy — governance /
+    System stays; the named prose/records/entities pillars dissolve.
 
-    Shares the ``Materializer`` backend with ``compute_receiver`` (which renders a
-    fresh compute payload); this verb builds the payload from a dissolved row.
+    **DRY-RUN by default.** A dry run classifies every ``.md`` and reports what
+    *would* dissolve, touching nothing. A LIVE sweep (``dry_run=False``) is
+    DESTRUCTIVE — it deletes each dissolvable file after a verified Calliope
+    write — and additionally requires ``confirm="DISSOLVE"``.
+
+    Pre-flight refuses the sweep when ``HADES_URL`` is unset (the documented
+    trap: the dissolve leg would fall back to the retired phdb
+    ``/write/document`` and halt). The scope policy is CONFIG
+    (``carve_policy.DEFAULT_SCOPE_POLICY``); the exact pillar cut and the
+    Obsidian vestigial-vs-retired end-state are OPEN Rob-decisions, surfaced in
+    the report's ``open_decisions``. ``limit`` caps acted-on files (bounded
+    live batches).
+
+    Returns the structured :class:`~vault_mcp.carve.CarveReport`.
     """
+    from vault_mcp.carve import bulk_carve, carve_preflight
+    from vault_mcp.carve_policy import DEFAULT_SCOPE_POLICY
+
+    pf = carve_preflight(hades_url=HADES_URL)
+    if not pf.ok:
+        return bulk_carve(
+            list_files=_vault_md_paths,
+            dissolve_one=lambda _p: {"ok": False, "error": "preflight"},
+            policy=DEFAULT_SCOPE_POLICY,
+            dry_run=dry_run,
+            preflight=pf,
+            limit=limit,
+        ).to_dict()
+
+    if not dry_run and confirm != "DISSOLVE":
+        return {
+            "ok": False,
+            "error": "confirm_required",
+            "detail": (
+                "A live sweep DELETES vault files after writing them to "
+                "Calliope. Re-run with dry_run=False and confirm='DISSOLVE'."
+            ),
+        }
+
+    def _dissolve_one(rel_path: str) -> dict[str, Any]:
+        return dissolve(
+            path=rel_path,
+            plan_slug="vault-carve",
+            rationale="C6 bulk vault carve into Calliope",
+        )
+
+    report = bulk_carve(
+        list_files=_vault_md_paths,
+        dissolve_one=_dissolve_one,
+        policy=DEFAULT_SCOPE_POLICY,
+        dry_run=dry_run,
+        preflight=pf,
+        limit=limit,
+    )
+    return report.to_dict()
+
+
+def _read_dissolved_row(table: str, row_id: int) -> dict[str, Any]:
+    """Read a dissolved row for materialize — from Calliope, not the dead phdb (C6).
+
+    Reverse-symmetry: dissolve writes documents to Calliope (over Hades when
+    ``HADES_URL`` is set), so un-dissolve READS from Calliope too — the retired
+    phdb is never the go-forward source. When ``HADES_URL`` is set, a
+    ``documents`` read routes to Calliope's ``read_documents`` and the row is
+    normalized to the phdb documents-row shape the mapper expects. With
+    ``HADES_URL`` unset (or for the legacy ``plans`` table, which has no Calliope
+    home), it falls back to the phdb HTTP read. Returns
+    ``{ok, row, paired_body}`` or ``{ok: False, error, detail}``.
+    """
+    if table == "documents" and HADES_URL:
+        from vault_mcp.hades_client import read_document
+        from vault_mcp.translator import calliope_document_to_row
+
+        res = read_document(row_id, url=f"{HADES_URL}/", token=HADES_TOKEN)
+        if res.get("ok") is False:
+            return {
+                "ok": False,
+                "error": "calliope_read_failed",
+                "detail": str(res.get("error")),
+            }
+        docs = res.get("documents") or []
+        if not docs:
+            return {
+                "ok": False,
+                "error": "row_not_found",
+                "detail": f"documents#{row_id} (Calliope)",
+            }
+        return {
+            "ok": True,
+            "row": calliope_document_to_row(docs[0]),
+            "paired_body": None,
+        }
+
     import httpx
 
-    from vault_mcp.translator import row_to_payload
-
-    if table not in ("documents", "plans"):
-        return {"ok": False, "error": "bad_table", "detail": table}
-
-    # 1. Read the row (+ paired documents body for plans) over HTTP.
     try:
         resp = httpx.get(
             f"{PHDB_HTTP_URL}/read/{table}", params={"id": row_id}, timeout=30.0
@@ -2606,11 +2716,7 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
     except httpx.HTTPError as e:
         return {"ok": False, "error": f"phdb unreachable: {e}"}
     if resp.status_code == 404:
-        return {
-            "ok": False,
-            "error": "row_not_found",
-            "detail": f"{table}#{row_id}",
-        }
+        return {"ok": False, "error": "row_not_found", "detail": f"{table}#{row_id}"}
     if resp.status_code != 200:
         return {
             "ok": False,
@@ -2618,8 +2724,38 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
             "detail": resp.text,
         }
     data = resp.json()
-    row = data.get("row") or {}
-    paired_body: str | None = data.get("paired_body")
+    return {
+        "ok": True,
+        "row": data.get("row") or {},
+        "paired_body": data.get("paired_body"),
+    }
+
+
+@mcp.tool()
+def materialize(table: str, row_id: int) -> dict[str, Any]:
+    """Materialize a dissolved row back into a Convention-Gate note (VDV F3).
+
+    The inverse of ``dissolve``: reads a typed row from the go-forward prose
+    store — **Calliope** (C6 reverse-symmetry), not the retired phdb — and writes
+    it back through the shared ``Materializer`` with ``mode=COMPUTE``, the
+    sanctioned path for materialize-only ``@type``s (e.g. ``Plan``) that ordinary
+    agent-create rejects. The target directory is resolved from the note_type's
+    schema route. Returns the Gate write result or a structured error.
+
+    Shares the ``Materializer`` backend with ``compute_receiver`` (which renders a
+    fresh compute payload); this verb builds the payload from a dissolved row.
+    """
+    from vault_mcp.translator import row_to_payload
+
+    if table not in ("documents", "plans"):
+        return {"ok": False, "error": "bad_table", "detail": table}
+
+    # 1. Read the row from Calliope (documents) / phdb fallback (plans).
+    read = _read_dissolved_row(table, row_id)
+    if not read.get("ok"):
+        return read
+    row = read["row"]
+    paired_body: str | None = read.get("paired_body")
 
     note_type = (
         "Plan"
