@@ -5,6 +5,7 @@ from __future__ import annotations
 from vault_mcp.translator import (
     DOC_ENDPOINT,
     ENTITY_ENDPOINT,
+    calliope_document_to_row,
     note_to_payloads,
     row_to_payload,
     target_tables,
@@ -228,3 +229,30 @@ def test_software_application_preserves_schema_type() -> None:
     payloads = note_to_payloads(fm, "Chat app.", "/vault/s.md")
     assert payloads[0]["endpoint"] == DOC_ENDPOINT
     assert payloads[0]["payload"]["schema_type"] == "SoftwareApplication"
+
+
+# -- calliope_document_to_row (the C6 reverse / materialize normalizer) --------
+
+
+def test_calliope_document_to_row_maps_title_to_subject() -> None:
+    # Calliope names the title column `title`; row_to_payload reads `subject`.
+    doc = {
+        "id": 9,
+        "title": "The Dissolved Note",
+        "schema_type": "DigitalDocument",
+        "body_text": "verbatim prose",
+        "source_path": "Brain Soup/Note.md",
+    }
+    row = calliope_document_to_row(doc)
+    assert row["subject"] == "The Dissolved Note"
+    assert row["body_text"] == "verbatim prose"
+    # And it feeds row_to_payload cleanly (the materialize path).
+    payload = row_to_payload(row, "documents", directory="Brain Soup")
+    assert payload["title"] == "The Dissolved Note"
+    assert payload["body"] == "verbatim prose"
+    assert payload["note_type"] == "DigitalDocument"
+
+
+def test_calliope_document_to_row_prefers_subject_when_present() -> None:
+    doc = {"subject": "Already-subject", "title": "fallback", "body_text": "x"}
+    assert calliope_document_to_row(doc)["subject"] == "Already-subject"

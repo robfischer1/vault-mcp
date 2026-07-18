@@ -13,6 +13,7 @@ from typing import Any
 from vault_mcp.hades_client import (
     call_verb,
     parse_tool_result,
+    read_document,
     write_entity_typed,
 )
 
@@ -173,3 +174,36 @@ def test_write_entity_typed_maps_the_phdb_payload() -> None:
     assert (
         call_body["params"]["arguments"]["fields"]["author"] == "Frank Herbert"
     )
+
+
+# -- read_document (the C6 reverse / materialize leg) ---------------------------
+
+
+def test_read_document_calls_calliope_read_documents_by_id() -> None:
+    transport = FakeTransport(
+        _ok_pair(
+            {
+                "structuredContent": {
+                    "documents": [
+                        {"id": 42, "title": "Idea", "body_text": "the prose"}
+                    ]
+                },
+                "content": [],
+            }
+        )
+    )
+    out = read_document(42, url="http://h/mcp/", token="t", transport=transport)
+    assert out["documents"][0]["id"] == 42
+    _, call_body = transport.calls[1]
+    assert call_body["params"]["name"] == "read_documents"
+    assert call_body["params"]["arguments"] == {"id": 42}
+
+
+def test_read_document_transport_fault_never_raises() -> None:
+    def boom(
+        url: str, headers: dict[str, str], body: dict[str, Any]
+    ) -> tuple[int, str]:
+        raise OSError("connection refused")
+
+    out = read_document(1, url="http://h/mcp/", token="t", transport=boom)
+    assert out["ok"] is False
