@@ -1419,6 +1419,8 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     Strangled concerns route to their sovereign star over Hades instead:
     entity writes (``/write/entity``) call ``harmonia_write_entity_typed``
     when ``HADES_URL`` is configured — same payload, same result contract.
+    Atom emits (``/emit``) call Terpsichore's ``fleet_emit`` (C1), the last
+    route that kept the retired monolith's :8101 surface load-bearing.
     """
     if endpoint == "/write/entity" and HADES_URL:
         from vault_mcp.hades_client import write_entity_typed
@@ -1431,6 +1433,13 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         from vault_mcp.hades_client import write_document
 
         return write_document(payload, url=f"{HADES_URL}/", token=HADES_TOKEN)
+
+    if endpoint == "/emit" and HADES_URL:
+        from vault_mcp.hades_client import emit_session_event
+
+        return emit_session_event(
+            payload, url=f"{HADES_URL}/", token=HADES_TOKEN
+        )
 
     import httpx
 
@@ -2855,7 +2864,10 @@ def atom(
             captured_when when present.
 
     Returns:
-        {"ok": True, "atom_type", "event_id", "ts"} or a structured error.
+        {"ok": True, "atom_type", "event_id", "born_token", "ts"} or a
+        structured error. Exactly one identifier is populated: ``born_token``
+        on the Terpsichore fleet plane (the C1 default), ``event_id`` on the
+        legacy phdb route when ``HADES_URL`` is unset.
 
     """
     from vault_mcp.phdb_client import (

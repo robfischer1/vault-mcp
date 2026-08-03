@@ -203,3 +203,36 @@ def read_document(
         token=token,
         transport=transport,
     )
+
+
+def emit_session_event(
+    payload: dict[str, Any],
+    *,
+    url: str,
+    token: str,
+    transport: Transport | None = None,
+) -> dict[str, Any]:
+    """Route one ``/emit`` payload to Terpsichore's ``fleet_emit`` (C1).
+
+    The payload shape is the phdb HTTP contract ``phdb_client`` already emits
+    — ``{event_type, payload, ts}`` — and the Terpsichore verb takes exactly
+    those parameters, so this is a passthrough like its sibling routers.
+
+    ``fleet_emit`` is the R9 CQRS write path: it lands the ``session_events``
+    row on the fleet plane and returns a content-derived ``born_token`` in
+    place of phdb's synchronous ``event_id`` (the async plane has no row id to
+    hand back). ``session_uuid`` is left unset, exactly as the phdb ``/emit``
+    path did — vault-mcp is a service principal, not a session.
+    """
+    args = {
+        "event_type": payload.get("event_type"),
+        "payload": payload.get("payload") or {},
+        "ts": payload.get("ts"),
+    }
+    return call_verb(
+        "fleet_emit",
+        args,
+        url=url,
+        token=token,
+        transport=transport,
+    )

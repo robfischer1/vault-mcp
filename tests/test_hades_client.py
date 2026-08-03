@@ -12,6 +12,7 @@ from typing import Any
 
 from vault_mcp.hades_client import (
     call_verb,
+    emit_session_event,
     parse_tool_result,
     read_document,
     write_entity_typed,
@@ -206,4 +207,67 @@ def test_read_document_transport_fault_never_raises() -> None:
         raise OSError("connection refused")
 
     out = read_document(1, url="http://h/mcp/", token="t", transport=boom)
+    assert out["ok"] is False
+
+
+# -- emit_session_event (the C1 atom leg) --------------------------------------
+
+
+def test_emit_session_event_calls_fleet_emit() -> None:
+    transport = FakeTransport(
+        _ok_pair(
+            {
+                "structuredContent": {
+                    "ok": True,
+                    "born_token": "bt-1",
+                    "event_type": "decision",
+                    "session_uuid": None,
+                },
+                "content": [],
+            }
+        )
+    )
+    payload = {
+        "event_type": "decision",
+        "payload": {"polarity": "for"},
+        "ts": "2026-08-03T00:00:00Z",
+    }
+    out = emit_session_event(
+        payload, url="http://h/mcp/", token="t", transport=transport
+    )
+    assert out["ok"] is True
+    assert out["born_token"] == "bt-1"
+    _, call_body = transport.calls[1]
+    assert call_body["params"]["name"] == "fleet_emit"
+    args = call_body["params"]["arguments"]
+    assert args["event_type"] == "decision"
+    assert args["payload"] == {"polarity": "for"}
+    assert args["ts"] == "2026-08-03T00:00:00Z"
+
+
+def test_emit_session_event_defaults_missing_payload_to_empty() -> None:
+    """A payload-less emit must send {}, never None, to the verb."""
+    transport = FakeTransport(
+        _ok_pair({"structuredContent": {"ok": True}, "content": []})
+    )
+    emit_session_event(
+        {"event_type": "probe"},
+        url="http://h/mcp/",
+        token="t",
+        transport=transport,
+    )
+    _, call_body = transport.calls[1]
+    assert call_body["params"]["arguments"]["payload"] == {}
+    assert call_body["params"]["arguments"]["ts"] is None
+
+
+def test_emit_session_event_transport_fault_never_raises() -> None:
+    def boom(
+        url: str, headers: dict[str, str], body: dict[str, Any]
+    ) -> tuple[int, str]:
+        raise OSError("connection refused")
+
+    out = emit_session_event(
+        {"event_type": "decision"}, url="http://h/mcp/", token="t", transport=boom
+    )
     assert out["ok"] is False

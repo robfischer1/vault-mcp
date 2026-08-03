@@ -143,6 +143,37 @@ class TestEmit:
         with pytest.raises(PhdbUnavailableError):
             emit_atom("decision", {"polarity": "for"}, post=poster)
 
+    def test_born_token_confirms_the_write(self):
+        """The Terpsichore fleet plane answers with a token, not a row id."""
+        poster = _FakePoster({"ok": True, "born_token": "abc123"})
+        result = emit_atom("decision", {"polarity": "for"}, post=poster)
+        assert result == AtomResult(
+            atom_type="decision",
+            event_id=None,
+            ts=None,
+            born_token="abc123",
+        )
+        assert result.to_dict() == {
+            "ok": True,
+            "atom_type": "decision",
+            "event_id": None,
+            "born_token": "abc123",
+            "ts": None,
+        }
+
+    def test_event_id_path_reports_no_born_token(self):
+        """The legacy phdb route still yields a row id and a null token."""
+        poster = _FakePoster({"ok": True, "event_id": 7})
+        result = emit_atom("decision", {"polarity": "for"}, post=poster)
+        assert result.event_id == 7
+        assert result.born_token is None
+
+    def test_non_string_born_token_is_not_a_confirmation(self):
+        """A token of the wrong type must not read as a landed write."""
+        poster = _FakePoster({"ok": True, "born_token": 12345})
+        with pytest.raises(PhdbUnavailableError):
+            emit_atom("decision", {"polarity": "for"}, post=poster)
+
     def test_bad_payload_raises_before_post(self):
         poster = _FakePoster({"ok": True, "event_id": 9})
         with pytest.raises(AtomError):
