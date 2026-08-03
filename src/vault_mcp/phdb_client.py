@@ -1,18 +1,27 @@
-"""phdb write client — the atom-emit write surface into personal-history-db.
+"""Atom write client — the atom-emit write surface for ``session_events``.
 
 The ``atom`` lifecycle verb records an AI-observed *atom* (a decision,
-reversal, tension, or pushback) into phdb's ``session_events`` table, skipping
-the vault filesystem entirely. vault-mcp is a *pure client*: it POSTs the atom
-to the running phdb service's HTTP ``/emit`` route (#720), so phdb owns the
-write and its backend (PG via ``PHDB_BACKEND``) — vault-mcp never opens phdb's
-DB directly. Degrades gracefully when the route is unreachable, exactly like
-the REST-backed tools degrade without Obsidian (Constitution II).
+reversal, tension, or pushback) as a ``session_events`` row, skipping the vault
+filesystem entirely. vault-mcp is a *pure client*: it hands the atom to the
+injected poster and never opens a store directly. Degrades gracefully when the
+write path is unreachable, exactly like the REST-backed tools degrade without
+Obsidian (Constitution II).
+
+Transport (PHDB dissolution C1, 2026-08-03): the poster the MCP layer wires
+(``server._phdb_post``) routes ``/emit`` to **Terpsichore's ``fleet_emit``**
+over Hades when ``HADES_URL`` is set — the R9 CQRS write path. That was the
+last route keeping the retired monolith's :8101 surface load-bearing. With
+``HADES_URL`` unset it still falls back to phdb's HTTP ``/emit`` (#720), the
+same symmetry the entity- and document-write routers use.
+
+This module keeps the per-type payload contract (``validate_atom``) that the
+raw ``fleet_emit`` verb does not enforce — a caller typo surfaces here rather
+than landing silently in the event blob.
 
 Boundary discipline:
 
-* **Write-only, over HTTP.** This module only emits ``session_events`` rows,
-  through phdb's ``/emit`` route. All reads, identity resolution, and the
-  typed-graph live in phdb.
+* **Write-only.** This module only emits ``session_events`` rows. All reads,
+  identity resolution, and the typed-graph live in the sovereign stars.
 * **Pure core, injected edge.** Validation + ts-resolution are pure; the
   poster (the HTTP transport) is injected, so the logic is unit-tested with a
   fake and the MCP layer wires the real ``_phdb_post`` adapter.
@@ -78,11 +87,18 @@ class PhdbUnavailableError(Exception):
 
 @dataclass(frozen=True)
 class AtomResult:
-    """The structured echo returned for a successful atom emit."""
+    """The structured echo returned for a successful atom emit.
+
+    Exactly one identifier is populated, depending on which write path ran:
+    ``event_id`` on the legacy phdb ``/emit`` route (a synchronous row id), or
+    ``born_token`` on the Terpsichore fleet plane (a content-derived handle —
+    the async CQRS path has no row id to return). The other stays ``None``.
+    """
 
     atom_type: str
-    event_id: int
+    event_id: int | None
     ts: str | None
+    born_token: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return this result as a JSON-serializable dict."""
@@ -90,6 +106,7 @@ class AtomResult:
             "ok": True,
             "atom_type": self.atom_type,
             "event_id": self.event_id,
+            "born_token": self.born_token,
             "ts": self.ts,
         }
 
@@ -138,17 +155,19 @@ def emit_atom(
     ts: str | None = None,
     post: Poster,
 ) -> AtomResult:
-    """Emit an atom by POSTing it to phdb's HTTP ``/emit`` route (#720).
+    """Emit an atom through the injected ``/emit`` poster.
 
-    vault-mcp is a pure client: the running phdb service owns the write and the
-    backend (PG via ``PHDB_BACKEND``), so this no longer opens phdb's DB directly
-    — which broke once SQLite went read-only at cutover, and pinned writes to
-    SQLite besides. ``post`` is injected (the real adapter is the server's
-    ``_phdb_post``), so the logic is unit-testable with a fake.
+    vault-mcp is a pure client and never opens a store directly — which broke
+    once phdb's SQLite went read-only at cutover, and pinned writes to SQLite
+    besides. ``post`` is injected (the real adapter is the server's
+    ``_phdb_post``), so the logic is unit-testable with a fake and the
+    transport can be restrangled without touching this logic. Since C1 that
+    adapter routes to Terpsichore's ``fleet_emit``.
 
     Validation runs first, so a bad payload is rejected (``AtomError``) before any
-    network call. Raises ``PhdbUnavailableError`` when the route is unreachable or
-    returns a non-success envelope.
+    network call. Raises ``PhdbUnavailableError`` when the route is unreachable,
+    returns a non-success envelope, or confirms the write with neither an
+    ``event_id`` nor a ``born_token``.
     """
     validated = validate_atom(atom_type, payload)  # fail fast, before the POST
     event_ts = _event_ts(validated, ts)
@@ -162,9 +181,20 @@ def emit_atom(
     )
     if not result.get("ok"):
         raise PhdbUnavailableError(
-            str(result.get("error", "phdb /emit returned no success flag"))
+            str(result.get("error", "/emit returned no success flag"))
         )
     event_id = result.get("event_id")
-    if not isinstance(event_id, int):
-        raise PhdbUnavailableError(f"phdb /emit returned no event_id: {result}")
-    return AtomResult(atom_type=atom_type, event_id=event_id, ts=event_ts)
+    born_token = result.get("born_token")
+    # Either identifier proves the write landed: phdb answered with a row id,
+    # or Terpsichore answered with a content-derived token. Neither means the
+    # write is unconfirmed, so refuse rather than report a phantom success.
+    if not isinstance(event_id, int) and not isinstance(born_token, str):
+        raise PhdbUnavailableError(
+            f"/emit returned neither event_id nor born_token: {result}"
+        )
+    return AtomResult(
+        atom_type=atom_type,
+        event_id=event_id if isinstance(event_id, int) else None,
+        ts=event_ts,
+        born_token=born_token if isinstance(born_token, str) else None,
+    )
