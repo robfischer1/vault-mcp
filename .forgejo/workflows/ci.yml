@@ -19,7 +19,12 @@ jobs:
   gate:
     runs-on: nas01
     container:
-      image: catthehacker/ubuntu:act-22.04@sha256:aeaa74e62723c9538ed865e2de82617bb8c2e2c84ef36f8ba150a9dbb7ad39a3   # glibc for the uv installer
+      # Pulled through the local proxy, not Docker Hub: the runner pulls with
+      # forcePull=true and no credentials, so a bare Hub reference burns an
+      # anonymous pull every run and hits the ~100/6h/IP cap -- which it did on
+      # 2026-08-04, failing the gate before a single step ran (infra #1443).
+      # Same digest, so the pin is unchanged.
+      image: docker.notusmi.com/catthehacker/ubuntu:act-22.04@sha256:aeaa74e62723c9538ed865e2de82617bb8c2e2c84ef36f8ba150a9dbb7ad39a3   # glibc for the uv installer
     steps:
       - uses: https://forgejo.notusmi.com/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
