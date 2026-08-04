@@ -1472,7 +1472,43 @@ def _get_phdb_conn() -> Any:
     return _phdb_conn
 
 
-@mcp.tool()
+# ---------------------------------------------------------------------------
+# RETIRED 2026-08-03 — the typed-graph (triple) + file-revision verbs.
+#
+# The ten functions below are de-tooled: the ``@mcp.tool()`` decorator is gone
+# and every phdb import and invocation with it, so each is an inert stub that
+# returns ``_RETIRED_TRIPLE_VERB``. Signatures are kept so re-enabling is a
+# one-line change; the bodies were deleted rather than left commented because
+# this package lints under ``select = ["ALL"]`` and ERA001 is exempted only for
+# tests/ and benchmarks/. Rollback is the commit that introduced this block:
+# ``git show <sha>^:src/vault_mcp/server.py``.
+#
+# Why. They read a phdb SQLite snapshot frozen 2026-06-10, of which only 11,839
+# of 13,841,482 triples (0.086 %) came from note frontmatter — the rest is
+# personal corpus (7.4 M inThread, 2.4 M hasMetadata, 1.85 M hasGeoTrace,
+# 934 K hasHeartRateSample). Nothing had written to it in eight weeks: vault-mcp
+# never had a frontmatter->triple extractor, only the manual ``add_triple``. The
+# ten verbs saw 19 calls between them across their whole lifetime, and five were
+# never called at all. The ontology is now Chaos's — ``sentTo``, ``inThread``,
+# ``hasChunk``, ``occurredAt``, ``locatedAt``, ``hasAttachment`` and
+# ``taggedWith`` all resolve as live Chaos predicates over the Hades gateway.
+#
+# NOT retired, and still phdb-backed through the same ``_get_phdb_conn``:
+# ``note_lookup`` / ``note_search`` / ``note_read`` / ``note_list``, which read
+# ``phdb.vault_notes``. They stay live verbs (130+ calls between them) — but
+# their index was last written 2026-05-27, so results are two months stale and
+# include System/Trash entries. Cutting them is a separate decision.
+# ---------------------------------------------------------------------------
+_RETIRED_TRIPLE_VERB: dict[str, Any] = {
+    "error": "retired",
+    "detail": (
+        "The typed-graph and file-revision verbs were retired 2026-08-03 with "
+        "the PHDB dissolution. The graph substrate is Chaos — query it over the "
+        "Hades gateway (the graph_* verbs)."
+    ),
+}
+
+
 def query_triples(
     subject: str | None = None,
     predicate: str | None = None,
@@ -1504,30 +1540,20 @@ def query_triples(
         {"count": int, "triples": [...]} or {"error": str} if DB unavailable.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.triples import query_triples as _qt
-
-    results = _qt(
-        conn,
-        subject=subject,
-        predicate=predicate,
-        object_=object,
-        provenance=provenance,
-        since=since,
-        until=until,
-        include_null_objects=include_null_objects,
-        include_inverse=include_inverse,
-        limit=limit,
+    del (
+        subject,
+        predicate,
+        object,
+        provenance,
+        since,
+        until,
+        include_null_objects,
+        include_inverse,
+        limit,
     )
-    return {"count": len(results), "triples": results}
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def add_triple(
     subject: str,
     predicate: str,
@@ -1559,32 +1585,20 @@ def add_triple(
         {"triple_id": int, "created": bool, ...} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.triples import add_triple as _at
-
-    try:
-        return _at(
-            conn,
-            subject=subject,
-            predicate=predicate,
-            object_=object,
-            observed_at=observed_at,
-            provenance=provenance,
-            source_ref=source_ref,
-            subject_kind=subject_kind,
-            object_kind=object_kind,
-            qualifiers=qualifiers,
-        )
-    except ValueError as e:
-        return {"error": "invalid_predicate", "detail": str(e)}
+    del (
+        subject,
+        predicate,
+        object,
+        observed_at,
+        provenance,
+        source_ref,
+        subject_kind,
+        object_kind,
+        qualifiers,
+    )
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def delete_triple(
     triple_id: int,
     prune_orphan_nodes: bool = False,
@@ -1602,18 +1616,10 @@ def delete_triple(
         {"deleted": bool, "triple_id": int, "nodes_pruned": int} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.triples import delete_triple as _dt
-
-    return _dt(conn, triple_id, prune_orphan_nodes=prune_orphan_nodes)
+    del triple_id, prune_orphan_nodes
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def delete_node(
     node_id: int,
     cascade: bool = False,
@@ -1628,18 +1634,10 @@ def delete_node(
         {"deleted": bool, "node_id": int, ...} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.triples import delete_node as _dn
-
-    return _dn(conn, node_id, cascade=cascade)
+    del node_id, cascade
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def triple_stats() -> dict[str, Any]:
     """Get summary statistics for the predicate table.
 
@@ -1650,18 +1648,9 @@ def triple_stats() -> dict[str, Any]:
         {"nodes": int, "triples": int, ...} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.triples import triple_stats as _ts
-
-    return _ts(conn)
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def node_neighborhood(
     node: str,
     limit: int = 50,
@@ -1678,18 +1667,10 @@ def node_neighborhood(
         {"node": {...}, "outgoing": [...], "incoming": [...]} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.triples import node_neighborhood as _nn
-
-    return _nn(conn, node, limit=limit)
+    del node, limit
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def list_predicates() -> dict[str, Any]:
     """List all predicates in the controlled vocabulary.
 
@@ -1697,16 +1678,7 @@ def list_predicates() -> dict[str, Any]:
         {"count": int, "predicates": [...]} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.triples import list_predicates as _lp
-
-    preds = _lp(conn)
-    return {"count": len(preds), "predicates": preds}
+    return _RETIRED_TRIPLE_VERB
 
 
 # ---------------------------------------------------------------------------
@@ -1714,7 +1686,6 @@ def list_predicates() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
 def materialize_revision(
     rev_id: int,
     repo_root: str | None = None,
@@ -1736,39 +1707,10 @@ def materialize_revision(
         {"error": str, "detail": str} on miss.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.file_revisions import get_revision, materialize
-
-    row = get_revision(conn, rev_id)
-    if row is None:
-        return {
-            "error": "not_found",
-            "detail": f"rev_id={rev_id} has no file_revisions row",
-        }
-    try:
-        body = materialize(conn, rev_id, repo_root=repo_root)
-    except FileNotFoundError as e:
-        return {"error": "not_found", "detail": str(e)}
-    except Exception as e:  # noqa: BLE001 — surface git errors verbatim
-        return {"error": "materialize_failed", "detail": str(e)}
-    return {
-        "rev_id": rev_id,
-        "repo": row["repo"],
-        "commit_sha": row["commit_sha"],
-        "file_path": row["file_path"],
-        "git_blob_sha": row["git_blob_sha"],
-        "change_type": row["change_type"],
-        "authorship": row["authorship"],
-        "body": body,
-    }
+    del rev_id, repo_root
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def list_file_revisions(
     file_path: str,
     repo: str = "vault",
@@ -1785,24 +1727,10 @@ def list_file_revisions(
         {"count": int, "revisions": [...]} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.file_revisions import list_for_path
-
-    rows = list_for_path(
-        conn,
-        file_path,
-        repo=repo,
-        limit=None if limit == 0 else limit,
-    )
-    return {"count": len(rows), "revisions": rows}
+    del file_path, repo, limit
+    return _RETIRED_TRIPLE_VERB
 
 
-@mcp.tool()
 def revision_triple_deltas(rev_id: int) -> dict[str, Any]:
     """Return predicate-graph edges added/removed by one revision.
 
@@ -1817,16 +1745,8 @@ def revision_triple_deltas(rev_id: int) -> dict[str, Any]:
         {"count": int, "deltas": [...]} or {"error": str}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.file_revisions import triple_deltas
-
-    deltas = triple_deltas(conn, rev_id)
-    return {"count": len(deltas), "deltas": deltas}
+    del rev_id
+    return _RETIRED_TRIPLE_VERB
 
 
 # ---------------------------------------------------------------------------
