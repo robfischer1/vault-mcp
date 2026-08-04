@@ -95,15 +95,13 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
-# phdb is an optional sibling package resolved on sys.path at runtime (atom
-# emit / triple tools), never a declared dependency of this publish-track
-# server. It ships no type stubs, so its imports are untyped here.
-[[tool.mypy.overrides]]
-module = "phdb.*"
-ignore_missing_imports = true
+# The phdb.* override is retired (2026-08-04): phdb was an optional sibling
+# resolved on sys.path, and with the triple and vault_notes verbs de-tooled
+# vault-mcp no longer imports it at all. mypy flagged the override as unused,
+# which is how this was caught.
 
 # Test files are type-checked but not strict — suppress annotation requirements
-# and known test-pattern false positives (matches the phdb tests.* relaxation).
+# and known test-pattern false positives.
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
@@ -125,14 +123,14 @@ disable_error_code = ["no-any-return"]
 # ignore-necessity (warn_unused_ignores), so reportUnnecessaryTypeIgnoreComment
 # is off. The carve-outs below are the strict reportX rules that fight mypy's
 # documented variance, the Any it permits, or ruff's lint domain.
-# server.py is checked by mypy (which ignores the optional phdb sibling via
-# ignore_missing_imports); pyright can't resolve phdb on a clean checkout. Now that
-# server.py lives under src/ (#1318) it is excluded here explicitly — mypy is its
-# sole gate (it imports phdb.* directly for the dissolution/vault_notes tools). The
-# rest of the package + tests stay on the pyright peer gate.
+# server.py was excluded from pyright because it imported the phdb sibling off
+# sys.path, which pyright could not resolve on a clean checkout — mypy was its
+# sole gate. That import is gone (2026-08-04, the dissolution), so the reason
+# for the carve-out is gone with it and server.py is back under the peer gate:
+# verified 0 errors / 0 warnings before removing the exclusion.
 [tool.pyright]
 include = ["src", "tests"]
-exclude = ["**/__pycache__", ".venv", "src/vault_mcp/server.py"]
+exclude = ["**/__pycache__", ".venv"]
 extraPaths = ["src"]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"

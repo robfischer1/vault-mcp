@@ -56,13 +56,12 @@ from vault_mcp.bases import (
 from vault_mcp.index import VaultIndex
 from vault_mcp.rest_client import DEFAULT_REST_URL
 
-# phdb sibling-repo import for predicate table (Phase 9 - triple tools).
-# Resolved from the repo root: parents[3] is the Forge workspace dir now that
-# this module lives at src/vault_mcp/. TODO(SRSC isolation #1317): replace this
-# sys.path sibling import with a config-addressed call (no cross-tree import).
-_phdb_src = Path(__file__).resolve().parents[3] / "personal-history-db" / "src"
-if str(_phdb_src) not in sys.path:
-    sys.path.insert(0, str(_phdb_src))
+# The phdb sibling-repo sys.path import is GONE (2026-08-04). It resolved
+# ../personal-history-db/src off the Forge workspace so the triple and
+# vault_notes verbs could import phdb directly — the cross-tree import that
+# SRSC isolation #1317 asked to remove. Both verb families are now retired and
+# the monolith is dissolved, so there is nothing left to import: #1317 is
+# closed by deletion rather than by the config-addressed call it proposed.
 
 
 # ---------------------------------------------------------------------------
@@ -1394,10 +1393,15 @@ if not REST_DISABLE:
 # Phase 9 — Predicate table (triple store) tools
 # ---------------------------------------------------------------------------
 
-PHDB_DB_PATH = os.environ.get("PHDB_DB_PATH", "")
+# PHDB_DB_PATH is retired (2026-08-04) along with the direct-DB read seam it
+# fed. It opened a phdb SQLite snapshot frozen 2026-06-10 whose vault_notes
+# index had not been written since 2026-05-27; every verb that read it is now
+# de-tooled, so the env var is no longer consulted and can be dropped from the
+# service definition.
 # phdb's plain-HTTP base URL — the dissolve verb POSTs typed writes here (VDV F3
-# transport decision: writes go over HTTP, not the legacy direct-DB seam). Reads
-# still use the direct _get_phdb_conn below.
+# transport decision: writes go over HTTP, not the legacy direct-DB seam). Only
+# /write/plan still falls through to it, and only when HADES_URL is unset; the
+# monolith is gone, so that path fails fast rather than half-writing.
 PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip(
     "/"
 )
@@ -1407,7 +1411,37 @@ PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip(
 # dissolve halts rather than half-writing).
 HADES_URL = os.environ.get("HADES_URL", "").rstrip("/")
 HADES_TOKEN = os.environ.get("HADES_TOKEN", "")
-_phdb_conn = None
+
+# ---------------------------------------------------------------------------
+# RETIRED 2026-08-04 — the phdb-backed note verbs, and the phdb dependency.
+#
+# note_lookup / note_search / note_read / note_list are de-tooled, along with
+# the two already-untooled dissolution_* helpers that shared their connection.
+# With them go `_get_phdb_conn`, the module-level connection cache, PHDB_DB_PATH
+# and the sys.path sibling import at the top of this file. vault-mcp no longer
+# imports phdb at all.
+#
+# Why. They read a phdb SQLite whose vault_notes index was last written
+# 2026-05-27 — two months stale, returning System/Trash entries and zero hits
+# for anything created since. Worse, they shadowed live verbs under
+# near-identical names: `note_read` served the frozen snapshot while `read_note`
+# served the live index, so "read a note" was a coin-flip between current and
+# stale, failing silently with plausible old content rather than erroring.
+#
+# Not rebuilt. `read_note` and `find_notes_by_frontmatter` already cover reads
+# and structured lookup off the live index, and `write_note` / `move_note` go
+# through the Gate. Full-text body search was the only capability without a live
+# equivalent; per Rob 2026-08-04 it is deliberately NOT being rebuilt.
+# ---------------------------------------------------------------------------
+_RETIRED_NOTE_VERB: dict[str, Any] = {
+    "error": "retired",
+    "detail": (
+        "The phdb-backed note verbs were retired 2026-08-04 with the PHDB "
+        "dissolution; they served a vault index frozen 2026-05-27. Use "
+        "read_note or find_notes_by_frontmatter (live index), or write_note / "
+        "move_note (the Gate). Full-text body search was not rebuilt."
+    ),
+}
 
 
 def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1458,20 +1492,6 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     return resp.json()
 
 
-def _get_phdb_conn() -> Any:
-    global _phdb_conn
-    if _phdb_conn is None:
-        if not PHDB_DB_PATH:
-            return None
-        db_file = Path(PHDB_DB_PATH)
-        if not db_file.exists():
-            return None
-        from phdb.db import connect_persistent
-
-        _phdb_conn = connect_persistent(db_file)
-    return _phdb_conn
-
-
 # ---------------------------------------------------------------------------
 # RETIRED 2026-08-03 — the typed-graph (triple) + file-revision verbs.
 #
@@ -1493,11 +1513,9 @@ def _get_phdb_conn() -> Any:
 # ``hasChunk``, ``occurredAt``, ``locatedAt``, ``hasAttachment`` and
 # ``taggedWith`` all resolve as live Chaos predicates over the Hades gateway.
 #
-# NOT retired, and still phdb-backed through the same ``_get_phdb_conn``:
-# ``note_lookup`` / ``note_search`` / ``note_read`` / ``note_list``, which read
-# ``phdb.vault_notes``. They stay live verbs (130+ calls between them) — but
-# their index was last written 2026-05-27, so results are two months stale and
-# include System/Trash entries. Cutting them is a separate decision.
+# The note verbs that shared this connection — ``note_lookup`` / ``note_search``
+# / ``note_read`` / ``note_list`` — were retired the next day, 2026-08-04, and
+# took ``_get_phdb_conn`` with them. See the block below.
 # ---------------------------------------------------------------------------
 _RETIRED_TRIPLE_VERB: dict[str, Any] = {
     "error": "retired",
@@ -1776,15 +1794,8 @@ def dissolution_lookup(vault_path: str, repo: str = "vault") -> dict[str, Any]:
          "materializations": [...], "lifecycle": [...]} or {"error": ...}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.dissolutions import lookup_vault_path
-
-    return lookup_vault_path(conn, vault_path, repo=repo)
+    del vault_path, repo
+    return _RETIRED_NOTE_VERB
 
 
 # RETIRED 2026-07-04 (C5): de-tooled (see dissolution_lookup). REPOINTED
@@ -1843,23 +1854,8 @@ def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
         {"error": str} on lookup failure.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    row = conn.execute(
-        "SELECT d.id FROM dissolutions d"
-        " JOIN file_revision_dissolutions frd ON frd.dissolution_pk = d.id"
-        " WHERE frd.file_revision_pk = ?",
-        (rev_id,),
-    ).fetchone()
-    if row is None:
-        return {"dissolution": None}
-    from phdb.dissolutions import get
-
-    return {"dissolution": get(conn, int(row[0]))}
+    del rev_id
+    return _RETIRED_NOTE_VERB
 
 
 # ---------------------------------------------------------------------------
@@ -1867,7 +1863,6 @@ def dissolution_for_revision(rev_id: int) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
 def note_lookup(query: str) -> dict[str, Any]:
     """Exact-match lookup of a vault note by name or file_path.
 
@@ -1883,21 +1878,10 @@ def note_lookup(query: str) -> dict[str, Any]:
         Full note dict on hit, {"result": None} on miss, or {"error": ...}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.vault_notes import lookup
-
-    result = lookup(conn, query)
-    if result is None:
-        return {"result": None}
-    return result
+    del query
+    return _RETIRED_NOTE_VERB
 
 
-@mcp.tool()
 def note_search(query: str, limit: int = 20) -> dict[str, Any]:
     """Full-text search over vault notes (name, description, body).
 
@@ -1913,19 +1897,10 @@ def note_search(query: str, limit: int = 20) -> dict[str, Any]:
         {"count": int, "results": [...]} with snippet per hit.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.vault_notes import search
-
-    results = search(conn, query, limit=limit)
-    return {"count": len(results), "results": results}
+    del query, limit
+    return _RETIRED_NOTE_VERB
 
 
-@mcp.tool()
 def note_read(name_or_path: str) -> dict[str, Any]:
     """Read the full body text of one vault note.
 
@@ -1941,21 +1916,10 @@ def note_read(name_or_path: str) -> dict[str, Any]:
         {"result": None} on miss.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.vault_notes import read_note
-
-    body = read_note(conn, name_or_path)
-    if body is None:
-        return {"result": None}
-    return {"name_or_path": name_or_path, "body": body}
+    del name_or_path
+    return _RETIRED_NOTE_VERB
 
 
-@mcp.tool()
 def note_list(
     status: str | None = None,
     at_type: str | None = None,
@@ -1975,16 +1939,8 @@ def note_list(
         {"count": int, "notes": [...]}.
 
     """
-    conn = _get_phdb_conn()
-    if conn is None:
-        return {
-            "error": "phdb_unavailable",
-            "detail": "PHDB_DB_PATH not set or DB not found",
-        }
-    from phdb.vault_notes import list_notes
-
-    results = list_notes(conn, status=status, at_type=at_type, limit=limit)
-    return {"count": len(results), "notes": results}
+    del status, at_type, limit
+    return _RETIRED_NOTE_VERB
 
 
 # ---------------------------------------------------------------------------
@@ -2831,10 +2787,9 @@ def main() -> None:
 
     watch_status = "watch=on" if WATCH_ENABLED else "watch=off"
     rest_status = "rest=off" if REST_DISABLE else f"rest={REST_URL}"
-    phdb_status = f"phdb={PHDB_DB_PATH}" if PHDB_DB_PATH else "phdb=off"
     print(
         f"vault-mcp: vault={VAULT_PATH}, ttl={TTL_SECONDS}s, "
-        f"{watch_status}, {rest_status}, {phdb_status}, "
+        f"{watch_status}, {rest_status}, "
         f"transport={args.transport}",
         file=sys.stderr,
     )
