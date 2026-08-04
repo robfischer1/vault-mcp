@@ -26,7 +26,7 @@ jobs:
       # Same digest, so the pin is unchanged.
       image: docker.notusmi.com/catthehacker/ubuntu:act-22.04@sha256:fc973df4b1bf8f6a4afef6e1c37feb51720cbbe0b6bc8be945292f86efe46d27   # glibc for the uv installer
     steps:
-      - uses: https://forgejo.notusmi.com/actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: https://forgejo.notusmi.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install uv
         env:
