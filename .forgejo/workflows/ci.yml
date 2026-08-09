@@ -24,7 +24,7 @@ jobs:
       # anonymous pull every run and hits the ~100/6h/IP cap -- which it did on
       # 2026-08-04, failing the gate before a single step ran (infra #1443).
       # Same digest, so the pin is unchanged.
-      image: docker.notusmi.com/catthehacker/ubuntu:act-22.04@sha256:fc973df4b1bf8f6a4afef6e1c37feb51720cbbe0b6bc8be945292f86efe46d27   # glibc for the uv installer
+      image: docker.notusmi.com/catthehacker/ubuntu:act-22.04@sha256:83f119b34d3e1e5417678a42ff3799e7e6ae4860d81141fcada039cbf13e7c5f   # glibc for the uv installer
     steps:
       - uses: https://forgejo.notusmi.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
