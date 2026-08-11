@@ -205,6 +205,33 @@ def read_document(
     )
 
 
+def read_document_by_source_path(
+    source_path: str,
+    *,
+    url: str,
+    token: str,
+    transport: Transport | None = None,
+) -> dict[str, Any]:
+    """Read the stored versions for one ``source_path`` from Calliope (F1).
+
+    The freshness leg's read. ``source_path`` — not the document id — is the
+    durable handle: the note-native store returns ``id: null`` for fresh writes
+    (the table's sequence died with it), so a plan's identity across versions is
+    its path. Calliope answers newest-first, so the caller takes ``[0]``.
+
+    Same contract as :func:`read_document`: ``{documents: [...]}`` on success (a
+    miss is an empty list), ``{ok: False, error}`` on any transport / tool
+    failure. Never raises across the boundary.
+    """
+    return call_verb(
+        "read_documents",
+        {"source_path": source_path},
+        url=url,
+        token=token,
+        transport=transport,
+    )
+
+
 def emit_session_event(
     payload: dict[str, Any],
     *,

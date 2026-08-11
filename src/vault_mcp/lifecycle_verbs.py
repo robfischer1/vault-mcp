@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
+from vault_mcp.plan_freshness import file_mtime_iso
 from vault_mcp.translator import (
     ENTITY_ENDPOINT,
     PLAN_ENDPOINT,
@@ -84,8 +85,15 @@ def dissolve_note(
     _ = (vault_rel_path, plan_slug, rationale, declared_by, repo)
     frontmatter = parse_frontmatter(raw_text)
     body = strip_frontmatter(raw_text)
+    # F2 — the store's clock is the source file's mtime, not the note's
+    # hand-maintained frontmatter `updated`. Resolved here (the caller holds
+    # the path); never raises, so a stat failure cannot fail the dissolve.
     payloads = note_to_payloads(
-        frontmatter, body, source_path, file_path=file_path
+        frontmatter,
+        body,
+        source_path,
+        file_path=file_path,
+        source_mtime=file_mtime_iso(file_path) if file_path else None,
     )
 
     # 1. Write every payload; verify each. Stop before delete on any failure.
