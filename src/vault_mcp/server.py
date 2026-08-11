@@ -2749,18 +2749,18 @@ def _plan_sweep(
     def _write(payload: dict[str, Any]) -> dict[str, Any]:
         return write_document(payload, url=f"{HADES_URL}/", token=HADES_TOKEN)
 
-    gate: Callable[[str], bool] | None = None
-    if cheap_gate:
-        root = str(VAULT_PATH.resolve())
+    root = str(VAULT_PATH.resolve())
 
-        def gate(p: str) -> bool:
-            # A path we have never resolved must be checked properly; the
-            # sweep then caches its clock for later ticks.
-            if p not in _PLAN_CLOCKS:
-                return True
-            return is_probably_stale(
-                p, vault_root=root, stored_mtime=_PLAN_CLOCKS[p]
-            )
+    def _gate(p: str) -> bool:
+        # A path we have never resolved must be checked properly; the sweep
+        # then caches its clock for later ticks.
+        if p not in _PLAN_CLOCKS:
+            return True
+        return is_probably_stale(
+            p, vault_root=root, stored_mtime=_PLAN_CLOCKS[p]
+        )
+
+    gate: Callable[[str], bool] | None = _gate if cheap_gate else None
 
     report = sweep_plans(
         list_files=_list,
