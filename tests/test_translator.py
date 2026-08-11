@@ -39,7 +39,12 @@ def test_plan_note_yields_document_only() -> None:
 
     doc = payloads[0]["payload"]
     assert doc["body_text"] == FENCED_BODY  # verbatim — no fence-extraction
-    assert doc["schema_type"] == "DigitalDocument"
+    # F3: `note_type` is authoritative and beats `@type`. PLAN_FM declares
+    # note_type: Plan alongside @type: DigitalDocument, so the stored label is
+    # now "Plan". This assertion previously read "DigitalDocument" — it was
+    # encoding the defect: every vault type flattened to the generic default,
+    # which is why read_documents(schema_type="Master-plan") answered [].
+    assert doc["schema_type"] == "Plan"
     assert doc["subject"] == "Roadmap Skill"
     assert doc["source_path"] == "/vault/Plans/Roadmap Skill.md"
 
@@ -256,3 +261,77 @@ def test_calliope_document_to_row_maps_title_to_subject() -> None:
 def test_calliope_document_to_row_prefers_subject_when_present() -> None:
     doc = {"subject": "Already-subject", "title": "fallback", "body_text": "x"}
     assert calliope_document_to_row(doc)["subject"] == "Already-subject"
+
+
+# ── F3: schema_type derives from note_type ──────────────────────────────────
+
+
+def _doc(fm: dict, body: str = "x") -> dict:
+    payloads = note_to_payloads(fm, body, "p.md")
+    return next(p["payload"] for p in payloads if p["endpoint"] == DOC_ENDPOINT)
+
+
+def test_master_plan_stores_its_vault_native_type() -> None:
+    """SC-001 — the headline defect. 135 WBS plans look like this."""
+    assert _doc({"note_type": "Master-plan"})["schema_type"] == "Master-plan"
+
+
+def test_note_type_beats_at_type() -> None:
+    """FR-002 — the note's own type field is authoritative."""
+    fm = {"note_type": "Master-plan", "@type": "CreativeWork"}
+    assert _doc(fm)["schema_type"] == "Master-plan"
+
+
+def test_at_type_is_the_fallback_when_note_type_absent() -> None:
+    """FR-002 — the generic field still works when note_type is missing."""
+    assert _doc({"@type": "CreativeWork"})["schema_type"] == "CreativeWork"
+
+
+def test_unknown_at_type_still_falls_back_to_the_default() -> None:
+    """The allowlist still guards free-form @type — only note_type bypasses it."""
+    assert _doc({"@type": "NotARealType"})["schema_type"] == "DigitalDocument"
+
+
+def test_no_declared_type_stores_the_default() -> None:
+    """FR-004."""
+    assert _doc({"title": "untyped"})["schema_type"] == "DigitalDocument"
+
+
+def test_vault_native_types_are_not_coerced() -> None:
+    """FR-003 — the point is to stop flattening, not to flatten a new set."""
+    for t in ("Master-plan", "Specification", "Handoff", "Design", "Plan"):
+        assert _doc({"note_type": t})["schema_type"] == t
+
+
+def test_note_type_does_not_change_entity_routing() -> None:
+    """FR-005 / SC-005 — labelling changed; routing deliberately did not.
+
+    A note declaring note_type: Book with no @type routed to the DOCUMENT
+    store before F3 and must still. Teaching _raw_type about note_type would
+    silently re-route notes into entity tables.
+    """
+    payloads = note_to_payloads({"note_type": "Book"}, "x", "b.md")
+    assert [p["endpoint"] for p in payloads] == [DOC_ENDPOINT]
+    assert payloads[0]["payload"]["schema_type"] == "Book"
+
+
+def test_entity_at_type_still_routes_to_entities() -> None:
+    """FR-005 — the existing entity route is untouched."""
+    payloads = note_to_payloads({"@type": "VideoGame"}, "x", "g.md")
+    assert [p["endpoint"] for p in payloads] == [ENTITY_ENDPOINT]
+
+
+def test_type_survives_the_dissolve_restore_round_trip() -> None:
+    """US3 — a master-plan restored from the store is still a master-plan.
+
+    row_to_payload maps note_type <- schema_type, so before F3 a dissolved
+    master-plan came back as note_type: DigitalDocument — a silent downgrade.
+    """
+    stored = _doc({"note_type": "Master-plan", "name": "A plan"})
+    row = {
+        "subject": stored["subject"],
+        "schema_type": stored["schema_type"],
+        "body_text": stored["body_text"],
+    }
+    restored = row_to_payload(row, "documents", directory="System/Pantheon/WBS")
+    assert restored["note_type"] == "Master-plan"

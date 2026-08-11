@@ -89,6 +89,32 @@ ENTITY_ENDPOINT = "/write/entity"
 
 
 def _schema_type(frontmatter: dict[str, Any]) -> str:
+    """Derive the stored type label for a note (F3).
+
+    ``note_type`` is authoritative and passes through VERBATIM. The vault
+    schema states it outright — "the Gate's ``note_type`` carries the @type
+    value" — so consulting it honours the existing convention rather than
+    inventing one. It is Gate-controlled (validated on write, driven by
+    ``vault-mcp.schema.yml``'s ``type_config``), which is why it does not need
+    the ``_DOC_SCHEMA_TYPES`` allowlist: that guard exists to stop a free-form
+    ``@type`` — which any note may set to anything — becoming a stored label,
+    and applying it here would merely re-flatten the vault-native types
+    (``Master-plan``, ``Specification``, …) this function exists to preserve.
+
+    Before F3 only ``@type``/``type`` were read, so all 135 WBS master-plans —
+    which declare ``note_type: Master-plan`` and no ``@type`` — fell through to
+    the ``DigitalDocument`` default, and ``read_documents(schema_type=
+    "Master-plan")`` answered ``[]``.
+
+    NOTE the deliberate asymmetry with :func:`_raw_type`, which decides entity
+    ROUTING and is **not** taught about ``note_type``: doing so would re-route
+    notes declaring ``note_type: Book`` from the document store into entity
+    tables. This function changes what a document is labelled, never where it
+    goes.
+    """
+    declared = frontmatter.get("note_type")
+    if declared:
+        return str(declared)
     at = frontmatter.get("@type") or frontmatter.get("type")
     return at if at in _DOC_SCHEMA_TYPES else "DigitalDocument"
 
