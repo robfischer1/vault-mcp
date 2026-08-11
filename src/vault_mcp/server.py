@@ -29,14 +29,14 @@ from typing import TYPE_CHECKING, Any, cast
 from mcp.server.fastmcp import Context, FastMCP
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
     from vault_mcp.gitops import GitCommitter
     from vault_mcp.lifecycle import Materializer
-    from vault_mcp.plan_freshness import StoredCopy
+    from vault_mcp.plan_freshness import PlanSweepReport, StoredCopy
     from vault_mcp.rest_client import ObsidianRESTClient
 
 from vault_mcp.bases import (
@@ -296,7 +296,35 @@ def _get_index() -> VaultIndex:
 
             _index.enable_watcher()
             _observer = start_watcher(_index)
+        _start_plan_reconcile_once()
     return _index
+
+
+#: F4 — the background re-dissolve loop, started once alongside the index.
+_plan_reconcile_thread: object | None = None
+
+
+def _start_plan_reconcile_once() -> None:
+    """Start the periodic plan reconcile (F4), at most once per process.
+
+    Deliberately NOT hung off the vault watcher: that fires on every ``.md``
+    save, so a plan edited over ten minutes would land ten stored versions and
+    an editor's autosave would land dozens — the store's history would become a
+    keystroke log. F2's clock made the periodic check cheap, so polling
+    debounces by construction and its cost does not scale with typing speed.
+
+    Skipped when ``HADES_URL`` is unset: without it the write leg would fall
+    back to the retired phdb route, so an enabled-but-unwired loop would log a
+    failure every tick forever.
+    """
+    global _plan_reconcile_thread
+    if _plan_reconcile_thread is not None or not HADES_URL:
+        return
+    from vault_mcp.plan_reconcile import start_plan_reconcile
+
+    _plan_reconcile_thread = start_plan_reconcile(
+        lambda: _plan_sweep(refresh=True, cheap_gate=True)
+    )
 
 
 # REST client (Phase 6)
@@ -2562,6 +2590,11 @@ def dissolve_sweep(
     return report.to_dict()
 
 
+#: F4 — {source_path: stored mtime}, populated by each sweep. Lets the periodic
+#: reconcile skip the store read for plans whose disk clock has not advanced.
+_PLAN_CLOCKS: dict[str, str] = {}
+
+
 def _plan_md_paths(directory: str) -> Iterator[str]:
     """Yield vault-relative POSIX paths of every ``.md`` under *directory*."""
     root = VAULT_PATH.resolve()
@@ -2589,10 +2622,12 @@ def _read_stored_copy(source_path: str) -> StoredCopy | None:
         return None
     newest = docs[0]  # Calliope answers newest-first
     body = newest.get("body_text") or ""
+    stored_mtime = newest.get("mtime")
     return StoredCopy(
         source_path=source_path,
         raw_hash=str(newest.get("raw_hash") or ""),
         body_bytes=len(body.encode("utf-8")),
+        mtime=str(stored_mtime) if stored_mtime else None,
     )
 
 
@@ -2675,9 +2710,30 @@ def plan_freshness(
         counts, records[]}``.
 
     """
+    return _plan_sweep(
+        refresh=refresh,
+        directory=directory,
+        source_path=source_path,
+        include_missing=include_missing,
+        backfill=backfill,
+        limit=limit,
+    ).to_dict()
+
+
+def _plan_sweep(
+    *,
+    refresh: bool = False,
+    directory: str = "System/Pantheon/WBS",
+    source_path: str | None = None,
+    include_missing: bool = False,
+    backfill: bool = False,
+    cheap_gate: bool = False,
+    limit: int | None = None,
+) -> PlanSweepReport:
+    """Configure and run one sweep — shared by the verb and F4's reconcile."""
     from vault_mcp.carve import carve_preflight
     from vault_mcp.hades_client import write_document
-    from vault_mcp.plan_freshness import sweep_plans
+    from vault_mcp.plan_freshness import is_probably_stale, sweep_plans
 
     pf = carve_preflight(hades_url=HADES_URL)
 
@@ -2693,6 +2749,19 @@ def plan_freshness(
     def _write(payload: dict[str, Any]) -> dict[str, Any]:
         return write_document(payload, url=f"{HADES_URL}/", token=HADES_TOKEN)
 
+    gate: Callable[[str], bool] | None = None
+    if cheap_gate:
+        root = str(VAULT_PATH.resolve())
+
+        def gate(p: str) -> bool:
+            # A path we have never resolved must be checked properly; the
+            # sweep then caches its clock for later ticks.
+            if p not in _PLAN_CLOCKS:
+                return True
+            return is_probably_stale(
+                p, vault_root=root, stored_mtime=_PLAN_CLOCKS[p]
+            )
+
     report = sweep_plans(
         list_files=_list,
         read_vault=_read_vault,
@@ -2703,10 +2772,21 @@ def plan_freshness(
         refresh=refresh,
         include_missing=include_missing,
         backfill=backfill,
+        cheap_gate=gate,
         limit=limit,
         preflight=pf.to_dict(),
     )
-    return report.to_dict()
+    # Cache each plan's stored clock so later reconcile ticks can skip the
+    # store read entirely. This cache is the ONLY thing that makes the
+    # periodic reconcile affordable: calliope has no index read by
+    # source_path — read_documents always materialises the body — so without
+    # it every tick would pull ~10MB.
+    for rec in report.records:
+        if not rec.gated and rec.stored_mtime is not None:
+            _PLAN_CLOCKS[rec.source_path] = rec.stored_mtime
+        elif rec.refreshed or rec.backfilled:
+            _PLAN_CLOCKS.pop(rec.source_path, None)
+    return report
 
 
 def _read_dissolved_row(table: str, row_id: int) -> dict[str, Any]:

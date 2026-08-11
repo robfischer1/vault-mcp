@@ -109,6 +109,8 @@ class StoredCopy:
     source_path: str
     raw_hash: str
     body_bytes: int | None = None
+    #: The stored source-clock (F2). Feeds F4's cheap gate across ticks.
+    mtime: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,10 +127,16 @@ class PlanDriftRecord:
     #: Full file size INCLUDING frontmatter — reported so the stripped-body
     #: number above is never mistaken for the size of the file on disk.
     vault_file_bytes: int | None = None
+    #: The stored source-clock read back, so a caller can cache it (F4).
+    stored_mtime: str | None = None
     refreshed: bool = False
     #: F2 — provenance was reconciled without a new body generation. Distinct
     #: from `refreshed`: the body did not change, only the stored attributes.
     backfilled: bool = False
+    #: F4 — `current` was concluded from the timestamp gate, NOT from a hash.
+    #: A gated record is an assumption, not a measurement; keeping the two
+    #: distinguishable is what stops a cheap sweep reading as an audit.
+    gated: bool = False
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -185,6 +193,32 @@ class PlanSweepReport:
         }
 
 
+def is_probably_stale(
+    source_path: str,
+    *,
+    vault_root: str,
+    stored_mtime: str | None,
+) -> bool:
+    """Decide cheaply whether a plan may be stale (F4) — one comparison.
+
+    F2 made this possible: the stored ``mtime`` is the source file's clock at
+    capture, ISO-8601 UTC at fixed precision, so ``>`` on the strings is a
+    correct ordering.
+
+    Deliberately **conservative in one direction**: an unknown stored clock or
+    an unstattable file answers ``True``, so the expensive hash check runs and
+    decides. This gate may say "stale" about an unchanged file — that costs one
+    wasted comparison. It must never say "current" about a changed one, because
+    only the hash suppresses a write.
+    """
+    if stored_mtime is None:
+        return True
+    disk = file_mtime_iso(f"{vault_root}/{source_path}")
+    if disk is None:
+        return True
+    return disk > stored_mtime
+
+
 def compare_plan(
     source_path: str,
     *,
@@ -212,6 +246,7 @@ def compare_plan(
             state=PlanDriftState.ORPHANED,
             stored_bytes=stored.body_bytes,
             stored_hash=stored.raw_hash,
+            stored_mtime=stored.mtime,
         )
 
     body = strip_frontmatter(vault_text)
@@ -247,6 +282,7 @@ def compare_plan(
         delta_bytes=delta,
         vault_hash=vhash,
         stored_hash=stored.raw_hash,
+        stored_mtime=stored.mtime,
         vault_file_bytes=vault_file_bytes,
     )
 
@@ -262,6 +298,7 @@ def sweep_plans(
     refresh: bool = False,
     include_missing: bool = False,
     backfill: bool = False,
+    cheap_gate: Callable[[str], bool] | None = None,
     limit: int | None = None,
     preflight: dict[str, Any] | None = None,
 ) -> PlanSweepReport:
@@ -315,6 +352,21 @@ def sweep_plans(
                     source_path=source_path,
                     state=PlanDriftState.ERROR,
                     error=f"vault read failed: {exc}",
+                )
+            )
+            continue
+
+        # F4's cheap gate: skip the store read entirely for plans whose disk
+        # clock says nothing changed. Without it the reconcile loop would pull
+        # every stored body (~10MB) on every tick. It only ever skips work,
+        # never writes — and the record is marked `gated` so a report never
+        # claims a hash-verified `current` it did not actually check.
+        if cheap_gate is not None and not cheap_gate(source_path):
+            report.records.append(
+                PlanDriftRecord(
+                    source_path=source_path,
+                    state=PlanDriftState.CURRENT,
+                    gated=True,
                 )
             )
             continue
