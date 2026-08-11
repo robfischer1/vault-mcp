@@ -396,3 +396,135 @@ def test_report_dict_shape() -> None:
         "orphaned",
         "error",
     }
+
+
+# ── F2: the source-modification clock ───────────────────────────────────────
+
+
+def test_file_mtime_iso_is_utc_second_precision(tmp_path: Path) -> None:
+    """FR-004 — timezone-explicit, fixed precision, lexicographically ordered."""
+    from vault_mcp.plan_freshness import file_mtime_iso
+
+    f = tmp_path / "n.md"
+    f.write_text("x", encoding="utf-8")
+    got = file_mtime_iso(f)
+    assert got is not None
+    assert got.endswith("Z")
+    assert len(got) == len("2026-08-11T21:22:29Z")
+
+
+def test_file_mtime_iso_returns_none_instead_of_raising() -> None:
+    """FR-007 — a stat failure must never fail a dissolve."""
+    from vault_mcp.plan_freshness import file_mtime_iso
+
+    assert file_mtime_iso("/nonexistent/nope.md") is None
+    assert file_mtime_iso("") is None
+
+
+def test_file_mtime_beats_frontmatter_updated() -> None:
+    """FR-002 / SC-004 — the mechanical clock wins over the declared one."""
+    from vault_mcp.translator import DOC_ENDPOINT, note_to_payloads
+
+    fm = {"updated": "2026-07-24", "title": "A plan"}
+    pls = note_to_payloads(
+        fm, BODY, "p.md", source_mtime="2026-08-11T21:22:29Z"
+    )
+    doc = next(p["payload"] for p in pls if p["endpoint"] == DOC_ENDPOINT)
+    assert doc["mtime"] == "2026-08-11T21:22:29Z"
+
+
+def test_frontmatter_updated_is_the_fallback() -> None:
+    """FR-003 rung 2 — no file time, but a declared one."""
+    from vault_mcp.translator import DOC_ENDPOINT, note_to_payloads
+
+    pls = note_to_payloads({"updated": "2026-07-24"}, BODY, "p.md")
+    doc = next(p["payload"] for p in pls if p["endpoint"] == DOC_ENDPOINT)
+    assert doc["mtime"] == "2026-07-24"
+
+
+def test_no_clock_at_all_omits_the_key() -> None:
+    """FR-003 rung 3 — absent means unset, never a fabricated value."""
+    from vault_mcp.translator import DOC_ENDPOINT, note_to_payloads
+
+    pls = note_to_payloads({}, BODY, "p.md")
+    doc = next(p["payload"] for p in pls if p["endpoint"] == DOC_ENDPOINT)
+    assert "mtime" not in doc
+
+
+def test_omitting_source_mtime_is_backwards_compatible() -> None:
+    """The new parameter is additive — existing callers behave as before."""
+    from vault_mcp.translator import DOC_ENDPOINT, note_to_payloads
+
+    fm = {"updated": "2026-07-24", "created": "2026-07-04"}
+    before = next(
+        p["payload"]
+        for p in note_to_payloads(fm, BODY, "p.md")
+        if p["endpoint"] == DOC_ENDPOINT
+    )
+    assert before["mtime"] == "2026-07-24"
+    assert before["ctime"] == "2026-07-04"
+
+
+def test_backfill_reconciles_current_plan_without_new_version() -> None:
+    """F2 backfill — a current plan is re-sent for provenance only."""
+    body = _stripped(RAW)
+    stored = {
+        "p.md": StoredCopy(
+            "p.md", raw_hash=body_hash(body), body_bytes=len(body)
+        )
+    }
+    w = _Writer()
+
+    def read_stored(p: str) -> StoredCopy | None:
+        return stored.get(p)
+
+    report = sweep_plans(
+        list_files=lambda _d: ["p.md"],
+        read_vault=lambda _p: RAW,
+        read_stored=read_stored,
+        build_payload=_payload,
+        write_stored=w,
+        backfill=True,
+    )
+    rec = report.records[0]
+    assert len(w.calls) == 1
+    assert rec.state is PlanDriftState.CURRENT
+    assert rec.backfilled is True
+    assert rec.refreshed is False, "a backfill is not a body refresh"
+    assert report.backfilled == 1
+    assert report.refreshed == 0
+
+
+def test_refresh_still_never_writes_a_current_plan_when_backfill_is_off() -> (
+    None
+):
+    """G-3 stays literally true — backfill is a separate mode, not a widening."""
+    body = _stripped(RAW)
+    report, writer = _sweep(
+        {"p.md": RAW},
+        {
+            "p.md": StoredCopy(
+                "p.md", raw_hash=body_hash(body), body_bytes=len(body)
+            )
+        },
+        refresh=True,
+    )
+    assert writer.calls == []
+    assert report.records[0].backfilled is False
+
+
+def test_backfill_failure_is_reported_per_plan() -> None:
+    """A failed backfill becomes an error record, not a crash."""
+    body = _stripped(RAW)
+    report = sweep_plans(
+        list_files=lambda _d: ["p.md"],
+        read_vault=lambda _p: RAW,
+        read_stored=lambda _p: StoredCopy(
+            "p.md", raw_hash=body_hash(body), body_bytes=len(body)
+        ),
+        build_payload=_payload,
+        write_stored=lambda _p: {"ok": False, "error": "nope"},
+        backfill=True,
+    )
+    assert report.records[0].state is PlanDriftState.ERROR
+    assert "nope" in (report.records[0].error or "")

@@ -120,6 +120,7 @@ def note_to_payloads(
     source_path: str,
     *,
     file_path: str | None = None,
+    source_mtime: str | None = None,
 ) -> list[dict[str, Any]]:
     """Translate one parsed note into the typed-write payloads phdb expects.
 
@@ -128,6 +129,15 @@ def note_to_payloads(
     payload carrying the body verbatim. A ``Plan`` note additionally emits a
     ``plans`` metadata payload.
     Returns ``[{"endpoint": str, "payload": dict}, ...]`` in write order.
+
+    ``source_mtime`` (F2) is the source file's modification time, resolved by
+    the caller (which holds the path; this function stays pure and never stats).
+    It is rung 1 of the ``mtime`` fallback chain and beats the frontmatter's
+    ``updated`` even when both are present: the filesystem time is mechanical,
+    the declared one is hand-maintained and drifts. Measured 2026-08-11 — the
+    Aglaia master-plan declares ``updated: 2026-07-24`` while the file was last
+    written ``2026-08-11 17:22``. Omitting it reproduces the pre-F2 behaviour
+    exactly, so callers are unaffected until updated.
     """
     raw_at = _raw_type(frontmatter)
 
@@ -152,10 +162,14 @@ def note_to_payloads(
         "subject": _subject(frontmatter),
         "file_path": file_path,
     }
+    # F2 — the mtime fallback chain, ordered and total:
+    #   1. the source file's mtime (mechanical)  2. frontmatter `updated`
+    #   (declared, hand-maintained)              3. absent (unset, not "")
     fm_updated = frontmatter.get("updated")
+    mtime = source_mtime or (str(fm_updated) if fm_updated else None)
+    if mtime:
+        doc_payload["mtime"] = mtime
     fm_created = frontmatter.get("created")
-    if fm_updated:
-        doc_payload["mtime"] = str(fm_updated)
     if fm_created:
         doc_payload["ctime"] = str(fm_created)
 

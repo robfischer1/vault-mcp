@@ -40,8 +40,10 @@ size is reported alongside so the two numbers are never confused.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -64,6 +66,35 @@ class PlanDriftState(StrEnum):
 def body_hash(body: str) -> str:
     """Hash a stripped body the way the store does — sha256 over UTF-8."""
     return sha256(body.encode("utf-8")).hexdigest()
+
+
+def file_mtime_iso(path: str | Path) -> str | None:
+    """Read the source file's modification time as ISO-8601 UTC (F2).
+
+    Rung 1 of the mtime fallback chain: the *mechanical* clock. Preferred over
+    the note's frontmatter ``updated``, which is hand-maintained and drifts —
+    measured 2026-08-11, the Aglaia plan declares ``updated: 2026-07-24`` while
+    the file was last written ``2026-08-11 17:22``.
+
+    Never raises: a missing, unreadable or unstattable path answers ``None`` so
+    a stat failure can never fail a dissolve (FR-007).
+
+    Second precision, ``Z``-suffixed, so values are timezone-explicit and
+    lexicographically ordered — staleness is then a string comparison.
+    """
+    if not path:
+        # Path("") resolves to the CWD, which stats fine — that would silently
+        # stamp a note with the current directory's mtime. Refuse it.
+        return None
+    try:
+        ts = Path(path).stat().st_mtime
+    except (OSError, ValueError):
+        return None
+    return (
+        datetime.fromtimestamp(ts, tz=UTC)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
 
 
 @dataclass(frozen=True)
@@ -95,6 +126,9 @@ class PlanDriftRecord:
     #: number above is never mistaken for the size of the file on disk.
     vault_file_bytes: int | None = None
     refreshed: bool = False
+    #: F2 — provenance was reconciled without a new body generation. Distinct
+    #: from `refreshed`: the body did not change, only the stored attributes.
+    backfilled: bool = False
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -124,6 +158,11 @@ class PlanSweepReport:
         return sum(1 for r in self.records if r.refreshed)
 
     @property
+    def backfilled(self) -> int:
+        """How many stored copies had provenance reconciled without a new body."""
+        return sum(1 for r in self.records if r.backfilled)
+
+    @property
     def counts(self) -> dict[str, int]:
         """Per-state totals, derived from ``records`` — one source of truth."""
         out = {s.value: 0 for s in PlanDriftState}
@@ -139,6 +178,7 @@ class PlanSweepReport:
             "directory": self.directory,
             "scanned": self.scanned,
             "refreshed": self.refreshed,
+            "backfilled": self.backfilled,
             "counts": self.counts,
             **({"preflight": self.preflight} if self.preflight else {}),
             "records": [r.to_dict() for r in self.records],
@@ -221,15 +261,25 @@ def sweep_plans(
     directory: str = DEFAULT_PLAN_DIRECTORY,
     refresh: bool = False,
     include_missing: bool = False,
+    backfill: bool = False,
     limit: int | None = None,
     preflight: dict[str, Any] | None = None,
 ) -> PlanSweepReport:
     """Compare every plan under *directory*; optionally refresh the stale ones.
 
-    Report-only unless ``refresh=True``. A ``current`` plan is never written,
-    even when refreshing — the master-plan's second Scope clause ("already
-    current → no-op") is an invariant here, not an optimisation. A single plan's
-    failure becomes an ``error`` record and the sweep continues (FR-007).
+    Report-only unless ``refresh=True``. A ``current`` plan is never written by
+    a refresh — the master-plan's second Scope clause ("already current →
+    no-op") is an invariant here, not an optimisation. A single plan's failure
+    becomes an ``error`` record and the sweep continues (FR-007).
+
+    ``backfill`` (F2) is a SEPARATE mode that re-sends a ``current`` plan's
+    payload to reconcile its stored provenance — Calliope's sink runs
+    ``reconcileAttrs`` unconditionally, after its body-dedup check, so an
+    identical body writes no new generation (``generation: "nooped"``) while the
+    attributes are corrected. It is kept distinct from ``refresh`` precisely so
+    the refresh guarantee stays literally true: ``refresh`` never writes a
+    ``current`` plan, and a caller asking for a body repair never silently gets
+    a provenance rewrite.
 
     ``refresh`` repairs **drift only** — a plan whose stored copy exists and has
     fallen behind. It deliberately does NOT write plans in the ``missing``
@@ -245,7 +295,9 @@ def sweep_plans(
     file text.
     """
     report = PlanSweepReport(
-        dry_run=not refresh, directory=directory, preflight=preflight
+        dry_run=not (refresh or backfill),
+        directory=directory,
+        preflight=preflight,
     )
     if preflight is not None and not preflight.get("ok"):
         return report
@@ -286,6 +338,13 @@ def sweep_plans(
             writable.add(PlanDriftState.MISSING)
         if refresh and record.state in writable:
             record = _refresh_one(
+                record,
+                raw=raw,
+                build_payload=build_payload,
+                write_stored=write_stored,
+            )
+        elif backfill and record.state is PlanDriftState.CURRENT:
+            record = _backfill_one(
                 record,
                 raw=raw,
                 build_payload=build_payload,
@@ -334,3 +393,36 @@ def _refresh_one(
         delta_bytes=0,
         refreshed=True,
     )
+
+
+def _backfill_one(
+    record: PlanDriftRecord,
+    *,
+    raw: str,
+    build_payload: Callable[[str, str], dict[str, Any]],
+    write_stored: Callable[[dict[str, Any]], dict[str, Any]],
+) -> PlanDriftRecord:
+    """Reconcile one CURRENT plan's stored provenance (F2) — no new body.
+
+    Calliope's sink dedups the body but reconciles attributes unconditionally,
+    so re-sending an identical body corrects `mtime` / `schema_type` without
+    minting a generation. The record stays ``current``; only ``backfilled``
+    flips, so the two kinds of write are never conflated in the report.
+    """
+    from dataclasses import replace
+
+    try:
+        result = write_stored(build_payload(record.source_path, raw))
+    except Exception as exc:  # noqa: BLE001 - one plan must not abort the sweep
+        return replace(
+            record, state=PlanDriftState.ERROR, error=f"backfill raised: {exc}"
+        )
+
+    if not result.get("ok"):
+        return replace(
+            record,
+            state=PlanDriftState.ERROR,
+            error=f"backfill failed: {result.get('error', 'unknown')}",
+        )
+
+    return replace(record, backfilled=True)

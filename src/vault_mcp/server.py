@@ -2604,13 +2604,18 @@ def _build_plan_payload(source_path: str, raw_text: str) -> dict[str, Any]:
     are untouched by either.
     """
     from vault_mcp.parsers import parse_frontmatter, strip_frontmatter
+    from vault_mcp.plan_freshness import file_mtime_iso
     from vault_mcp.translator import DOC_ENDPOINT, note_to_payloads
 
     frontmatter = parse_frontmatter(raw_text)
     body = strip_frontmatter(raw_text)
     file_path = str(VAULT_PATH.resolve() / source_path)
     payloads = note_to_payloads(
-        frontmatter, body, source_path, file_path=file_path
+        frontmatter,
+        body,
+        source_path,
+        file_path=file_path,
+        source_mtime=file_mtime_iso(file_path),
     )
     doc = next(
         (p["payload"] for p in payloads if p["endpoint"] == DOC_ENDPOINT), None
@@ -2627,6 +2632,7 @@ def plan_freshness(
     directory: str = "System/Pantheon/WBS",
     source_path: str | None = None,
     include_missing: bool = False,
+    backfill: bool = False,
     limit: int | None = None,
 ) -> dict[str, Any]:
     """Report (and optionally repair) drift between vault plans and their stored copies.
@@ -2660,6 +2666,8 @@ def plan_freshness(
         directory: Vault-relative directory to sweep.
         source_path: Sweep exactly this one plan instead of the directory.
         include_missing: Also write plans with no stored copy (populate).
+        backfill: Reconcile provenance (mtime / schema_type) on plans whose
+            body is already current, without minting a new body version.
         limit: Cap the number of plans acted on.
 
     Returns:
@@ -2694,6 +2702,7 @@ def plan_freshness(
         directory=directory,
         refresh=refresh,
         include_missing=include_missing,
+        backfill=backfill,
         limit=limit,
         preflight=pf.to_dict(),
     )
