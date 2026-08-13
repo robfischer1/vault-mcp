@@ -31,6 +31,21 @@ Transport = Callable[[str, dict[str, str], dict[str, Any]], tuple[int, str]]
 
 _PROTOCOL_VERSION = "2024-11-05"
 
+#: Calliope's document verbs, STAR-PREFIXED.
+#:
+#: The U6 data.fleet cutover namespaced every gateway verb by its star, and
+#: these three call sites were never migrated — so every vault->store write
+#: from this process has failed since, with ``unknown verb "read_documents"``.
+#: Measured 2026-08-13: a `plan_freshness` sweep of 176 WBS plans returned 176
+#: errors and zero reads, and Calliope holds copies of exactly 3 plans, all of
+#: them written before the cutover. The failure was invisible because
+#: ``call_verb`` never raises across the boundary — it maps the refusal to
+#: ``{ok: False, error}``, which the callers record per-plan and continue past.
+#:
+#: Named constants rather than literals so the next rename greps to one place.
+_VERB_WRITE_DOCUMENT = "calliope_write_document"
+_VERB_READ_DOCUMENTS = "calliope_read_documents"
+
 
 def _default_transport(
     url: str, headers: dict[str, str], body: dict[str, Any]
@@ -173,7 +188,7 @@ def write_document(
     """
     args = {k: v for k, v in payload.items() if v is not None}
     return call_verb(
-        "write_document",
+        _VERB_WRITE_DOCUMENT,
         args,
         url=url,
         token=token,
@@ -197,7 +212,7 @@ def read_document(
     failure. ``call_verb`` never raises across the boundary.
     """
     return call_verb(
-        "read_documents",
+        _VERB_READ_DOCUMENTS,
         {"id": doc_id},
         url=url,
         token=token,
@@ -224,7 +239,7 @@ def read_document_by_source_path(
     failure. Never raises across the boundary.
     """
     return call_verb(
-        "read_documents",
+        _VERB_READ_DOCUMENTS,
         {"source_path": source_path},
         url=url,
         token=token,

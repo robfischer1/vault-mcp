@@ -15,6 +15,8 @@ from vault_mcp.hades_client import (
     emit_session_event,
     parse_tool_result,
     read_document,
+    read_document_by_source_path,
+    write_document,
     write_entity_typed,
 )
 
@@ -196,8 +198,53 @@ def test_read_document_calls_calliope_read_documents_by_id() -> None:
     out = read_document(42, url="http://h/mcp/", token="t", transport=transport)
     assert out["documents"][0]["id"] == 42
     _, call_body = transport.calls[1]
-    assert call_body["params"]["name"] == "read_documents"
+    assert call_body["params"]["name"] == "calliope_read_documents"
     assert call_body["params"]["arguments"] == {"id": 42}
+
+
+def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
+    """The U6 cutover's names, pinned at all three call sites.
+
+    This is the regression that shipped: the gateway namespaced its verbs by
+    star and these callers kept the bare ones, so every vault->store read and
+    write returned ``unknown verb`` — invisibly, because ``call_verb`` maps a
+    refusal to ``{ok: False, error}`` rather than raising. Measured 2026-08-13:
+    a sweep of 176 WBS plans produced 176 errors and zero reads.
+
+    The old test asserted ``"read_documents"`` while being NAMED for the
+    prefixed verb, so the suite was green the entire time. Asserting every call
+    site here is what makes that failure mode impossible to reintroduce one
+    function at a time.
+    """
+    seen: dict[str, str] = {}
+
+    def record() -> FakeTransport:
+        return FakeTransport(_ok_pair({"structuredContent": {}, "content": []}))
+
+    t_write = record()
+    write_document(
+        {"source_path": "a.md", "body_text": "x"},
+        url="http://h/mcp/",
+        token="t",
+        transport=t_write,
+    )
+    seen["write_document"] = t_write.calls[1][1]["params"]["name"]
+
+    t_by_id = record()
+    read_document(1, url="http://h/mcp/", token="t", transport=t_by_id)
+    seen["read_document"] = t_by_id.calls[1][1]["params"]["name"]
+
+    t_by_path = record()
+    read_document_by_source_path(
+        "a.md", url="http://h/mcp/", token="t", transport=t_by_path
+    )
+    seen["read_document_by_source_path"] = t_by_path.calls[1][1]["params"]["name"]
+
+    assert seen == {
+        "write_document": "calliope_write_document",
+        "read_document": "calliope_read_documents",
+        "read_document_by_source_path": "calliope_read_documents",
+    }
 
 
 def test_read_document_transport_fault_never_raises() -> None:
