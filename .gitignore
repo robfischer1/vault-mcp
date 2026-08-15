@@ -22,3 +22,7 @@ build/
 # Test coverage
 .coverage
 htmlcov/
+
+# spec-kit session state — which feature this checkout is on, set by
+# create-new-feature / SPECIFY_FEATURE; regenerated locally, never shared
+.specify/feature.json
