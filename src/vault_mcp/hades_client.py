@@ -43,8 +43,14 @@ _PROTOCOL_VERSION = "2024-11-05"
 #: ``{ok: False, error}``, which the callers record per-plan and continue past.
 #:
 #: Named constants rather than literals so the next rename greps to one place.
-_VERB_WRITE_DOCUMENT = "calliope_write_document"
-_VERB_READ_DOCUMENTS = "calliope_read_documents"
+#:
+#: F10 (Git for Ideas): the document family is GONE from the live surface —
+#: the vault rides the ``_note`` container family instead. The write is
+#: ``dissolve_note`` (calliope's non-destructive store write; the vault-side
+#: delete stays vault-mcp's own step in lifecycle_verbs), the read is
+#: ``materialize_note`` (one note by source_path: blocks + provenance).
+_VERB_DISSOLVE_NOTE = "calliope_dissolve_note"
+_VERB_MATERIALIZE_NOTE = "calliope_materialize_note"
 
 
 def _default_transport(
@@ -178,22 +184,74 @@ def write_document(
     token: str,
     transport: Transport | None = None,
 ) -> dict[str, Any]:
-    """Route one ``/write/document`` payload to Calliope's ``write_document``.
+    """Route one ``/write/document`` payload onto ``dissolve_note`` (F10).
 
-    The payload shape is the phdb HTTP contract the translator already
-    emits — ``{source_path, body_text, schema_type?, subject?, file_path?,
-    mtime?, ctime?}`` — and the Calliope verb takes exactly those parameters
-    (C3, the prose strangle), so this is a passthrough. ``None`` values are
-    dropped: the verb's optional fields are absent-or-string.
+    The payload keeps the phdb HTTP contract the translator emits —
+    ``{source_path, body_text, schema_type?, subject?, file_path?, mtime?,
+    ctime?}`` — and maps onto the ``_note`` container write: the whole body
+    is ONE block (blocks are authored, never inferred — the 0.14
+    de-inference rule), ``subject`` is the display title, and the
+    provenance fields cross verbatim. The verb is non-destructive by
+    construction; the vault-side delete stays :mod:`lifecycle_verbs`' own
+    step, which is exactly the split the plan-freshness reconcile needs.
+
+    The result is normalized back to the shape this seam always answered:
+    ``{ok: True, table, id, deduped}`` on success (``deduped`` = the
+    container-grain no-op — identical content wrote nothing), or the
+    untouched ``{ok: False, error}``.
     """
-    args = {k: v for k, v in payload.items() if v is not None}
-    return call_verb(
-        _VERB_WRITE_DOCUMENT,
+    args: dict[str, Any] = {
+        "source_path": payload.get("source_path"),
+        "blocks": [{"text": payload.get("body_text") or ""}],
+        "title": payload.get("subject"),
+        "schema_type": payload.get("schema_type"),
+        "file_path": payload.get("file_path"),
+        "mtime": payload.get("mtime"),
+        "ctime": payload.get("ctime"),
+        "raw_hash": payload.get("raw_hash"),
+    }
+    args = {k: v for k, v in args.items() if v is not None}
+    res = call_verb(
+        _VERB_DISSOLVE_NOTE,
         args,
         url=url,
         token=token,
         transport=transport,
     )
+    if res.get("ok") is False:
+        return res
+    return {
+        "ok": True,
+        "table": "notes",
+        "id": res.get("node_id"),
+        "deduped": res.get("generation") == "nooped",
+        "generation": res.get("generation"),
+    }
+
+
+def _note_to_document_row(res: dict[str, Any]) -> dict[str, Any]:
+    """Project one ``materialize_note`` answer onto the documents-row shape.
+
+    The consumers (StoredCopy, the un-dissolve mapper) read
+    ``{body_text, raw_hash, mtime, schema_type, subject, source_path}`` —
+    all served by the note's blocks (joined on the markdown separator, the
+    sink's own projection rule) and provenance attributes.
+    """
+    blocks = res.get("blocks") or []
+    provenance = res.get("provenance") or {}
+    return {
+        "id": res.get("container_id"),
+        "source_path": provenance.get("source_path"),
+        "body_text": "\n\n".join(
+            str(b.get("text") or "") for b in blocks if isinstance(b, dict)
+        ),
+        "raw_hash": provenance.get("raw_hash"),
+        "mtime": provenance.get("mtime"),
+        "ctime": provenance.get("ctime"),
+        "schema_type": provenance.get("schema_type"),
+        "subject": provenance.get("title"),
+        "source_kind": provenance.get("source_kind"),
+    }
 
 
 def read_document(
@@ -203,21 +261,25 @@ def read_document(
     token: str,
     transport: Transport | None = None,
 ) -> dict[str, Any]:
-    """Read one dissolved document back from Calliope's ``read_documents`` (C6).
+    """Read one dissolved note back by container id (F10: ``materialize_note``).
 
-    The reverse (materialize / un-dissolve) leg: it reads the go-forward prose
-    store — **Calliope**, not the retired phdb — so un-dissolve is symmetric
-    with dissolve. Returns the star's ``{documents: [...]}`` contract on success
-    (a miss is an empty list) or ``{ok: False, error}`` on any transport / tool
-    failure. ``call_verb`` never raises across the boundary.
+    The reverse (materialize / un-dissolve) leg, on the ``_note`` container
+    surface. Answers the ``{documents: [...]}`` projection the consumers
+    always read (a miss is an empty list); ``{ok: False, error}`` on any
+    transport / tool failure. Never raises across the boundary.
     """
-    return call_verb(
-        _VERB_READ_DOCUMENTS,
-        {"id": doc_id},
+    res = call_verb(
+        _VERB_MATERIALIZE_NOTE,
+        {"container_id": str(doc_id)},
         url=url,
         token=token,
         transport=transport,
     )
+    if res.get("ok") is False:
+        if "container_not_found" in str(res.get("error", "")):
+            return {"documents": []}
+        return res
+    return {"documents": [_note_to_document_row(res)]}
 
 
 def read_document_by_source_path(
@@ -227,24 +289,27 @@ def read_document_by_source_path(
     token: str,
     transport: Transport | None = None,
 ) -> dict[str, Any]:
-    """Read the stored versions for one ``source_path`` from Calliope (F1).
+    """Read the stored copy for one ``source_path`` (F10: ``materialize_note``).
 
-    The freshness leg's read. ``source_path`` — not the document id — is the
-    durable handle: the note-native store returns ``id: null`` for fresh writes
-    (the table's sequence died with it), so a plan's identity across versions is
-    its path. Calliope answers newest-first, so the caller takes ``[0]``.
-
-    Same contract as :func:`read_document`: ``{documents: [...]}`` on success (a
-    miss is an empty list), ``{ok: False, error}`` on any transport / tool
-    failure. Never raises across the boundary.
+    The freshness leg's read, on the ``_note`` container surface.
+    ``source_path`` is the durable handle (the note's identity name). The
+    answer keeps the ``{documents: [...]}`` projection the caller reads —
+    the newest (and only) materialized state first; a
+    ``container_not_found`` miss is an empty list. Never raises across the
+    boundary.
     """
-    return call_verb(
-        _VERB_READ_DOCUMENTS,
+    res = call_verb(
+        _VERB_MATERIALIZE_NOTE,
         {"source_path": source_path},
         url=url,
         token=token,
         transport=transport,
     )
+    if res.get("ok") is False:
+        if "container_not_found" in str(res.get("error", "")):
+            return {"documents": []}
+        return res
+    return {"documents": [_note_to_document_row(res)]}
 
 
 def emit_session_event(

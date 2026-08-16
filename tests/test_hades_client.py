@@ -179,27 +179,85 @@ def test_write_entity_typed_maps_the_phdb_payload() -> None:
     )
 
 
-# -- read_document (the C6 reverse / materialize leg) ---------------------------
+# -- read_document (the materialize leg — F10: the _note container surface) ----
 
 
-def test_read_document_calls_calliope_read_documents_by_id() -> None:
+def test_read_document_materializes_by_container_id() -> None:
     transport = FakeTransport(
         _ok_pair(
             {
                 "structuredContent": {
-                    "documents": [
-                        {"id": 42, "title": "Idea", "body_text": "the prose"}
-                    ]
+                    "container_id": "42",
+                    "blocks": [
+                        {"id": "s1", "text": "the prose", "orderKey": "a0"}
+                    ],
+                    "tags": [],
+                    "provenance": {
+                        "source_path": "Ideas/Idea.md",
+                        "raw_hash": "h1",
+                        "mtime": "2026-08-10T00:00:00Z",
+                        "schema_type": "Note",
+                        "title": "Idea",
+                    },
                 },
                 "content": [],
             }
         )
     )
     out = read_document(42, url="http://h/mcp/", token="t", transport=transport)
-    assert out["documents"][0]["id"] == 42
+    doc = out["documents"][0]
+    assert doc["id"] == "42"
+    assert doc["body_text"] == "the prose"
+    assert doc["raw_hash"] == "h1"
+    assert doc["schema_type"] == "Note"
+    assert doc["subject"] == "Idea"
     _, call_body = transport.calls[1]
-    assert call_body["params"]["name"] == "calliope_read_documents"
-    assert call_body["params"]["arguments"] == {"id": 42}
+    assert call_body["params"]["name"] == "calliope_materialize_note"
+    assert call_body["params"]["arguments"] == {"container_id": "42"}
+
+
+def test_read_document_joins_blocks_on_the_markdown_separator() -> None:
+    transport = FakeTransport(
+        _ok_pair(
+            {
+                "structuredContent": {
+                    "container_id": "7",
+                    "blocks": [
+                        {"id": "s1", "text": "one", "orderKey": "a0"},
+                        {"id": "s2", "text": "two", "orderKey": "a1"},
+                    ],
+                    "tags": [],
+                    "provenance": {"source_path": "a.md"},
+                },
+                "content": [],
+            }
+        )
+    )
+    out = read_document(7, url="http://h/mcp/", token="t", transport=transport)
+    assert out["documents"][0]["body_text"] == "one\n\ntwo"
+
+
+def test_read_document_miss_is_an_empty_list() -> None:
+    transport = FakeTransport(
+        _ok_pair(
+            {
+                "structuredContent": {
+                    "error": "container_not_found",
+                    "detail": "nope.md",
+                },
+                # The wire's isError text carries the error prefix — this is
+                # what parse_tool_result maps into {ok: False, error}.
+                "content": [
+                    {"type": "text", "text": "container_not_found: nope.md"}
+                ],
+                "isError": True,
+            }
+        )
+    )
+    out = read_document_by_source_path(
+        "nope.md", url="http://h/mcp/", token="t", transport=transport
+    )
+    assert out == {"documents": []}
 
 
 def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
@@ -241,9 +299,9 @@ def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
     seen["read_document_by_source_path"] = t_by_path.calls[1][1]["params"]["name"]
 
     assert seen == {
-        "write_document": "calliope_write_document",
-        "read_document": "calliope_read_documents",
-        "read_document_by_source_path": "calliope_read_documents",
+        "write_document": "calliope_dissolve_note",
+        "read_document": "calliope_materialize_note",
+        "read_document_by_source_path": "calliope_materialize_note",
     }
 
 

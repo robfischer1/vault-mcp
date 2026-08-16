@@ -1857,22 +1857,24 @@ def list_dissolution_waves(
                 "(the phdb.dissolutions registry is retired). Set HADES_URL."
             ),
         }
-    from vault_mcp.carve import documents_to_waves
-    from vault_mcp.hades_client import call_verb
-
-    res = call_verb(
-        "read_documents",
-        {"limit": limit, "omit_body": True},
-        url=f"{HADES_URL}/",
-        token=HADES_TOKEN,
-    )
-    if res.get("ok") is False:
-        return {
-            "error": "calliope_read_failed",
-            "detail": str(res.get("error")),
-        }
-    waves = documents_to_waves(res.get("documents") or [])
-    return {"count": len(waves), "waves": waves}
+    # F10 (Git for Ideas): the document family is gone from the live
+    # surface, and the note-native store has no bulk enumeration verb —
+    # the master plan's surfaced gap ("read_documents(schema_type=...)
+    # ... becomes a graph query, and that query needs a shape"). This
+    # browse is ALREADY de-tooled (C5); until the graph query exists it
+    # answers the honest gap instead of a phantom empty list.
+    _ = limit
+    return {
+        "error": "enumeration_gap",
+        "detail": (
+            "bulk dissolution browse has no successor yet: the _note "
+            "container surface reads one note by source_path "
+            "(materialize_note); enumerating all dissolved notes becomes "
+            "a graph query that needs a registered shape (Git for Ideas "
+            "F10, surfaced gap). Per-note reads work; the wave browse "
+            "waits on the shape."
+        ),
+    }
 
 
 # RETIRED 2026-07-04 (C5): de-tooled (see dissolution_lookup).
