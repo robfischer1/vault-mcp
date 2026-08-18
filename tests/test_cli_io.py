@@ -61,7 +61,7 @@ class FakeCLI:
 class TestObsidianNoteIO:
     def test_create_invokes_eval(self):
         cli = FakeCLI({"ok": True, "data": WRITE_OK_SENTINEL})
-        io = ObsidianNoteIO(cli)  # type: ignore[arg-type]
+        io = ObsidianNoteIO(cli)
         io.create_note("Notes/x.md", "body")
         assert len(cli.calls) == 1
         assert "app.vault.create(" in cli.calls[0]
@@ -69,19 +69,19 @@ class TestObsidianNoteIO:
     def test_silent_noop_write_raises(self):
         # Exit-0 with no sentinel (e.g. the GUI launcher) must NOT look like success.
         cli = FakeCLI({"ok": True, "data": ""})
-        io = ObsidianNoteIO(cli)  # type: ignore[arg-type]
+        io = ObsidianNoteIO(cli)
         with pytest.raises(ObsidianIOError) as exc:
             io.create_note("Notes/x.md", "body")
         assert "not confirmed" in str(exc.value)
 
     def test_read_returns_data(self):
         cli = FakeCLI({"ok": True, "data": "file contents"})
-        io = ObsidianNoteIO(cli)  # type: ignore[arg-type]
+        io = ObsidianNoteIO(cli)
         assert io.read_note("a.md") == "file contents"
 
     def test_failed_eval_raises(self):
         cli = FakeCLI({"ok": False, "error": "cli_error", "detail": "boom"})
-        io = ObsidianNoteIO(cli)  # type: ignore[arg-type]
+        io = ObsidianNoteIO(cli)
         with pytest.raises(ObsidianIOError) as exc:
             io.create_note("a.md", "x")
         assert "boom" in str(exc.value)

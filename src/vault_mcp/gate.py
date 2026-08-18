@@ -1144,7 +1144,7 @@ class ConventionGate:
         }
         try:
             self._diff_sink(record)
-        except Exception as exc:  # noqa: BLE001 — observability is non-critical; never fail the write
+        except Exception:
             # Observability is non-critical: a failed emit must never fail the
             # write that already succeeded (RFC: emission failure never blocks).
-            log.warning("diff emission failed for %s: %s", path, exc)
+            log.exception("diff emission failed for %s", path)

@@ -64,6 +64,8 @@ from vault_mcp.rest_client import DEFAULT_REST_URL
 # the monolith is dissolved, so there is nothing left to import: #1317 is
 # closed by deletion rather than by the config-addressed call it proposed.
 
+log = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -262,7 +264,10 @@ class SubscriptionManager:
         for session in _active_sessions:
             try:
                 await session.send_notification(cast("Any", notification))
-            except Exception:  # noqa: BLE001 — any send failure means the session is gone
+            except Exception:
+                self.log.exception(
+                    "send_notification failed; treating session as gone"
+                )
                 disconnected.append(session)
 
         for session in disconnected:
@@ -2096,7 +2101,7 @@ def _start_sweep_scheduler() -> None:
         while True:
             _time.sleep(interval)
             try:
-                stamp = datetime.now().strftime("%Y-%m-%d %H:%M")  # noqa: DTZ005 — local stamp for a commit message
+                stamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
                 res = committer.sweep_commit(f"vault: periodic sweep {stamp}")
                 if res.get("committed"):
                     log.info(
@@ -2218,7 +2223,8 @@ def write_note(
             "create" if result.created else "update",
             commit_message,
         )
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("write_note failed")
         return _gate_error_envelope(exc)
 
 
@@ -2252,7 +2258,8 @@ def delete(
                 abs_path, VAULT_PATH
             )
         return committed
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("delete failed")
         return _gate_error_envelope(exc)
 
 
@@ -2294,7 +2301,8 @@ def move_note(
             abs_src = (VAULT_PATH / src).resolve()
             committed["dirs_pruned"] = _prune_empty_parents(abs_src, VAULT_PATH)
         return committed
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("move_note failed")
         return _gate_error_envelope(exc)
 
 
@@ -2341,7 +2349,8 @@ def lint(
             fields=fields,
             actor=Actor.HUMAN if actor == "human" else Actor.AGENT,
         )
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("lint failed")
         return _gate_error_envelope(exc)
 
 
@@ -2355,7 +2364,8 @@ def list_types() -> dict[str, Any]:
     """
     try:
         return {"ok": True, "types": _get_gate()._schema.list_types()}
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("list_types failed")
         return _gate_error_envelope(exc)
 
 
@@ -2369,7 +2379,8 @@ def list_tags() -> dict[str, Any]:
     """
     try:
         return {"ok": True, "tags": _get_gate()._schema.list_tags()}
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("list_tags failed")
         return _gate_error_envelope(exc)
 
 
@@ -2383,7 +2394,8 @@ def list_keys() -> dict[str, Any]:
     """
     try:
         return {"ok": True, "keys": _get_gate()._schema.list_keys()}
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("list_keys failed")
         return _gate_error_envelope(exc)
 
 
@@ -2416,7 +2428,8 @@ def query(note_type: str) -> dict[str, Any]:
         )  # the one vault-read: locate a matching template
         spec["body_template"] = note_type if note_type in templates else None
         return {"ok": True, **spec}
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("query failed")
         return _gate_error_envelope(exc)
 
 
@@ -2446,7 +2459,8 @@ def audit(
     """
     try:
         return _get_gate().audit(directory, resolve=resolve, all_dirs=all_dirs)
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("audit failed")
         return _gate_error_envelope(exc)
 
 
@@ -2896,7 +2910,8 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
         )
         result = _get_materializer().materialize(payload)
         return _commit_write(result.to_dict(), "materialize")
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes
+    except Exception as exc:
+        log.exception("materialize failed")
         return _gate_error_envelope(exc)
 
 
@@ -2921,7 +2936,8 @@ def compute_receive(
         return _commit_write(result.to_dict(), "compute")
     except ComputePayloadError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("compute_receive failed")
         return _gate_error_envelope(exc)
 
 
@@ -2951,7 +2967,8 @@ def compute_receiver(
         return _commit_write(result.to_dict(), "compute")
     except MaterializePayloadError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
-    except Exception as exc:  # noqa: BLE001 - mapped to structured envelopes below
+    except Exception as exc:
+        log.exception("compute_receiver failed")
         return _gate_error_envelope(exc)
 
 
@@ -3013,8 +3030,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--host",
-        default=os.environ.get("VAULT_MCP_HOST", "0.0.0.0"),  # noqa: S104 — operator-chosen bind host for HTTP transport
-        help="Bind host for HTTP transports (env VAULT_MCP_HOST; default 0.0.0.0)",
+        default=os.environ.get("VAULT_MCP_HOST", "127.0.0.1"),
+        help=(
+            "Bind host for HTTP transports (env VAULT_MCP_HOST; default "
+            "127.0.0.1 — set VAULT_MCP_HOST=0.0.0.0 explicitly to bind all "
+            "interfaces)"
+        ),
     )
     parser.add_argument(
         "--port",

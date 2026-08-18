@@ -7,6 +7,12 @@ over an injected sweep, which is the whole reason it is shaped that way.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 from vault_mcp.plan_freshness import (
     PlanDriftRecord,
@@ -32,7 +38,7 @@ def _report(*records: PlanDriftRecord) -> PlanSweepReport:
 # ── the cheap gate ──────────────────────────────────────────────────────────
 
 
-def test_gate_says_stale_when_disk_is_newer(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_gate_says_stale_when_disk_is_newer(tmp_path: Path) -> None:
     f = tmp_path / "p.md"
     f.write_text("x", encoding="utf-8")
     assert is_probably_stale(
@@ -40,7 +46,7 @@ def test_gate_says_stale_when_disk_is_newer(tmp_path) -> None:  # type: ignore[n
     )
 
 
-def test_gate_says_fresh_when_stored_clock_is_newer(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_gate_says_fresh_when_stored_clock_is_newer(tmp_path: Path) -> None:
     f = tmp_path / "p.md"
     f.write_text("x", encoding="utf-8")
     assert not is_probably_stale(
@@ -48,7 +54,7 @@ def test_gate_says_fresh_when_stored_clock_is_newer(tmp_path) -> None:  # type: 
     )
 
 
-def test_gate_is_conservative_when_the_clock_is_unknown(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_gate_is_conservative_when_the_clock_is_unknown(tmp_path: Path) -> None:
     """An unknown clock must fall through to the hash, never assume current."""
     (tmp_path / "p.md").write_text("x", encoding="utf-8")
     assert is_probably_stale(
@@ -56,7 +62,7 @@ def test_gate_is_conservative_when_the_clock_is_unknown(tmp_path) -> None:  # ty
     )
 
 
-def test_gate_is_conservative_when_the_file_is_unstattable(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_gate_is_conservative_when_the_file_is_unstattable(tmp_path: Path) -> None:
     assert is_probably_stale(
         "missing.md",
         vault_root=str(tmp_path),
@@ -93,6 +99,11 @@ def test_gate_never_suppresses_a_write_on_its_own() -> None:
     from vault_mcp.plan_freshness import body_hash
 
     writes: list[dict] = []
+
+    def _write_stored(pl: dict) -> dict:
+        writes.append(pl)
+        return {"ok": True}
+
     sweep_plans(
         list_files=lambda _d: ["p.md"],
         read_vault=lambda _p: body,
@@ -100,7 +111,7 @@ def test_gate_never_suppresses_a_write_on_its_own() -> None:
             p, raw_hash=body_hash(body), body_bytes=len(body)
         ),
         build_payload=lambda p, r: {"source_path": p},
-        write_stored=lambda pl: writes.append(pl) or {"ok": True},  # type: ignore[func-returns-value]
+        write_stored=_write_stored,
         refresh=True,
         cheap_gate=lambda _p: True,  # gate says "check it"
     )
@@ -110,7 +121,9 @@ def test_gate_never_suppresses_a_write_on_its_own() -> None:
 # ── one reconcile pass ──────────────────────────────────────────────────────
 
 
-def test_pass_with_no_change_writes_nothing_and_stays_quiet(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_pass_with_no_change_writes_nothing_and_stays_quiet(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.INFO)
     out = reconcile_once(
         lambda: _report(
@@ -124,7 +137,9 @@ def test_pass_with_no_change_writes_nothing_and_stays_quiet(caplog) -> None:  # 
     assert caplog.records == [], "a quiet system must stay quiet at INFO"
 
 
-def test_pass_that_refreshes_names_each_plan(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_pass_that_refreshes_names_each_plan(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.INFO)
     out = reconcile_once(
         lambda: _report(
@@ -139,7 +154,7 @@ def test_pass_that_refreshes_names_each_plan(caplog) -> None:  # type: ignore[no
     assert "a.md" in caplog.text, "the trigger must be observable"
 
 
-def test_pass_reports_per_plan_errors(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_pass_reports_per_plan_errors(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.WARNING)
     out = reconcile_once(
         lambda: _report(
@@ -194,10 +209,12 @@ def test_interval_defaults_and_validates() -> None:
 
 def test_disabled_loop_starts_no_thread() -> None:
     called: list[int] = []
-    thread = start_plan_reconcile(
-        lambda: called.append(1) or _report(),  # type: ignore[func-returns-value]
-        enabled=False,
-    )
+
+    def _sweep() -> PlanSweepReport:
+        called.append(1)
+        return _report()
+
+    thread = start_plan_reconcile(_sweep, enabled=False)
     assert thread is None
     assert called == []
 
@@ -205,11 +222,12 @@ def test_disabled_loop_starts_no_thread() -> None:
 def test_enabled_loop_starts_a_daemon_thread_and_waits_first() -> None:
     """It must not sweep during startup — the first tick is after one interval."""
     called: list[int] = []
-    thread = start_plan_reconcile(
-        lambda: called.append(1) or _report(),  # type: ignore[func-returns-value]
-        enabled=True,
-        interval=3600,
-    )
+
+    def _sweep() -> PlanSweepReport:
+        called.append(1)
+        return _report()
+
+    thread = start_plan_reconcile(_sweep, enabled=True, interval=3600)
     assert thread is not None
     assert thread.daemon is True
     assert called == [], "no sweep may run at startup"

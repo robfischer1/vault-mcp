@@ -47,7 +47,7 @@ def repo(tmp_path: Path) -> Path:
 
 def _committer(repo: Path, **kw: object) -> GitCommitter:
     kw.setdefault("enabled", True)
-    return GitCommitter(repo, **kw)  # type: ignore[arg-type]
+    return GitCommitter(repo, **kw)
 
 
 class TestCommitPaths:
