@@ -1,0 +1,26 @@
+# This file records the copier template + answers for this repo.
+# Managed by Copier — do not edit by hand. Run `copier update` to pull template
+# changes (3-way merged against your local edits).
+#
+# ADOPTED by Standalone F8, not stamped: this repo predates the template's
+# current layout and was never template-managed. Recording the answers is what
+# makes the next `copier update` a reconcile instead of a fresh stamp.
+#
+# variant: library, and mcp: true — BOTH, which is exactly the pair the plan
+# exists to make sayable. vault-mcp IS a FastMCP server (src/vault_mcp/server.py
+# imports mcp.server.fastmcp) and it SHIPS A WHEEL, not a container: there is no
+# Dockerfile and no slag record in the fleet roster. Before `variant`, `mcp` had
+# to carry both meanings, and a repo like this one could only be described by
+# lying about one of them.
+_src_path: https://forgejo.notusmi.com/rob/python-repo-template.git
+author_name: Rob Fischer
+core_backed: false
+description: FastMCP server exposing an Obsidian vault as read-only query tools over MCP.
+mcp: true
+package_dir: .
+project_name: Vault MCP
+service_name: vault-mcp
+sovereign_database: false
+variant: library
+verb_prefix: ""
+year: 2026
