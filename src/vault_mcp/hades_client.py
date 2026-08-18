@@ -23,8 +23,11 @@ payloads become ``harmonia_write_entity_typed`` calls (2026-07-02).
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 #: POST (url, headers, json_body) -> (status_code, response_text)
 Transport = Callable[[str, dict[str, str], dict[str, Any]], tuple[int, str]]
@@ -139,7 +142,8 @@ def call_verb(
         if status != 200:
             return {"ok": False, "error": f"hades initialize HTTP {status}"}
         status, text = post(url, headers, call)
-    except Exception as e:  # noqa: BLE001 — transport faults must not cross the verb boundary.
+    except Exception as e:
+        log.exception("hades transport unreachable")
         return {"ok": False, "error": f"hades unreachable: {e}"}
     if status != 200:
         return {"ok": False, "error": f"hades HTTP {status}: {text[:200]}"}

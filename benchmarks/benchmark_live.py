@@ -9,17 +9,16 @@ Not a pytest test — run manually for one-shot perf validation.
 
 from __future__ import annotations
 
+import io
 import statistics
 import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+from vault_mcp.index import VaultIndex
 
-from vault_mcp.index import VaultIndex  # noqa: E402
-
-sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+if isinstance(sys.stdout, io.TextIOWrapper):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 
 def _time(fn, *, iterations: int = 5) -> dict:

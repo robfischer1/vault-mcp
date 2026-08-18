@@ -25,10 +25,13 @@ running live*:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from vault_mcp.carve_policy import DEFAULT_SCOPE_POLICY, ScopePolicy
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -80,7 +83,8 @@ def carve_preflight(
                     error="calliope_unreachable",
                     detail="Calliope doc verbs did not answer the pre-flight smoke.",
                 )
-        except Exception as exc:  # noqa: BLE001 - pre-flight must never raise across the sweep
+        except Exception as exc:
+            log.exception("Calliope pre-flight smoke raised")
             return PreflightResult(
                 ok=False,
                 error="calliope_unreachable",
@@ -206,7 +210,8 @@ def bulk_carve(
         acted += 1
         try:
             res = dissolve_one(decision.path)
-        except Exception as exc:  # noqa: BLE001 - a driver must survive one bad file
+        except Exception as exc:
+            log.exception("Carve driver failed on %s", decision.path)
             report.failed += 1
             report.files.append(
                 CarveFileResult(

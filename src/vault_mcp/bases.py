@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,8 @@ import yaml
 
 if TYPE_CHECKING:
     from .index import VaultIndex
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -795,7 +798,8 @@ def evaluate_formula(
             return (None, str(e))
         except FormulaError as e:
             return (None, f"Evaluation error: {e}")
-        except Exception as e:  # noqa: BLE001 — formula eval: any error → result tuple, never crash
+        except Exception as e:
+            log.exception("Unexpected formula-evaluation error for %r", expr)
             return (None, f"Unexpected error: {e}")
 
     m = _NOTE_KEY_RE.match(expr)

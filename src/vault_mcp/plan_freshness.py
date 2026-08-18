@@ -39,12 +39,15 @@ size is reported alongside so the two numbers are never confused.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -346,7 +349,8 @@ def sweep_plans(
         acted += 1
         try:
             raw = read_vault(source_path)
-        except Exception as exc:  # noqa: BLE001 - one plan must not abort the sweep
+        except Exception as exc:
+            log.exception("vault read failed for %s", source_path)
             report.records.append(
                 PlanDriftRecord(
                     source_path=source_path,
@@ -373,7 +377,8 @@ def sweep_plans(
 
         try:
             stored = read_stored(source_path)
-        except Exception as exc:  # noqa: BLE001 - one plan must not abort the sweep
+        except Exception as exc:
+            log.exception("store read failed for %s", source_path)
             report.records.append(
                 PlanDriftRecord(
                     source_path=source_path,
@@ -421,7 +426,8 @@ def _refresh_one(
     try:
         payload = build_payload(record.source_path, raw)
         result = write_stored(payload)
-    except Exception as exc:  # noqa: BLE001 - one plan must not abort the sweep
+    except Exception as exc:
+        log.exception("store write raised for %s", record.source_path)
         return replace(
             record,
             state=PlanDriftState.ERROR,
@@ -465,7 +471,8 @@ def _backfill_one(
 
     try:
         result = write_stored(build_payload(record.source_path, raw))
-    except Exception as exc:  # noqa: BLE001 - one plan must not abort the sweep
+    except Exception as exc:
+        log.exception("backfill raised for %s", record.source_path)
         return replace(
             record, state=PlanDriftState.ERROR, error=f"backfill raised: {exc}"
         )
