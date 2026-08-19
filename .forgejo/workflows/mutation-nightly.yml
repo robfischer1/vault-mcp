@@ -1,0 +1,34 @@
+# Caller stub — the nightly FULL mutation run (foundry-stocks track C1).
+#
+# Separate file from mutation.yml on purpose. Both triggers in one workflow means
+# that on a pull_request the scheduled job reports `skipped`, and a required check
+# reporting anything other than success is the hazard ci.yml spends a paragraph
+# warning about. One trigger per file, one status per event.
+#
+# NOT GATED, deliberately — `fail-under: 0`. This is the number that tracks suite
+# quality over time across the whole module, and it starts wherever the module's
+# history left it. The PR gate (mutation.yml, fail-under 70) is what binds; this
+# is what measures. Raise it once the trend is known.
+#
+# The first such run in the fleet (oceanus, 2026-08-19) scored 90.5% honest over
+# 427 mutants — with 110 annotation-inert survivors excluded from BOTH sides of
+# the ratio, which is the difference between that number and a misleading 67.2%.
+name: mutation-nightly
+
+on:
+  schedule:
+    # Staggered off the hour and off each other, so twenty-odd full runs do not
+    # queue onto llm01 at the same minute.
+    - cron: '48 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    uses: foundry/foundry-stocks/.forgejo/workflows/mutation.yml@main
+    with:
+      critical-modules: src/vault_mcp/bases.py src/vault_mcp/rest_client.py
+      mode: full
+      fail-under: 0
+    # pragma comment: detect-secrets flags the word 'secrets' as a Secret Keyword,
+    # and `secrets: inherit` is the reusable-workflow idiom, not a credential.
+    secrets: inherit  # pragma: allowlist secret
