@@ -1,0 +1,45 @@
+# Caller stub — the per-PR mutation gate (foundry-stocks track C1).
+#
+# Coverage says a line RAN. Mutation says a line is TESTED. This is the second
+# oracle: it breaks the source on purpose and fails when the suite does not
+# notice.
+#
+# WHAT THIS GATE JUDGES IS THE DIFF, not the repo. `mode: diff` mutates only the
+# lines this PR touched, so `fail-under` is a statement about the code you just
+# wrote — "most of what you added is actually tested" — and says nothing about
+# this module's legacy score. That is what makes ONE number safe to apply across
+# the fleet without auditing every repo's history first. The whole-module number
+# is the nightly's job (mutation-nightly.yml), where it is measured and NOT
+# gated: gating legacy debt on day one reds a run nobody in the PR caused, and a
+# red nobody can act on is how a gate gets ignored.
+#
+# 70 is the floor because the forge-testkit master-plan measured both ends of
+# this scale on real fleet code: 33% for a suite over a permissive fake, 86% for
+# a pinned one. Proven on the first caller (oceanus, 2026-08-19): a one-line PR
+# scoped 427 mutation sites down to 13 and ran in 52 seconds.
+#
+# A SURVIVOR IS A HYPOTHESIS, NOT A VERDICT. Semantic equivalence is undecidable,
+# so a red here sometimes means the branch is redundant — delete it — rather than
+# untested. Read the survivor before writing a test against it.
+#
+# NO paths-ignore, for the reason ci.yml states at length: a filtered-out PR
+# posts no status, and a required check that never reports blocks its PR
+# forever. The reusable workflow already no-ops internally when a PR touches
+# none of the critical modules — the job still runs and still reports success.
+#
+# Requires foundry-stocks 82b3f44 or later.
+name: mutation
+
+on:
+  pull_request:
+
+jobs:
+  mutation:
+    uses: foundry/foundry-stocks/.forgejo/workflows/mutation.yml@main
+    with:
+      critical-modules: src/vault_mcp/bases.py src/vault_mcp/rest_client.py
+      mode: diff
+      fail-under: 70
+    # pragma comment: detect-secrets flags the word 'secrets' as a Secret Keyword,
+    # and `secrets: inherit` is the reusable-workflow idiom, not a credential.
+    secrets: inherit  # pragma: allowlist secret
