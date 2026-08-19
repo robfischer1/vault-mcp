@@ -27,7 +27,15 @@
 # forever. The reusable workflow already no-ops internally when a PR touches
 # none of the critical modules — the job still runs and still reports success.
 #
-# Requires foundry-stocks 82b3f44 or later.
+# Requires foundry-stocks 5d1573ed or later. This stub's own first run is what
+# surfaced the last of three latent defects in the reusable workflow: it synced
+# the project BEFORE computing the diff, so a PR adding only these two files died
+# on this repo's stale `uv.lock` — a sync it never needed for a job that was
+# about to no-op. Fixed in foundry-stocks#533.
+#
+# THE STALE LOCK IS REAL AND STILL WANTS FIXING (vault-mcp#4649). This repo's own
+# ci.yml does not see it, because the reusable gate skips its work steps on an
+# inert-only change; the first PR here that touches a critical module will.
 name: mutation
 
 on:
