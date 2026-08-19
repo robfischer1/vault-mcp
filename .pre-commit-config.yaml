@@ -1,6 +1,7 @@
 # Pre-commit hooks: lint (ruff), secret scan (detect-secrets), basic hygiene.
 # Runs on STAGED files at commit time. Install once: `pre-commit install`.
 # Full manual sweep: `pre-commit run --all-files`.  Bypass once: `git commit --no-verify`.
+exclude: '^\.(claude|specify|furnace)/|(^|/)(vendor|node_modules)/|\.melt$'
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.16
