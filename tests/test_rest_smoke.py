@@ -1,6 +1,8 @@
 """Smoke tests for REST tools against a running Obsidian instance.
 
-Auto-skips when the REST API is unreachable (Cowork sandbox, no Obsidian).
+Auto-skips when the REST API is unreachable (Cowork sandbox, no Obsidian) --
+unless VAULT_MCP_REST_REQUIRED is truthy, which turns the same condition into a
+FAILURE. See the skip-vs-fail contract below.
 Run from Code session with Obsidian open:
     VAULT_MCP_PATH=... python -m pytest tests/test_rest_smoke.py -v
 """
@@ -29,12 +31,38 @@ def _make_client() -> ObsidianRESTClient:
     return ObsidianRESTClient(base_url=REST_URL, key_path=KEY_PATH)
 
 
+# THE SKIP-VS-FAIL CONTRACT. An unreachable REST API skips by default --
+# correct in the Cowork sandbox, where no Obsidian exists, and a TRAP in any
+# lane meant to have one, because a skip is indistinguishable from a pass.
+# VAULT_MCP_REST_REQUIRED truthy turns the same condition into a FAILURE.
+#
+# Named and parsed to the fleet convention -- <SCOPE>_<RESOURCE>_REQUIRED,
+# truthy in {1,true,yes,on} -- which forge-testkit-go/containers/containers.go
+# set and 13 repos read, so one rule describes every skip-vs-fail contract in
+# the fleet rather than each suite inventing a dialect. The scope prefix
+# matches this file's existing VAULT_MCP_REST_URL / VAULT_MCP_REST_KEY_PATH.
+REQUIRED_ENV = "VAULT_MCP_REST_REQUIRED"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _rest_required() -> bool:
+    """True when an unreachable REST API must FAIL this suite, not skip it."""
+    return os.environ.get(REQUIRED_ENV, "").strip().lower() in _TRUTHY
+
+
 @pytest.fixture(scope="module")
 def client() -> ObsidianRESTClient:
     c = _make_client()
     health = c.probe()
     if not health["reachable"]:
-        pytest.skip("Obsidian REST API not reachable — skipping smoke tests")
+        msg = f"Obsidian REST API not reachable at {REST_URL}"
+        if _rest_required():
+            pytest.fail(
+                f"{msg} — {REQUIRED_ENV} is armed, so these smoke tests must "
+                "RUN, not skip. A skipped gate reports success, which is the "
+                "outcome arming the variable exists to prevent."
+            )
+        pytest.skip(f"{msg} — skipping smoke tests")
     return c
 
 
