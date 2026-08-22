@@ -322,11 +322,11 @@ class ConventionGate:
     # reachable directly (`gate._writer`) when a caller wants to be explicit.
 
     def create_note(self, *args: Any, **kwargs: Any) -> WriteResult:
-        """Create a compliant note through the Gate. Delegates to GateWriter."""
+        """Create compliant note through the Gate — delegates to GateWriter."""
         return self._writer.create_note(*args, **kwargs)
 
     def update_note(self, *args: Any, **kwargs: Any) -> WriteResult:
-        """Update an existing note through the Gate. Delegates to GateWriter."""
+        """Update existing note through the Gate — delegates to GateWriter."""
         return self._writer.update_note(*args, **kwargs)
 
     def write_note(self, *args: Any, **kwargs: Any) -> WriteResult:
@@ -334,19 +334,19 @@ class ConventionGate:
         return self._writer.write_note(*args, **kwargs)
 
     def delete(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Delete a note through the Gate. Delegates to GateWriter."""
+        """Delete note through the Gate — delegates to GateWriter."""
         return self._writer.delete(*args, **kwargs)
 
     def move_note(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Move a note through the Gate. Delegates to GateWriter."""
+        """Move note through the Gate — delegates to GateWriter."""
         return self._writer.move_note(*args, **kwargs)
 
     def audit(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Scan the vault for drift and optionally heal it. Delegates to GateAuditor."""
+        """Scan the vault for drift and optionally heal it — delegates to GateAuditor."""
         return self._auditor.audit(*args, **kwargs)
 
     def lint_payload(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Lint a prospective write. Delegates to FrontmatterBuilder."""
+        """Lint prospective write — delegates to FrontmatterBuilder."""
         return self._frontmatter.lint_payload(*args, **kwargs)
 
     def _note_exists(self, target: str) -> bool:
