@@ -58,37 +58,43 @@ class FakeVault:
     raises the SAME exception type, and where the real one is deliberately
     forgiving (`list_notes` over a missing subtree) this is forgiving too.
 
+    The attribute names are the ones the five replaced fakes already used —
+    `store`, `calls`, `deleted` — so migrating a test module is a matter of
+    deleting its local class and importing this one. The DIFFERENCE is meant to
+    be behavioural, not cosmetic: the same test now runs against real failure
+    modes instead of a dict's.
+
     Args:
-        notes: seed content, path -> body.
+        store: seed content, path -> body.
         refuse_create_over_existing: model ObsidianNoteIO's `app.vault.create`
             instead of REST PUT. Off by default because production is REST.
         fail: paths that raise `ObsidianIOError` on ANY access, for exercising
             the error paths that a dict fake can never reach.
     """
 
-    notes: dict[str, str] = field(default_factory=dict)
+    store: dict[str, str] = field(default_factory=dict)
     refuse_create_over_existing: bool = False
     fail: set[str] = field(default_factory=set)
-    calls: list[VaultCall] = field(default_factory=list)
+    log: list[VaultCall] = field(default_factory=list)
 
     # --- NoteIO ----------------------------------------------------------
 
     def create_note(self, path: str, content: str) -> None:
         """Create a note. REST PUT overwrites; the CLI flavour refuses."""
-        self.calls.append(VaultCall("create_note", path, content))
+        self.log.append(VaultCall("create_note", path, content))
         self._guard(path)
-        if self.refuse_create_over_existing and path in self.notes:
+        if self.refuse_create_over_existing and path in self.store:
             raise ObsidianIOError(
                 f"write to {path} not confirmed (got None); "
                 f"is obsidian-cli connected and the path's parent folder present?"
             )
-        self.notes[path] = content
+        self.store[path] = content
 
     def write_note(self, path: str, content: str) -> None:
         """Overwrite the note at `path`."""
-        self.calls.append(VaultCall("write_note", path, content))
+        self.log.append(VaultCall("write_note", path, content))
         self._guard(path)
-        self.notes[path] = content
+        self.store[path] = content
 
     def read_note(self, path: str) -> str:
         """Read the note at `path`.
@@ -98,11 +104,11 @@ class FakeVault:
         non-ok response into `ObsidianIOError`. This single line is what makes
         the fake pinned rather than permissive.
         """
-        self.calls.append(VaultCall("read_note", path))
+        self.log.append(VaultCall("read_note", path))
         self._guard(path)
-        if path not in self.notes:
+        if path not in self.store:
             raise ObsidianIOError(f"REST read {path}: not_found: 404")
-        return self.notes[path]
+        return self.store[path]
 
     def delete_note(self, path: str) -> None:
         """Move the note to the vault-local `.trash/`, mirroring RestNoteIO.
@@ -110,13 +116,16 @@ class FakeVault:
         The real implementation reads first and only removes the origin after
         the trash copy lands, so a failed delete never loses the note. A
         missing note therefore raises from the READ, before anything moves.
+
+        The log entry is written AFTER both checks, so `deleted` never reports
+        a note that was not in fact deleted.
         """
-        self.calls.append(VaultCall("delete_note", path))
         self._guard(path)
-        if path not in self.notes:
+        if path not in self.store:
             raise ObsidianIOError(f"REST read {path}: not_found: 404")
-        self.notes[f"{_TRASH}/{path}"] = self.notes[path]
-        del self.notes[path]
+        self.log.append(VaultCall("delete_note", path))
+        self.store[f"{_TRASH}/{path}"] = self.store[path]
+        del self.store[path]
 
     def list_notes(
         self, directory: str = "", *, recursive: bool = True
@@ -127,11 +136,11 @@ class FakeVault:
         subtree is an EMPTY LIST rather than an error — "a scan over a missing
         subtree is empty, not an error", per that implementation's docstring.
         """
-        self.calls.append(VaultCall("list_notes", directory))
+        self.log.append(VaultCall("list_notes", directory))
         prefix = directory.strip("/")
         out = [
             p
-            for p in self.notes
+            for p in self.store
             if p.endswith(".md")
             and not p.startswith(f"{_TRASH}/")
             and (not prefix or p.startswith(f"{prefix}/"))
@@ -148,8 +157,27 @@ class FakeVault:
         if path in self.fail:
             raise ObsidianIOError(f"REST read {path}: unreachable: injected")
 
-    # --- assertion surface -----------------------------------------------
+    # --- assertion surface -------------------------------------------------
+    # `calls` and `deleted` are DERIVED views over `log`, shaped exactly like
+    # the ad-hoc lists the replaced fakes kept by hand. test_gate asserts
+    # `len(writer.calls) == 0` to mean "nothing was written", so `calls` must
+    # count writes only — a raw call log would count the read probes too and
+    # quietly invert every one of those assertions.
+
+    @property
+    def calls(self) -> list[tuple[str, str]]:
+        """(path, content) per note CREATED — writes only, never reads."""
+        return [
+            (c.path, c.content or "")
+            for c in self.log
+            if c.verb == "create_note"
+        ]
+
+    @property
+    def deleted(self) -> list[str]:
+        """Every path passed to a SUCCESSFUL delete, in order."""
+        return [c.path for c in self.log if c.verb == "delete_note"]
 
     def paths_touched(self, verb: str) -> list[str]:
         """Every path `verb` was called with, in order."""
-        return [c.path for c in self.calls if c.verb == verb]
+        return [c.path for c in self.log if c.verb == verb]

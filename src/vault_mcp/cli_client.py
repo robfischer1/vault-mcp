@@ -11,7 +11,7 @@ import logging
 import os
 import shutil
 import subprocess
-from typing import Any
+from typing import Any, Protocol
 
 log = logging.getLogger(__name__)
 
@@ -175,6 +175,21 @@ class ObsidianIOError(Exception):
     """A vault write/read through the Obsidian CLI failed."""
 
 
+class CLIRunner(Protocol):
+    """The one CLI method `ObsidianNoteIO` actually depends on.
+
+    Narrowed from the concrete `ObsidianCLI` so the seam can be doubled. It
+    could not be before: `ObsidianNoteIO.__init__` named the concrete class,
+    so a test double was an arg-type error against it and the only reason the
+    suite stayed green was that mypy's `check_untyped_defs` was off for tests
+    and never looked inside the bodies making those calls.
+    """
+
+    def run(self, command: str, **params: Any) -> dict[str, Any]:
+        """Execute a CLI command and return the result envelope."""
+        ...
+
+
 # Returned by write eval so the adapter can confirm the write actually ran.
 # Guards against a binary (e.g. the Obsidian GUI launcher) that exits 0
 # without evaluating the JS — which would otherwise look like a silent success.
@@ -259,8 +274,8 @@ class ObsidianNoteIO:
     unit-tested independently of the subprocess call.
     """
 
-    def __init__(self, cli: ObsidianCLI) -> None:
-        """Wrap an ObsidianCLI for note read/write via eval."""
+    def __init__(self, cli: CLIRunner) -> None:
+        """Wrap a CLI runner for note read/write via eval."""
         self._cli = cli
 
     def create_note(self, path: str, content: str) -> None:

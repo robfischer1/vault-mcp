@@ -16,6 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from tests.substrate import FakeVault
 from vault_mcp.gate import ConventionGate, WriteModeError
 from vault_mcp.lifecycle import (
     MaterializePayloadError,
@@ -25,22 +26,6 @@ from vault_mcp.provenance import Actor, Provenance, WriteMode
 from vault_mcp.schema import load_schema
 
 VALID = ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
-
-
-class FakeVault:
-    """In-memory vault IO; captures writes instead of touching Obsidian."""
-
-    def __init__(self) -> None:
-        self.store: dict[str, str] = {}
-
-    def create_note(self, path: str, content: str) -> None:
-        self.store[path] = content
-
-    def read_note(self, path: str) -> str:
-        return self.store[path]
-
-    def write_note(self, path: str, content: str) -> None:
-        self.store[path] = content
 
 
 def _materializer(

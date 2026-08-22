@@ -40,13 +40,14 @@ class TestPinnedFailureModes:
         assert not isinstance(caught.value, OSError)
 
     def test_missing_delete_raises_before_moving_anything(self):
-        vault = FakeVault(notes={"Journal/kept.md": "body"})
+        vault = FakeVault(store={"Journal/kept.md": "body"})
         with pytest.raises(ObsidianIOError):
             vault.delete_note("Journal/absent.md")
-        assert vault.notes == {"Journal/kept.md": "body"}
+        assert vault.store == {"Journal/kept.md": "body"}
+        assert vault.deleted == []
 
     def test_injected_failure_reaches_the_error_path(self):
-        vault = FakeVault(notes={"a.md": "x"}, fail={"a.md"})
+        vault = FakeVault(store={"a.md": "x"}, fail={"a.md"})
         with pytest.raises(ObsidianIOError):
             vault.read_note("a.md")
 
@@ -55,38 +56,38 @@ class TestRestSemantics:
     """Behaviours copied from RestNoteIO rather than invented."""
 
     def test_create_overwrites_because_rest_puts(self):
-        vault = FakeVault(notes={"a.md": "old"})
+        vault = FakeVault(store={"a.md": "old"})
         vault.create_note("a.md", "new")
-        assert vault.notes["a.md"] == "new"
+        assert vault.store["a.md"] == "new"
 
     def test_cli_flavour_refuses_create_over_existing(self):
-        vault = FakeVault(notes={"a.md": "old"}, refuse_create_over_existing=True)
+        vault = FakeVault(store={"a.md": "old"}, refuse_create_over_existing=True)
         with pytest.raises(ObsidianIOError):
             vault.create_note("a.md", "new")
-        assert vault.notes["a.md"] == "old"
+        assert vault.store["a.md"] == "old"
 
     def test_delete_moves_to_trash_rather_than_dropping(self):
-        vault = FakeVault(notes={"Journal/x.md": "body"})
+        vault = FakeVault(store={"Journal/x.md": "body"})
         vault.delete_note("Journal/x.md")
-        assert "Journal/x.md" not in vault.notes
-        assert vault.notes[".trash/Journal/x.md"] == "body"
+        assert "Journal/x.md" not in vault.store
+        assert vault.store[".trash/Journal/x.md"] == "body"
 
     def test_list_skips_trash(self):
-        vault = FakeVault(notes={"a.md": "x"})
+        vault = FakeVault(store={"a.md": "x"})
         vault.delete_note("a.md")
         assert vault.list_notes() == []
 
     def test_list_returns_markdown_only(self):
-        vault = FakeVault(notes={"a.md": "x", "b.canvas": "y"})
+        vault = FakeVault(store={"a.md": "x", "b.canvas": "y"})
         assert vault.list_notes() == ["a.md"]
 
     def test_list_over_a_missing_subtree_is_empty_not_an_error(self):
-        vault = FakeVault(notes={"Journal/a.md": "x"})
+        vault = FakeVault(store={"Journal/a.md": "x"})
         assert vault.list_notes("Nowhere") == []
 
     def test_list_non_recursive_returns_immediate_children_only(self):
         vault = FakeVault(
-            notes={
+            store={
                 "Journal/a.md": "x",
                 "Journal/deep/b.md": "y",
             }
@@ -119,7 +120,7 @@ class TestAtomFilenameRegression:
             body="body text",
         )
         assert result.path.startswith("Journal/")
-        assert result.path in vault.notes
+        assert result.path in vault.store
 
     def test_the_probe_skips_slugs_already_taken(self, gate_factory):
         """A taken candidate must advance the sequence, not collide."""
@@ -131,5 +132,5 @@ class TestAtomFilenameRegression:
             title="two", note_type="idea", pillar="Journal", body="y"
         )
         assert first.path != second.path
-        assert first.path in vault.notes
-        assert second.path in vault.notes
+        assert first.path in vault.store
+        assert second.path in vault.store

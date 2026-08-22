@@ -13,38 +13,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from tests.substrate import FakeVault
 from vault_mcp.gate import ConventionGate
 from vault_mcp.schema import load_schema
 
 VALID = ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
-
-
-class FakeVault:
-    def __init__(self) -> None:
-        self.store: dict[str, str] = {}
-
-    def create_note(self, path: str, content: str) -> None:
-        self.store[path] = content
-
-    def write_note(self, path: str, content: str) -> None:
-        self.store[path] = content
-
-    def read_note(self, path: str) -> str:
-        return self.store[path]
-
-    def delete_note(self, path: str) -> None:
-        self.store.pop(path, None)
-
-    def list_notes(
-        self, directory: str = "", *, recursive: bool = True
-    ) -> list[str]:
-        return [
-            p
-            for p in self.store
-            if not directory
-            or p == f"{directory}.md"
-            or p.startswith(directory + "/")
-        ]
 
 
 def _gate() -> tuple[ConventionGate, FakeVault]:

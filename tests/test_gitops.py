@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -170,7 +171,7 @@ def repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _committer(repo: Path, **kw: object) -> GitCommitter:
+def _committer(repo: Path, **kw: Any) -> GitCommitter:
     kw.setdefault("enabled", True)
     return GitCommitter(repo, **kw)
 

@@ -162,16 +162,43 @@ warn_unused_configs = true
 # vault-mcp no longer imports it at all. mypy flagged the override as unused,
 # which is how this was caught.
 
-# Test files are type-checked but not strict — suppress annotation requirements
-# and known test-pattern false positives.
+# Test files are type-checked but not strict.
+#
+# THE disable_error_code LINE IS GONE. It named twelve codes; measured
+# 2026-08-22, nine were already dead and the remaining three (type-arg,
+# return-value, arg-type) covered six real errors, five of which were the
+# FakeVault protocol gap that the substrate consolidation closed. The last one
+# was a genuine typing defect — a heterogeneous dict literal subscripted
+# inline, so the value type collapsed to `object` and the annotation was a lie.
+# All six are answered; nothing is silenced. mypy is clean on src AND tests.
+#
+# check_untyped_defs IS ALSO GONE, and it was the one worth removing: with it
+# off, mypy never looked INSIDE an unannotated test body, which is where test
+# logic lives. Lifting it found six errors, four of them one finding —
+# ObsidianNoteIO named the concrete ObsidianCLI in its constructor, so no
+# double could conform to it. That seam now depends on a CLIRunner Protocol,
+# the same shape the Gate already uses for NoteIO.
+#
+# WHAT REMAINS, each with the population measured by removing it alone. These
+# are LIVE, not dead — recorded so the next reader does not have to re-measure,
+# and so this block never claims a population it does not have (the failure
+# mode foundry-stocks#5242 exists to catch):
+#
+#   disallow_untyped_defs     453 errors — annotating every test signature.
+#                             This is the same ANN churn Rob already ruled out
+#                             for tests in the ruff per-file-ignores above; the
+#                             two rulings should not disagree.
+#   disallow_incomplete_defs   22 errors — partial signatures, a subset of the
+#                             above and only worth doing together with it.
+#   disallow_untyped_calls      1 error  — nearly free, but it cascades: it
+#                             re-types contexts and pulls the 453 back in.
+#   warn_return_any             2 errors — cheap; same cascade caveat.
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
 disallow_untyped_calls = false
 disallow_incomplete_defs = false
-check_untyped_defs = false
 warn_return_any = false
-disable_error_code = ["attr-defined", "arg-type", "type-arg", "union-attr", "index", "var-annotated", "operator", "misc", "override", "assignment", "unused-ignore", "return-value"]
 
 # server.py is the MCP-tool entry layer: it bridges dynamic Obsidian REST JSON
 # and the untyped phdb sibling, so tool returns are dict[str, Any] by contract

@@ -9,13 +9,13 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from tests.substrate import FakeCLI
 from vault_mcp.cli_client import (
     WRITE_OK_SENTINEL,
     ObsidianIOError,
@@ -43,19 +43,6 @@ class TestJsBuilders:
         js = build_read_js("a.md")
         assert "app.vault.read(" in js
         assert "return" in js
-
-
-class FakeCLI:
-    """Stand-in for ObsidianCLI.run capturing eval calls."""
-
-    def __init__(self, result: dict[str, Any]) -> None:
-        self.result = result
-        self.calls: list[str] = []
-
-    def run(self, command: str, **params: Any) -> dict[str, Any]:
-        assert command == "eval"
-        self.calls.append(params["code"])
-        return self.result
 
 
 class TestObsidianNoteIO:
