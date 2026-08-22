@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -398,7 +399,8 @@ class TestInvalidateFile:
     def test_invalidate_outside_vault_ignored(self):
         idx = _idx()
         before_content = len(idx._content)
-        idx.invalidate_file(Path("/tmp/not-in-vault.md"))
+        outside = Path(tempfile.gettempdir()) / "not-in-vault.md"
+        idx.invalidate_file(outside)
         assert len(idx._content) == before_content
 
     def test_last_indexed_at_set(self):

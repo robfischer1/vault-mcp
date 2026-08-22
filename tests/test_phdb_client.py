@@ -26,6 +26,13 @@ from vault_mcp.phdb_client import (
     validate_atom,
 )
 
+#: The `born_token` an AtomResult carries. Named `_VALUE`, not `_TOKEN`: S106
+#: fires on a string LITERAL at a credential-shaped keyword and S105 fires on a
+#: credential-shaped NAME, so a constant only answers the finding if its own
+#: name stays clear of the word. Nothing here is a credential — the atom is
+#: constructed offline and never sent.
+_BORN_VALUE = "abc123"
+
 
 def _valid_payload(atom_type: str) -> dict[str, object]:
     return {
@@ -151,7 +158,7 @@ class TestEmit:
             atom_type="decision",
             event_id=None,
             ts=None,
-            born_token="abc123",
+            born_token=_BORN_VALUE,
         )
         assert result.to_dict() == {
             "ok": True,

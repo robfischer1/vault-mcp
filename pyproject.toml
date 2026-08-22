@@ -81,9 +81,43 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests assert freely, use subprocess/temp dirs, late imports, no docs/packaging
-"tests/**" = ["S", "PT", "ANN", "D", "ARG", "PLR2004", "SLF001", "INP001", "ERA001", "E402", "PLW1510"]
+# EXACTLY the rules foundry-stocks' stop-justifications gate ratifies for a test
+# glob: NOT_A_PACKAGE | TEST_ERGONOMICS, in ci/lib/stop_justifications.py.
+# Ratified by Rob 2026-08-21 (foundry-stocks#596, 61bab337); before that the tier
+# stood on a session's authority alone.
+#
+# THE GATE EXEMPTS AN ENTRY ONLY WHEN EVERY RULE IT NAMES IS EXEMPT, so one extra
+# family voids the whole line. The list this replaces named eleven, was therefore
+# exempt for nothing, and froze every star carrying it the moment anyone
+# hand-committed — measured 2026-08-21, 24 of the 26 Python stars.
+#
+# WHY THESE SIX. S101 (pytest IS assert) and INP001 (tests are not an importable
+# package) are unsatisfiable by construction, which is a different thing from a
+# suppression. D / ANN / E402 / PLW1510 are satisfiable and ruled out anyway, as
+# churn on test functions that buys nothing the firewall exists to buy.
+#
+# NOTE `S101`, NOT `S` — the old line silenced ALL of flake8-bandit in tests,
+# S608 (SQL injection) included. Of the five families dropped, PLR2004 and
+# SLF001 were pure dead weight: both already sit in the global `ignore` above, so
+# they silenced nothing here. `PT`, `ARG` and `ERA001` were live.
+#
+# ⚑ ANYTHING ADDED TO THIS LINE MUST ALREADY BE IN THE GATE'S EXEMPT SET, or
+# every star this template touches loses the ability to commit. Widen the gate
+# first, with Rob's signoff — never widen this line to route around it.
+"tests/**" = ["S101", "ANN", "D", "E402", "PLW1510", "INP001"]
 # Benchmarks are throwaway scripts
-"benchmarks/**" = ["INP001", "T201", "D", "ANN", "S", "PLR2004", "ERA001"]
+# INP001 ALONE, which is the gate's ratified idiom: an entry naming only
+# INP001 declares that a directory is not an importable package — a fact about
+# the layout, not a claim that a tool is wrong.
+#
+# MEASURED 2026-08-22: of the seven rules this used to name, FIVE were dead.
+# T201 and PLR2004 are already in the global `ignore` above, S and ERA001 fire
+# nowhere in benchmarks/, and the ANN codes that fire here are covered globally
+# too. The entry claimed a population it did not have — exactly what nothing in
+# the toolchain detects, since RUF100 reads a `noqa` and has never read a
+# config. The one real finding it hid, a missing D103 docstring, is answered
+# rather than re-silenced.
+"benchmarks/**" = ["INP001"]
 # gitops wraps git subprocesses with deliberately fail-safe boundaries (logged, never propagated)
 "src/vault_mcp/gitops.py" = ["S603", "BLE001"]
 # cli_client shells out to the obsidian binary (configured path / allowlisted commands)

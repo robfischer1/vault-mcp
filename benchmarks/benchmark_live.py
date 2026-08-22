@@ -50,6 +50,13 @@ def _count(result):
 
 
 def run_benchmark(vault_path: Path) -> None:
+    """Time the index and search paths against a real vault, to stdout.
+
+    Prints rather than returns: this is an operator-facing script, and the
+    numbers are the output. T201 is globally ignored in this repo for exactly
+    that reason ("deliberate CLI prints"), which is why the `benchmarks/**`
+    carve-out that also named T201 was silencing nothing.
+    """
     print("vault-mcp Performance Benchmark")
     print(f"{'=' * 60}")
     print(f"Vault: {vault_path}")

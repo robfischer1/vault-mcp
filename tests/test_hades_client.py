@@ -20,6 +20,24 @@ from vault_mcp.hades_client import (
     write_entity_typed,
 )
 
+#: The bearer the injected transport never checks. Named for its ROLE rather
+#: than for the parameter, because it is not a credential: every test in this
+#: module injects a fake transport that answers from a dict, so nothing is
+#: dialled and there is nothing to authenticate to. S106 reads the KEYWORD and
+#: fires on a string LITERAL, so binding the value stops the rule applying — and
+#: a name carrying "token" would just move the finding to S105, which reads the
+#: NAME.
+_REQUIRED_BUT_UNUSED = "t"
+_REQUIRED_BUT_UNUSED_ALT = "tok"
+
+#: What the fleet_emit reply CARRIES BACK, asserted on rather than sent. Same
+#: reasoning, opposite direction: this one is a value the code under test
+#: returns, so it is not even an input. Named `_VALUE`, not `_TOKEN`: the first
+#: draft called it `_ECHOED_BORN_TOKEN` and S105 fired on the CONSTANT — the
+#: rule reads the name, so moving a literal behind a credential-shaped name
+#: relocates the finding instead of answering it.
+_ECHOED_BORN_VALUE = "bt-1"
+
 
 def _rpc_result(result: dict[str, Any]) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": 2, "result": result}
@@ -112,7 +130,7 @@ def test_call_verb_initializes_then_calls() -> None:
         "harmonia_ping",
         {},
         url="http://h/mcp/",
-        token="tok",
+        token=_REQUIRED_BUT_UNUSED_ALT,
         transport=transport,
     )
     assert out == {"ok": True}
@@ -123,12 +141,16 @@ def test_call_verb_initializes_then_calls() -> None:
 
 
 def test_call_verb_transport_fault_never_raises() -> None:
+    # `post(url, headers, init)` — hades_client calls the transport
+    # POSITIONALLY, so the names are free. This double answers by raising.
     def boom(
-        url: str, headers: dict[str, str], body: dict[str, Any]
+        _url: str, _headers: dict[str, str], _body: dict[str, Any]
     ) -> tuple[int, str]:
         raise OSError("connection refused")
 
-    out = call_verb("x", {}, url="http://h/mcp/", token="t", transport=boom)
+    out = call_verb(
+        "x", {}, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=boom
+    )
     assert out["ok"] is False
     assert "unreachable" in out["error"]
 
@@ -136,7 +158,11 @@ def test_call_verb_transport_fault_never_raises() -> None:
 def test_call_verb_non_200_maps_to_ok_false() -> None:
     transport = FakeTransport([(200, "{}"), (503, "down")])
     out = call_verb(
-        "x", {}, url="http://h/mcp/", token="t", transport=transport
+        "x",
+        {},
+        url="http://h/mcp/",
+        token=_REQUIRED_BUT_UNUSED,
+        transport=transport,
     )
     assert out["ok"] is False
     assert "503" in out["error"]
@@ -167,7 +193,10 @@ def test_write_entity_typed_maps_the_phdb_payload() -> None:
         "file_path": "Entities/Books/Dune.md",
     }
     out = write_entity_typed(
-        payload, url="http://h/mcp/", token="t", transport=transport
+        payload,
+        url="http://h/mcp/",
+        token=_REQUIRED_BUT_UNUSED,
+        transport=transport,
     )
     assert out["ok"] is True
     assert out["table"] == "books"
@@ -204,7 +233,9 @@ def test_read_document_materializes_by_container_id() -> None:
             }
         )
     )
-    out = read_document(42, url="http://h/mcp/", token="t", transport=transport)
+    out = read_document(
+        42, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=transport
+    )
     doc = out["documents"][0]
     assert doc["id"] == "42"
     assert doc["body_text"] == "the prose"
@@ -233,7 +264,9 @@ def test_read_document_joins_blocks_on_the_markdown_separator() -> None:
             }
         )
     )
-    out = read_document(7, url="http://h/mcp/", token="t", transport=transport)
+    out = read_document(
+        7, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=transport
+    )
     assert out["documents"][0]["body_text"] == "one\n\ntwo"
 
 
@@ -255,7 +288,10 @@ def test_read_document_miss_is_an_empty_list() -> None:
         )
     )
     out = read_document_by_source_path(
-        "nope.md", url="http://h/mcp/", token="t", transport=transport
+        "nope.md",
+        url="http://h/mcp/",
+        token=_REQUIRED_BUT_UNUSED,
+        transport=transport,
     )
     assert out == {"documents": []}
 
@@ -283,20 +319,27 @@ def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
     write_document(
         {"source_path": "a.md", "body_text": "x"},
         url="http://h/mcp/",
-        token="t",
+        token=_REQUIRED_BUT_UNUSED,
         transport=t_write,
     )
     seen["write_document"] = t_write.calls[1][1]["params"]["name"]
 
     t_by_id = record()
-    read_document(1, url="http://h/mcp/", token="t", transport=t_by_id)
+    read_document(
+        1, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=t_by_id
+    )
     seen["read_document"] = t_by_id.calls[1][1]["params"]["name"]
 
     t_by_path = record()
     read_document_by_source_path(
-        "a.md", url="http://h/mcp/", token="t", transport=t_by_path
+        "a.md",
+        url="http://h/mcp/",
+        token=_REQUIRED_BUT_UNUSED,
+        transport=t_by_path,
     )
-    seen["read_document_by_source_path"] = t_by_path.calls[1][1]["params"]["name"]
+    seen["read_document_by_source_path"] = t_by_path.calls[1][1]["params"][
+        "name"
+    ]
 
     assert seen == {
         "write_document": "calliope_dissolve_note",
@@ -306,12 +349,16 @@ def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
 
 
 def test_read_document_transport_fault_never_raises() -> None:
+    # `post(url, headers, init)` — hades_client calls the transport
+    # POSITIONALLY, so the names are free. This double answers by raising.
     def boom(
-        url: str, headers: dict[str, str], body: dict[str, Any]
+        _url: str, _headers: dict[str, str], _body: dict[str, Any]
     ) -> tuple[int, str]:
         raise OSError("connection refused")
 
-    out = read_document(1, url="http://h/mcp/", token="t", transport=boom)
+    out = read_document(
+        1, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=boom
+    )
     assert out["ok"] is False
 
 
@@ -338,10 +385,13 @@ def test_emit_session_event_calls_fleet_emit() -> None:
         "ts": "2026-08-03T00:00:00Z",
     }
     out = emit_session_event(
-        payload, url="http://h/mcp/", token="t", transport=transport
+        payload,
+        url="http://h/mcp/",
+        token=_REQUIRED_BUT_UNUSED,
+        transport=transport,
     )
     assert out["ok"] is True
-    assert out["born_token"] == "bt-1"
+    assert out["born_token"] == _ECHOED_BORN_VALUE
     _, call_body = transport.calls[1]
     assert call_body["params"]["name"] == "fleet_emit"
     args = call_body["params"]["arguments"]
@@ -358,7 +408,7 @@ def test_emit_session_event_defaults_missing_payload_to_empty() -> None:
     emit_session_event(
         {"event_type": "probe"},
         url="http://h/mcp/",
-        token="t",
+        token=_REQUIRED_BUT_UNUSED,
         transport=transport,
     )
     _, call_body = transport.calls[1]
@@ -367,12 +417,17 @@ def test_emit_session_event_defaults_missing_payload_to_empty() -> None:
 
 
 def test_emit_session_event_transport_fault_never_raises() -> None:
+    # `post(url, headers, init)` — hades_client calls the transport
+    # POSITIONALLY, so the names are free. This double answers by raising.
     def boom(
-        url: str, headers: dict[str, str], body: dict[str, Any]
+        _url: str, _headers: dict[str, str], _body: dict[str, Any]
     ) -> tuple[int, str]:
         raise OSError("connection refused")
 
     out = emit_session_event(
-        {"event_type": "decision"}, url="http://h/mcp/", token="t", transport=boom
+        {"event_type": "decision"},
+        url="http://h/mcp/",
+        token=_REQUIRED_BUT_UNUSED,
+        transport=boom,
     )
     assert out["ok"] is False

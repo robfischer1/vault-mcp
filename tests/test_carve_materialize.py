@@ -22,7 +22,7 @@ from vault_mcp import hades_client, server
 def test_documents_read_routes_to_calliope_when_hades_set(monkeypatch) -> None:
     captured: dict[str, Any] = {}
 
-    def fake_read_document(doc_id: int, **kwargs: Any) -> dict[str, Any]:
+    def fake_read_document(doc_id: int, **_kwargs: Any) -> dict[str, Any]:
         captured["doc_id"] = doc_id
         return {
             "documents": [
@@ -50,7 +50,7 @@ def test_documents_read_routes_to_calliope_when_hades_set(monkeypatch) -> None:
 def test_calliope_miss_maps_to_row_not_found(monkeypatch) -> None:
     monkeypatch.setattr(server, "HADES_URL", "http://nas01:8101")
     monkeypatch.setattr(
-        hades_client, "read_document", lambda *a, **k: {"documents": []}
+        hades_client, "read_document", lambda *_a, **_k: {"documents": []}
     )
     out = server._read_dissolved_row("documents", 7)
     assert out["ok"] is False
@@ -62,7 +62,7 @@ def test_calliope_tool_failure_maps_to_structured_error(monkeypatch) -> None:
     monkeypatch.setattr(
         hades_client,
         "read_document",
-        lambda *a, **k: {"ok": False, "error": "no star serves verb"},
+        lambda *_a, **_k: {"ok": False, "error": "no star serves verb"},
     )
     out = server._read_dissolved_row("documents", 7)
     assert out["ok"] is False
@@ -71,8 +71,10 @@ def test_calliope_tool_failure_maps_to_structured_error(monkeypatch) -> None:
 
 def test_hades_unset_falls_back_to_phdb_not_calliope(monkeypatch) -> None:
     # With HADES_URL unset, documents must NOT route to Calliope.
-    def boom(*a: Any, **k: Any) -> dict[str, Any]:
-        raise AssertionError("read_document must not be called when HADES_URL unset")
+    def boom(*_a: Any, **_k: Any) -> dict[str, Any]:
+        raise AssertionError(
+            "read_document must not be called when HADES_URL unset"
+        )
 
     monkeypatch.setattr(server, "HADES_URL", "")
     monkeypatch.setattr(hades_client, "read_document", boom)
@@ -86,7 +88,7 @@ def test_hades_unset_falls_back_to_phdb_not_calliope(monkeypatch) -> None:
 
     import httpx
 
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: _Resp())
+    monkeypatch.setattr(httpx, "get", lambda *_a, **_k: _Resp())
     out = server._read_dissolved_row("documents", 1)
     assert out["ok"] is True
     assert out["row"]["subject"] == "phdb row"

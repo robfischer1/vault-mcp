@@ -25,7 +25,9 @@ def _schema():
 class TestListTypes:
     def test_lists_every_type_with_write_mode(self):
         types = {t["name"]: t for t in _schema().list_types()}
-        assert "Gadget" in types and "Dossier" in types and "signal" in types
+        assert "Gadget" in types
+        assert "Dossier" in types
+        assert "signal" in types
         assert types["Gadget"]["write_mode"] == "agent"
         assert types["Dossier"]["write_mode"] == "materialize-only"
         assert types["signal"]["write_mode"] == "pure-DB"
