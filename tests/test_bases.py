@@ -835,6 +835,36 @@ class TestSummaries:
         assert result.summaries["Max Amount"] == 30
         assert result.summaries["Range Amount"] == 20
 
+    def test_non_numeric_values_are_skipped_not_fatal(self):
+        """A numeric summary over un-coercible values skips them and survives.
+
+        THE MUTATION GATE FOUND THIS GAP. The accumulator wraps `float(val)` in
+        `except ValueError, TypeError`, and cosmic-ray replaced `ValueError`
+        with a dummy exception on a diff-scoped run — no test noticed, so that
+        arm was never exercised. Both arms are distinct in practice:
+
+            float("not a number")  -> ValueError   (a non-numeric STRING)
+            float([1, 2])          -> TypeError    (a non-coercible TYPE)
+
+        Frontmatter is user-written YAML, so both reach this code from a real
+        vault. Without the catch, one malformed note aborts the whole base
+        execution rather than being skipped.
+        """
+        v_path = ROOT / "tests" / "fixtures" / "summaries-mixed-vault"
+        idx = VaultIndex(v_path, ttl_seconds=9999)
+        idx.reindex()
+        pf = parse_file(FIXTURES / "summaries-numeric.md")
+        base = pf.bases[0]
+
+        result = execute_base(base, idx)
+
+        # Three notes, only one with a coercible amount (10).
+        assert result.total == 3
+        assert result.summaries["Total Amount"] == 10
+        assert result.summaries["Average Amount"] == 10
+        assert result.summaries["Min Amount"] == 10
+        assert result.summaries["Max Amount"] == 10
+
     def test_boundary_summaries(self):
         idx = self._summaries_idx()
         # Empty result set
