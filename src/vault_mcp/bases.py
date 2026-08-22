@@ -1,5 +1,20 @@
 """Obsidian Bases parser, evaluator, writer, and validator."""
 
+# VERIFY: `dict[str, Any]` at the JSON boundary, and only there.
+#
+# An MCP tool return IS a JSON object, so the value type is open by the
+# protocol's own contract — pinning it to a TypedDict per verb would encode a
+# wire shape the client is free to ignore, and would still be `Any` one level
+# down where Obsidian's REST payloads and YAML frontmatter arrive untyped.
+# Measured 2026-08-22: of 276 `Any` in this package, 127 are `-> dict[str, Any]`
+# verb returns and 34 are `list[dict[str, Any]]` rows of the same. This is a
+# stated decision at the boundary, not an unexamined default.
+#
+# What is NOT excused by it: a BARE `: Any` or `-> Any` on anything that is not
+# that boundary. Those were audited to zero in this package on the same date —
+# the survivors are three sites in the Bases formula evaluator, each carrying
+# its own VERIFY where it sits.
+
 from __future__ import annotations
 
 import ast
@@ -264,7 +279,7 @@ def _parse_filter_predicate(pred: str) -> FilterNode:
 # ---------------------------------------------------------------------------
 
 
-def _build_filter_tree(raw: Any) -> FilterNode | None:
+def _build_filter_tree(raw: object) -> FilterNode | None:
     if raw is None:
         return None
 
@@ -498,6 +513,14 @@ class FormulaEvaluator:
         self.regex_timeout = regex_timeout
         self._current_depth = 0
 
+    # VERIFY: Any is the return of an expression EVALUATOR — a Bases formula
+    # yields whatever its expression yields (str, int, bool, list, None), so
+    # the type is genuinely open at this boundary. `object` was tried and is
+    # wrong here: every caller then needs a narrow before arithmetic or
+    # comparison the evaluator has already validated, which relocates the
+    # check rather than performing it. The SAFETY of what runs is enforced by
+    # the AST visitor below (an allowlist of node types), not by this
+    # annotation.
     def evaluate(self, expression: str) -> Any:
         """Evaluate a Tier-2 formula expression against the bound context."""
         # Pre-process JS syntax: if( -> _if_( , x => -> lambda x: , and /regex/ -> "/regex/"
@@ -529,6 +552,9 @@ class FormulaEvaluator:
                 raise
             raise FormulaError(f"Evaluation failed: {e}") from e
 
+    # VERIFY: same open return as `evaluate` — this is its recursive step,
+    # dispatching over the allowlisted ast node types and returning each
+    # node's value.
     def _visit(self, node: ast.AST) -> Any:
         try:
             if isinstance(node, ast.Constant):
@@ -660,7 +686,9 @@ class FormulaEvaluator:
             return node.attr
         return None
 
-    def _safe_replace(self, target: Any, pattern: Any, replacement: Any) -> str:
+    def _safe_replace(
+        self, target: object, pattern: object, replacement: object
+    ) -> str:
         target_str = str(target if target is not None else "")
         pattern_str = str(pattern)
         is_regex = pattern_str.startswith("/") and pattern_str.endswith("/")
@@ -681,6 +709,9 @@ class FormulaEvaluator:
         else:
             return target_str.replace(pattern_str, str(replacement))
 
+    # VERIFY: `item` is one row of a Bases result (arbitrary frontmatter
+    # values) and the return is the lambda's own value — both open for the
+    # same reason `evaluate` is.
     def _eval_lambda(self, node: ast.Lambda, item: Any) -> Any:
         if not node.args.args:
             raise FormulaError("Lambda requires at least one argument")
@@ -908,7 +939,7 @@ def _partition_results(
 
 def execute_base(
     base: Base,
-    index: Any,
+    index: VaultIndex,
     view_name: str | None = None,
 ) -> QueryResult:
     """Execute a base's selected view against the index and return a QueryResult."""
@@ -1063,7 +1094,7 @@ def execute_base(
                     accums[name]["count_with_val"] += 1
                     accums[name]["min"] = min(accums[name]["min"], num)
                     accums[name]["max"] = max(accums[name]["max"], num)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
     # Finalize summaries
@@ -1343,7 +1374,7 @@ def validate_base(base_dict: dict[str, Any]) -> ValidationResult:
                             }
                         )
 
-    def _check_strings(obj: Any, path: str = "") -> None:
+    def _check_strings(obj: object, path: str = "") -> None:
         if isinstance(obj, str):
             if any(c in obj for c in _YAML_SPECIAL_CHARS):
                 warnings.append(
@@ -1363,7 +1394,7 @@ def validate_base(base_dict: dict[str, Any]) -> ValidationResult:
     _check_strings(base_dict)
 
     return ValidationResult(
-        valid=len(errors) == 0,
+        valid=not errors,
         errors=errors,
         warnings=warnings,
     )

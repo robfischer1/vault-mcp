@@ -7,7 +7,7 @@ over an injected sweep, which is the whole reason it is shaped that way.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -100,9 +100,9 @@ def test_gate_never_suppresses_a_write_on_its_own() -> None:
     body = "unchanged"
     from vault_mcp.plan_freshness import body_hash
 
-    writes: list[dict] = []
+    writes: list[dict[str, Any]] = []
 
-    def _write_stored(pl: dict) -> dict:
+    def _write_stored(pl: dict[str, Any]) -> dict[str, Any]:
         writes.append(pl)
         return {"ok": True}
 

@@ -42,7 +42,7 @@ def parse_payload(raw: object) -> ComputePayload:
         raise ComputePayloadError("compute payload must be a mapping")
 
     missing = [k for k in _REQUIRED_KEYS if not raw.get(k)]
-    if len(missing) > 0:
+    if missing:
         raise ComputePayloadError(
             f"compute payload missing required field(s): {missing}"
         )

@@ -91,7 +91,7 @@ def file_mtime_iso(path: str | Path) -> str | None:
         return None
     try:
         ts = Path(path).stat().st_mtime
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     return (
         datetime.fromtimestamp(ts, tz=UTC)

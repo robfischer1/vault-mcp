@@ -6,9 +6,11 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.16
     hooks:
-      - id: ruff            # lint only (uses [tool.ruff] in pyproject); no ruff-format
+      - id: ruff            # lint (uses [tool.ruff] in pyproject)
         stages: [pre-commit]
         args: [--fix]
+      - id: ruff-format     # format enforcement — the gate is a thing reality checks
+        stages: [pre-commit]
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
@@ -28,4 +30,36 @@ repos:
       - id: check-added-large-files
         stages: [pre-commit]
       - id: check-merge-conflict
+        stages: [pre-commit]
+  # The forge-testkit test-body checks — the half of this rewrite that stops it
+  # regrowing. On first run they found exactly what they exist to find: eight
+  # Fake*/Stub* classes scattered across test modules (five of them the same
+  # FakeVault), and two test bodies with no assertion at all.
+  #
+  # language: SYSTEM, not python, and the entry keeps its own `uv run`. A
+  # `language: python` hook builds an ISOLATED env and installs into it with
+  # bare pip, which has no forgejo index and cannot see forge-testkit at all.
+  # `--extra dev` guarantees the extra is synced first so the hook works on a
+  # fresh checkout. This is the same wiring athena, chaos and terpsichore use.
+  #
+  # schema-budget is deliberately NOT wired here. It is the third lint and it
+  # applies squarely to this repo — vault-mcp registers a large MCP verb surface
+  # and every verb's description ships in the tool manifest on every session's
+  # first turn — but turning it on is a separate, measurable change to a live
+  # cost, not a side effect of a test-suite rewrite. Left for its own landing.
+  - repo: local
+    hooks:
+      - id: forge-testkit-assertion-free
+        name: assertion-free test bodies (forge-testkit)
+        entry: uv run --extra dev forge-testkit-lint assertion-free
+        language: system
+        files: ^tests/.*\.py$
+        types: [python]
+        stages: [pre-commit]
+      - id: forge-testkit-fake-placement
+        name: FakeX placement (forge-testkit)
+        entry: uv run --extra dev forge-testkit-lint fake-placement
+        language: system
+        files: \.py$
+        types: [python]
         stages: [pre-commit]

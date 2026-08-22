@@ -11,6 +11,21 @@ The full deny/protection surface is documented in
 ``docs/security/write-protections.md``.
 """
 
+# VERIFY: `dict[str, Any]` at the JSON boundary, and only there.
+#
+# An MCP tool return IS a JSON object, so the value type is open by the
+# protocol's own contract — pinning it to a TypedDict per verb would encode a
+# wire shape the client is free to ignore, and would still be `Any` one level
+# down where Obsidian's REST payloads and YAML frontmatter arrive untyped.
+# Measured 2026-08-22: of 276 `Any` in this package, 127 are `-> dict[str, Any]`
+# verb returns and 34 are `list[dict[str, Any]]` rows of the same. This is a
+# stated decision at the boundary, not an unexamined default.
+#
+# What is NOT excused by it: a BARE `: Any` or `-> Any` on anything that is not
+# that boundary. Those were audited to zero in this package on the same date —
+# the survivors are three sites in the Bases formula evaluator, each carrying
+# its own VERIFY where it sits.
+
 from __future__ import annotations
 
 import logging
@@ -245,7 +260,7 @@ class ConventionGate:
         """Link-resolution predicate for the linter, backed by the injected IO."""
         try:
             self._io.read_note(target)
-        except (KeyError, OSError, ObsidianIOError):
+        except KeyError, OSError, ObsidianIOError:
             return False
         return True
 
@@ -403,14 +418,22 @@ class ConventionGate:
     def _atom_filename(
         self, created: str, note_type: str, directory: str
     ) -> str:
-        """Dated atom slug YYYY-MM-DD-{type}.{seq}; seq probes for the next free name."""
+        """Dated atom slug YYYY-MM-DD-{type}.{seq}; seq probes for the next free name.
+
+        ObsidianIOError is load-bearing in the except, not defensive breadth:
+        it is what BOTH real NoteIO implementations raise for a missing note,
+        and "missing" is the answer this probe is looking for. Without it every
+        atom write failed in production while the suite stayed green, because
+        the only NoteIOs the tests ever used were dict fakes raising KeyError
+        (vault-mcp#5258). The two sibling call sites already caught all three.
+        """
         base = f"{created}-{note_type}"
         seq = 0
         while True:
             candidate = f"{base}.{seq}"
             try:
                 self._io.read_note(f"{directory}/{candidate}.md")
-            except (KeyError, OSError):
+            except KeyError, OSError, ObsidianIOError:
                 return candidate
             seq += 1
 
@@ -420,7 +443,7 @@ class ConventionGate:
         if actor is not Actor.AGENT:
             return []
         hits = [t for t in tags if t in self._schema.reserved_tags]
-        if len(hits) == 0:
+        if not hits:
             return []
         return [f"reserved tag(s) {hits} are normally set by Rob, not agents"]
 
@@ -793,7 +816,7 @@ class ConventionGate:
         for note_path in paths:
             try:
                 fm, body = _split_note(self._io.read_note(note_path))
-            except (KeyError, OSError, ObsidianIOError):
+            except KeyError, OSError, ObsidianIOError:
                 continue
             note_dir = note_path.rsplit("/", 1)[0] if "/" in note_path else ""
             filename = note_path.rsplit("/", 1)[-1].removesuffix(".md")
@@ -1075,7 +1098,7 @@ class ConventionGate:
             )  # FR: Title-Case note_type
         if pillar is not None:
             fm["pillar"] = pillar
-        if len(tags) > 0:
+        if tags:
             fm["tags"] = tags
         if extra_fields is not None:
             for key, value in extra_fields.items():
@@ -1092,7 +1115,7 @@ class ConventionGate:
             fm["identifier"] = _slugify(title)
         # status defaults to the schema default on create when a vocabulary exists,
         # then normalizes (repairs) so the linter validates the stored value.
-        if "status" not in fm and len(schema.status_values) > 0:
+        if "status" not in fm and schema.status_values:
             fm["status"] = schema.status_default
         if "status" in fm:
             fm["status"] = schema.normalize_status(fm["status"])

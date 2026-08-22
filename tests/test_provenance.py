@@ -136,7 +136,9 @@ class TestSchemaLink:
         schema = load_schema(
             ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
         )
-        validate_schema_levels(schema.provenance_levels)  # must not raise
+        # forge-testkit: assert-exempt: validate_schema_levels is -> None and
+        # raises on a mismatch, so "did not raise" is the result being checked.
+        validate_schema_levels(schema.provenance_levels)
 
     def test_mismatched_levels_rejected(self):
         with pytest.raises(ProvenanceError):

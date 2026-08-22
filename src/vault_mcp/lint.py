@@ -64,7 +64,7 @@ class Finding:
     code: Code
     message: str
     field: str | None = None
-    value: Any = None
+    value: object = None
     suggestion: str | None = None
     severity: Severity = Severity.ERROR
 
@@ -99,7 +99,7 @@ class LintResult:
     @property
     def ok(self) -> bool:
         """True when nothing blocks the write (no error-severity findings)."""
-        return len(self.errors) == 0
+        return not self.errors
 
     def first_error(self) -> Finding | None:
         """Return the first blocking finding in check order, or None."""

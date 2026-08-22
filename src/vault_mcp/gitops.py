@@ -72,6 +72,12 @@ class GitCommitter:
         self._inflight_lock = threading.Lock()
 
     # -- subprocess plumbing ------------------------------------------------
+    # FAIL-SOFT IS DELIBERATE, AND NARROW. Every handler below catches
+    # (OSError, subprocess.SubprocessError) rather than Exception: those are
+    # what `subprocess.run(check=False)` can actually raise here — git absent,
+    # not executable, or the spawn itself failing. The git sidecar must never
+    # break a vault write, so it logs and degrades instead of propagating, but
+    # "must not propagate" was never a reason to catch everything.
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         # ``safe.directory=*`` defuses git's dubious-ownership guard: the service
         # runs as LocalSystem while the vault repo is owned by the interactive
@@ -109,7 +115,7 @@ class GitCommitter:
         try:
             cp = self._run("rev-parse", "HEAD")
             return cp.stdout.strip() if cp.returncode == 0 else None
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             log.warning("git head_sha failed: %s", exc)
             return None
 
@@ -177,7 +183,7 @@ class GitCommitter:
                     )
                     return None
                 return self.head_sha()
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             log.warning("commit_paths failed for %s: %s", paths, exc)
             return None
 
@@ -215,7 +221,7 @@ class GitCommitter:
                 sha = self.head_sha()
                 pushed = self.push() if self.push_enabled else False
                 return {"committed": True, "sha": sha, "pushed": pushed}
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             log.warning("sweep_commit failed: %s", exc)
             return {"committed": False, "reason": f"error: {exc}"}
 
@@ -228,6 +234,6 @@ class GitCommitter:
                     log.warning("git push failed: %s", cp.stderr.strip())
                     return False
                 return True
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             log.warning("push failed: %s", exc)
             return False

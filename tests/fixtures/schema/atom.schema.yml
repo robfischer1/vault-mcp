@@ -1,0 +1,47 @@
+# Minimal schema for the atom-slug probe (vault-mcp#5258).
+#
+# Purpose-built rather than reusing valid.schema.yml, whose only route for an
+# atom_slug type is the bare `pillar: Records` one — and Records is
+# body-immutable there, so the write is refused before the probe is reached.
+# The regression under test is the FILENAME PROBE, so this fixture gives it an
+# unprotected pillar and nothing else.
+pillars:
+  - Journal
+
+tags:
+  - topic/ai
+
+reserved_tags:
+  - todo
+
+forbidden_dirs:
+  - .obsidian
+
+routes:
+  - note_type: idea
+    pillar: Journal
+    directory: Journal
+
+required_frontmatter:
+  - title
+  - created
+  - author_type
+  - author_level
+
+write_protection: []
+
+provenance:
+  levels:
+    - human
+    - human-edited
+    - human-revised
+    - ai-assisted
+    - ai-compiled
+    - ai
+  default: ai
+
+types:
+  idea:
+    required: [title]
+    atom_slug: true
+    write_mode: agent

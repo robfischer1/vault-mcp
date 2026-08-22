@@ -112,7 +112,7 @@ def strip_frontmatter(text: str) -> str:
     return text
 
 
-def extract_wikilink_targets(value: Any) -> list[str]:
+def extract_wikilink_targets(value: object) -> list[str]:
     """Pull wikilink stems from a string or list of strings."""
     if isinstance(value, str):
         values = [value]

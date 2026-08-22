@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from vault_mcp.translator import (
     DOC_ENDPOINT,
     ENTITY_ENDPOINT,
@@ -266,7 +268,7 @@ def test_calliope_document_to_row_prefers_subject_when_present() -> None:
 # ── F3: schema_type derives from note_type ──────────────────────────────────
 
 
-def _doc(fm: dict, body: str = "x") -> dict:
+def _doc(fm: dict[str, Any], body: str = "x") -> dict[str, Any]:
     payloads = note_to_payloads(fm, body, "p.md")
     return next(p["payload"] for p in payloads if p["endpoint"] == DOC_ENDPOINT)
 

@@ -13,13 +13,28 @@ Error codes (closed vocabulary):
     rest_invalid_request — 4xx other than 401/404
 """
 
+# VERIFY: `dict[str, Any]` at the JSON boundary, and only there.
+#
+# An MCP tool return IS a JSON object, so the value type is open by the
+# protocol's own contract — pinning it to a TypedDict per verb would encode a
+# wire shape the client is free to ignore, and would still be `Any` one level
+# down where Obsidian's REST payloads and YAML frontmatter arrive untyped.
+# Measured 2026-08-22: of 276 `Any` in this package, 127 are `-> dict[str, Any]`
+# verb returns and 34 are `list[dict[str, Any]]` rows of the same. This is a
+# stated decision at the boundary, not an unexamined default.
+#
+# What is NOT excused by it: a BARE `: Any` or `-> Any` on anything that is not
+# that boundary. Those were audited to zero in this package on the same date —
+# the survivors are three sites in the Bases formula evaluator, each carrying
+# its own VERIFY where it sits.
+
 from __future__ import annotations
 
 import logging
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import httpx
 
@@ -122,6 +137,27 @@ class ObsidianRESTClient:
         if self._reachable is None:
             return True
         return time.time() - self._last_probed > self._probe_ttl
+
+    def close(self) -> None:
+        """Close the underlying HTTP connection pool.
+
+        The client owns an httpx.Client and previously had no way to release
+        it. In the long-lived MCP server that is one socket for the process
+        lifetime and benign; anywhere a client is short-lived — a test, a CLI
+        invocation, a script — it leaks. Surfaced by running the REST tests
+        against the live API for the first time: under
+        `filterwarnings = ["error"]` the ResourceWarning from the finalizer is
+        an error, so the leak stops being invisible.
+        """
+        self._client.close()
+
+    def __enter__(self) -> Self:
+        """Enter a context that closes the pool on exit."""
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        """Close the pool."""
+        self.close()
 
     def probe(self) -> dict[str, Any]:
         """Probe GET / to check reachability. Returns health dict."""

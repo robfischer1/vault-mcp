@@ -34,8 +34,8 @@ from vault_mcp.phdb_client import (
 _BORN_VALUE = "abc123"
 
 
-def _valid_payload(atom_type: str) -> dict[str, object]:
-    return {
+def _valid_payload(atom_type: str) -> dict[str, Any]:
+    payloads: dict[str, dict[str, Any]] = {
         "decision": {"polarity": "for", "reversed_by": None},
         "reversal": {
             "reverses": "decision-42",
@@ -58,7 +58,8 @@ def _valid_payload(atom_type: str) -> dict[str, object]:
             "position_changed": True,
             "captured_when": "2026-06-01T12:00:00Z",
         },
-    }[atom_type]
+    }
+    return payloads[atom_type]
 
 
 class _FakePoster:

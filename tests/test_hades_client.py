@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from tests.substrate import FakeTransport
 from vault_mcp.hades_client import (
     call_verb,
     emit_session_event,
@@ -98,21 +99,6 @@ def test_parse_unparseable_text_maps_to_ok_false() -> None:
 
 
 # -- call_verb transport boundary ----------------------------------------------
-
-
-class FakeTransport:
-    """Scriptable transport: records calls, returns queued (status, text)."""
-
-    def __init__(self, responses: list[tuple[int, str]]) -> None:
-        self.responses = list(responses)
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    def __call__(
-        self, url: str, headers: dict[str, str], body: dict[str, Any]
-    ) -> tuple[int, str]:
-        self.calls.append((url, body))
-        assert headers["Authorization"].startswith("Bearer ")
-        return self.responses.pop(0)
 
 
 def _ok_pair(result: dict[str, Any]) -> list[tuple[int, str]]:

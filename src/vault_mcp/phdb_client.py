@@ -127,13 +127,13 @@ def validate_atom(atom_type: str, payload: object) -> dict[str, Any]:
     keys = set(payload)
     allowed = _ATOM_ALLOWED[atom_type]
     unknown = keys - allowed
-    if len(unknown) > 0:
+    if unknown:
         raise AtomError(
             f"{atom_type} payload has unknown field(s) {sorted(unknown)}; "
             f"allowed: {sorted(allowed)}"
         )
     missing = _ATOM_REQUIRED[atom_type] - keys
-    if len(missing) > 0:
+    if missing:
         raise AtomError(
             f"{atom_type} payload missing required field(s): {sorted(missing)}"
         )

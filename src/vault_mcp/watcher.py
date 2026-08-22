@@ -10,12 +10,14 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 if TYPE_CHECKING:
+    from watchdog.observers.api import BaseObserver
+
     from .index import VaultIndex
 
 log = logging.getLogger(__name__)
@@ -72,7 +74,7 @@ class _VaultEventHandler(FileSystemEventHandler):
                     log.debug("invalidated (move dest): %s", dest)
 
 
-def start_watcher(index: VaultIndex) -> Any:
+def start_watcher(index: VaultIndex) -> BaseObserver:
     """Start a background filesystem watcher on the vault directory.
 
     Returns the Observer instance (call .stop() to shut down).
