@@ -12,6 +12,22 @@ Config resolution (highest priority first):
     VAULT_MCP_TTL_SECONDS   index TTL in seconds (default: 300)
 """
 
+# VERIFY: `dict[str, Any]` at the JSON boundary, and only there.
+#
+# An MCP tool return IS a JSON object, so the value type is open by the
+# protocol's own contract — pinning it to a TypedDict per verb would encode a
+# wire shape the client is free to ignore, and would still be `Any` one level
+# down where Obsidian's REST payloads and YAML frontmatter arrive untyped.
+# Measured 2026-08-22: of 276 `Any` in this package, 127 are `-> dict[str, Any]`
+# verb returns and 34 are `list[dict[str, Any]]` rows of the same. This is a
+# stated decision at the boundary, not an unexamined default. The mypy override
+# for this module records the same trade from the checker's side.
+#
+# What is NOT excused by it: a BARE `: Any` or `-> Any` on anything that is not
+# that boundary. Those were audited to zero in this package on the same date —
+# the survivors are three sites in the Bases formula evaluator, each carrying
+# its own VERIFY where it sits.
+
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +47,7 @@ from mcp.server.fastmcp import Context, FastMCP
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
+    from vault_mcp.bases import QueryResult
     from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
@@ -185,13 +202,17 @@ class SubscriptionManager:
                 return True
         return False
 
-    def _hash_result(self, result: Any) -> str:
-        """Create a stable hash of a QueryResult."""
-        data = (
-            asdict(result)
-            if hasattr(result, "__dataclass_fields__")
-            else result
-        )
+    def _hash_result(self, result: QueryResult) -> str:
+        """Create a stable hash of a QueryResult.
+
+        Typed concretely rather than `Any`. Both call sites pass the return of
+        `_execute_base_impl`, which is a QueryResult — so the previous
+        `asdict(x) if hasattr(x, "__dataclass_fields__") else x` branch was
+        dead defensive weight, and the `Any` that permitted it was hiding the
+        fact. `.get()` on the else-branch would have raised on any non-mapping
+        that ever reached it.
+        """
+        data = asdict(result)
 
         hash_data = {
             "notes": [
@@ -242,14 +263,14 @@ class SubscriptionManager:
             except Exception:
                 self.log.exception("Error updating subscription %s", sub.handle)
 
-    async def _push_notification(self, sub: Subscription, result: Any) -> None:
+    async def _push_notification(
+        self, sub: Subscription, result: QueryResult
+    ) -> None:
         payload = {
             "handle": sub.handle,
             "path": sub.path,
             "view": sub.view,
-            "results": asdict(result)
-            if hasattr(result, "__dataclass_fields__")
-            else result,
+            "results": asdict(result),
         }
 
         from mcp.types import JSONRPCNotification

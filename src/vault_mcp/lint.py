@@ -64,7 +64,7 @@ class Finding:
     code: Code
     message: str
     field: str | None = None
-    value: Any = None
+    value: object = None
     suggestion: str | None = None
     severity: Severity = Severity.ERROR
 
