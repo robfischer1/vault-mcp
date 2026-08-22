@@ -1063,7 +1063,7 @@ def execute_base(
                     accums[name]["count_with_val"] += 1
                     accums[name]["min"] = min(accums[name]["min"], num)
                     accums[name]["max"] = max(accums[name]["max"], num)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
     # Finalize summaries
@@ -1363,7 +1363,7 @@ def validate_base(base_dict: dict[str, Any]) -> ValidationResult:
     _check_strings(base_dict)
 
     return ValidationResult(
-        valid=len(errors) == 0,
+        valid=not errors,
         errors=errors,
         warnings=warnings,
     )

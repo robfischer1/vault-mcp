@@ -1520,7 +1520,7 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     if resp.status_code != 200:
         try:
             detail = resp.json().get("error", resp.text)
-        except (ValueError, KeyError, AttributeError):
+        except ValueError, KeyError, AttributeError:
             detail = resp.text
         return {"ok": False, "error": f"phdb HTTP {resp.status_code}: {detail}"}
     return resp.json()

@@ -27,7 +27,13 @@ SCHEMA_ENV_VAR = "VAULT_MCP_SCHEMA"
 
 # Allowed write-protection rule kinds (Convention Gate enforces the semantics).
 PROTECTION_RULES: frozenset[str] = frozenset(
-    {"body-immutable", "fully-immutable", "compute-only", "voice-only", "exempt"}
+    {
+        "body-immutable",
+        "fully-immutable",
+        "compute-only",
+        "voice-only",
+        "exempt",
+    }
 )
 
 # Per-@type write-mode: who may create a note of this type through the Gate.
@@ -229,7 +235,7 @@ class VaultSchema:
 
     def is_valid_status(self, value: str) -> bool:
         """Report whether ``value`` is in the configured status vocabulary."""
-        if len(self.status_values) == 0:
+        if not self.status_values:
             return True  # no vocabulary configured -> nothing to enforce
         return value in self.status_values
 
@@ -253,7 +259,7 @@ class VaultSchema:
 
     def is_valid_author_type(self, value: str) -> bool:
         """Report whether ``value`` is in the configured author_type vocabulary."""
-        if len(self.author_type_values) == 0:
+        if not self.author_type_values:
             return True  # no vocabulary configured -> nothing to enforce
         return value in self.author_type_values
 
@@ -292,7 +298,7 @@ class VaultSchema:
         route matches or two equally specific routes both match.
         """
         hits = [r for r in self.routes if r.matches(note_type, pillar, attrs)]
-        if len(hits) == 0:
+        if not hits:
             raise RouteError(
                 f"no route matches note_type={note_type!r} pillar={pillar!r}"
             )
@@ -354,7 +360,7 @@ class VaultSchema:
             keys.update(tc.freeform_fields)
             keys.update(field for field, _ in tc.value_constraints)
             keys.update(field for field, _ in tc.formats)
-        if len(self.status_values) > 0:
+        if self.status_values:
             keys.add("status")
         return sorted(keys)
 

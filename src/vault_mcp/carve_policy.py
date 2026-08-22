@@ -75,7 +75,9 @@ class ScopePolicy:
             return CarveDecision(norm, pillar, False, "protected-pillar")
         if pillar in self.dissolve_pillars:
             return CarveDecision(norm, pillar, True, "dissolvable-pillar")
-        return CarveDecision(norm, pillar, False, "unlisted-pillar-default-stay")
+        return CarveDecision(
+            norm, pillar, False, "unlisted-pillar-default-stay"
+        )
 
     def with_overrides(
         self,

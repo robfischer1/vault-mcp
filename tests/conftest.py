@@ -48,9 +48,23 @@ def gate_factory() -> GateFactory:
     """
 
     def build(
-        *, schema: str = "valid", **kwargs: object
+        *,
+        schema: str = "valid",
+        store: dict[str, str] | None = None,
+        refuse_create_over_existing: bool = False,
+        fail: set[str] | None = None,
     ) -> tuple[ConventionGate, FakeVault]:
-        vault = FakeVault(**kwargs)  # type: ignore[arg-type]
+        # Named parameters rather than **kwargs: the kwargs form needed a
+        # `# type: ignore[arg-type]` to pass mypy, because `object` cannot
+        # satisfy FakeVault's typed fields. The standard forbids an un-VERIFIED
+        # ignore, and the honest fix is to state the signature rather than
+        # annotate around it — None-sentinels for the mutable defaults, per the
+        # same rule.
+        vault = FakeVault(
+            store=store if store is not None else {},
+            refuse_create_over_existing=refuse_create_over_existing,
+            fail=fail if fail is not None else set(),
+        )
         loaded = load_schema(str(FIXTURES / "schema" / f"{schema}.schema.yml"))
         return ConventionGate(loaded, vault), vault
 

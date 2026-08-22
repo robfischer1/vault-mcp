@@ -63,7 +63,9 @@ class TestRestSemantics:
         assert vault.store["a.md"] == "new"
 
     def test_cli_flavour_refuses_create_over_existing(self):
-        vault = FakeVault(store={"a.md": "old"}, refuse_create_over_existing=True)
+        vault = FakeVault(
+            store={"a.md": "old"}, refuse_create_over_existing=True
+        )
         with pytest.raises(ObsidianIOError):
             vault.create_note("a.md", "new")
         assert vault.store["a.md"] == "old"

@@ -248,7 +248,9 @@ def bulk_carve(
     return report
 
 
-def documents_to_waves(documents: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def documents_to_waves(
+    documents: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Project Calliope ``documents`` rows into the dissolution-wave view.
 
     The dissolution-bridge is retired (C5); the go-forward record of *what

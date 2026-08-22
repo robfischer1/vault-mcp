@@ -136,16 +136,12 @@ class TestHealthSmoke:
 
 class TestActiveNote:
     def test_returns_path(self, client):
-        result = client.get(
-            "/active/", accept=NOTE_JSON
-        )
+        result = client.get("/active/", accept=NOTE_JSON)
         assert result["ok"] is True
         assert "path" in result["data"]
 
     def test_has_frontmatter(self, client):
-        result = client.get(
-            "/active/", accept=NOTE_JSON
-        )
+        result = client.get("/active/", accept=NOTE_JSON)
         assert "frontmatter" in result["data"]
 
 

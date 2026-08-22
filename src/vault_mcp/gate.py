@@ -245,7 +245,7 @@ class ConventionGate:
         """Link-resolution predicate for the linter, backed by the injected IO."""
         try:
             self._io.read_note(target)
-        except (KeyError, OSError, ObsidianIOError):
+        except KeyError, OSError, ObsidianIOError:
             return False
         return True
 
@@ -418,7 +418,7 @@ class ConventionGate:
             candidate = f"{base}.{seq}"
             try:
                 self._io.read_note(f"{directory}/{candidate}.md")
-            except (KeyError, OSError, ObsidianIOError):
+            except KeyError, OSError, ObsidianIOError:
                 return candidate
             seq += 1
 
@@ -428,7 +428,7 @@ class ConventionGate:
         if actor is not Actor.AGENT:
             return []
         hits = [t for t in tags if t in self._schema.reserved_tags]
-        if len(hits) == 0:
+        if not hits:
             return []
         return [f"reserved tag(s) {hits} are normally set by Rob, not agents"]
 
@@ -801,7 +801,7 @@ class ConventionGate:
         for note_path in paths:
             try:
                 fm, body = _split_note(self._io.read_note(note_path))
-            except (KeyError, OSError, ObsidianIOError):
+            except KeyError, OSError, ObsidianIOError:
                 continue
             note_dir = note_path.rsplit("/", 1)[0] if "/" in note_path else ""
             filename = note_path.rsplit("/", 1)[-1].removesuffix(".md")
@@ -1083,7 +1083,7 @@ class ConventionGate:
             )  # FR: Title-Case note_type
         if pillar is not None:
             fm["pillar"] = pillar
-        if len(tags) > 0:
+        if tags:
             fm["tags"] = tags
         if extra_fields is not None:
             for key, value in extra_fields.items():
@@ -1100,7 +1100,7 @@ class ConventionGate:
             fm["identifier"] = _slugify(title)
         # status defaults to the schema default on create when a vocabulary exists,
         # then normalizes (repairs) so the linter validates the stored value.
-        if "status" not in fm and len(schema.status_values) > 0:
+        if "status" not in fm and schema.status_values:
             fm["status"] = schema.status_default
         if "status" in fm:
             fm["status"] = schema.normalize_status(fm["status"])

@@ -98,7 +98,7 @@ def parse_tool_result(rpc: dict[str, Any]) -> dict[str, Any]:
         return dict(structured)
     try:
         return dict(json.loads(text))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return {"ok": False, "error": f"unparseable tool result: {text[:200]}"}
 
 

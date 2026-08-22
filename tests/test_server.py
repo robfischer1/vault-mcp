@@ -56,7 +56,9 @@ class TestVerbSurface:
 
     def test_every_verb_has_a_description(self):
         """An undescribed verb is unusable and still costs manifest bytes."""
-        missing = [t.name for t in _tools() if not (t.description or "").strip()]
+        missing = [
+            t.name for t in _tools() if not (t.description or "").strip()
+        ]
         assert missing == []
 
     def test_every_verb_has_a_unique_name(self):
@@ -128,7 +130,9 @@ class TestAtomSlugWriteVerb:
 
     def test_atom_slug_write_returns_an_envelope(self, gated: FakeVault):
         result = server.write_note(
-            title="a captured idea", note_type="idea", pillar="Journal",
+            title="a captured idea",
+            note_type="idea",
+            pillar="Journal",
             body="body text",
         )
         assert isinstance(result, dict)
@@ -136,7 +140,9 @@ class TestAtomSlugWriteVerb:
 
     def test_atom_slug_write_reaches_the_vault(self, gated: FakeVault):
         server.write_note(
-            title="a captured idea", note_type="idea", pillar="Journal",
+            title="a captured idea",
+            note_type="idea",
+            pillar="Journal",
             body="body text",
         )
         assert gated.calls, "write_note produced no write"

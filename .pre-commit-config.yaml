@@ -6,9 +6,11 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.16
     hooks:
-      - id: ruff            # lint only (uses [tool.ruff] in pyproject); no ruff-format
+      - id: ruff            # lint (uses [tool.ruff] in pyproject)
         stages: [pre-commit]
         args: [--fix]
+      - id: ruff-format     # format enforcement — the gate is a thing reality checks
+        stages: [pre-commit]
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:

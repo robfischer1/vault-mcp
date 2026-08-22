@@ -28,7 +28,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-TAPE = Path(__file__).resolve().parents[1] / "fixtures" / "rest" / "olrapi.tape.json"
+TAPE = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "rest"
+    / "olrapi.tape.json"
+)
 
 _JSON = "application/json"
 
@@ -124,7 +129,11 @@ class TapeRESTClient:
             args["content_type"] = content_type
         if params and "query" in params:
             args["query"] = params["query"]
-        if json_body is not None and content_type and "jsonlogic" in content_type:
+        if (
+            json_body is not None
+            and content_type
+            and "jsonlogic" in content_type
+        ):
             args["content_type"] = (
                 f"{content_type}|glob"
                 if "glob" in json_body

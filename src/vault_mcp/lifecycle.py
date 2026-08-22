@@ -55,7 +55,7 @@ def parse_payload(raw: object) -> MaterializePayload:
         raise MaterializePayloadError("materialize payload must be a mapping")
 
     missing = [k for k in _REQUIRED_KEYS if not raw.get(k)]
-    if len(missing) > 0:
+    if missing:
         raise MaterializePayloadError(
             f"materialize payload missing required field(s): {missing}"
         )
