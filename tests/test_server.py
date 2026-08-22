@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 
 from tests.substrate import FakeVault
-from vault_mcp import server
+from vault_mcp import server, verbs_write
 from vault_mcp.gate import ConventionGate
 from vault_mcp.schema import load_schema
 
@@ -129,7 +129,7 @@ class TestAtomSlugWriteVerb:
     """
 
     def test_atom_slug_write_returns_an_envelope(self, gated: FakeVault):
-        result = server.write_note(
+        result = verbs_write.write_note(
             title="a captured idea",
             note_type="idea",
             pillar="Journal",
@@ -139,7 +139,7 @@ class TestAtomSlugWriteVerb:
         assert result.get("error") is None, result
 
     def test_atom_slug_write_reaches_the_vault(self, gated: FakeVault):
-        server.write_note(
+        verbs_write.write_note(
             title="a captured idea",
             note_type="idea",
             pillar="Journal",

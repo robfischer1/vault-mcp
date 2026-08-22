@@ -16,7 +16,7 @@ import pytest
 pytest.importorskip("mcp", reason="requires the 'server' extra (mcp)")
 
 os.environ.setdefault("VAULT_MCP_PATH", ".")
-from vault_mcp import hades_client, server
+from vault_mcp import hades_client, server, verbs_plan
 
 
 def test_documents_read_routes_to_calliope_when_hades_set(monkeypatch) -> None:
@@ -39,7 +39,7 @@ def test_documents_read_routes_to_calliope_when_hades_set(monkeypatch) -> None:
     monkeypatch.setattr(server, "HADES_URL", "http://nas01:8101")
     monkeypatch.setattr(hades_client, "read_document", fake_read_document)
 
-    out = server._read_dissolved_row("documents", 42)
+    out = verbs_plan._read_dissolved_row("documents", 42)
     assert out["ok"] is True
     assert captured["doc_id"] == 42
     # Normalized to the phdb documents-row shape the mapper expects.
@@ -52,7 +52,7 @@ def test_calliope_miss_maps_to_row_not_found(monkeypatch) -> None:
     monkeypatch.setattr(
         hades_client, "read_document", lambda *_a, **_k: {"documents": []}
     )
-    out = server._read_dissolved_row("documents", 7)
+    out = verbs_plan._read_dissolved_row("documents", 7)
     assert out["ok"] is False
     assert out["error"] == "row_not_found"
 
@@ -64,7 +64,7 @@ def test_calliope_tool_failure_maps_to_structured_error(monkeypatch) -> None:
         "read_document",
         lambda *_a, **_k: {"ok": False, "error": "no star serves verb"},
     )
-    out = server._read_dissolved_row("documents", 7)
+    out = verbs_plan._read_dissolved_row("documents", 7)
     assert out["ok"] is False
     assert out["error"] == "calliope_read_failed"
 
@@ -89,6 +89,6 @@ def test_hades_unset_falls_back_to_phdb_not_calliope(monkeypatch) -> None:
     import httpx
 
     monkeypatch.setattr(httpx, "get", lambda *_a, **_k: _Resp())
-    out = server._read_dissolved_row("documents", 1)
+    out = verbs_plan._read_dissolved_row("documents", 1)
     assert out["ok"] is True
     assert out["row"]["subject"] == "phdb row"

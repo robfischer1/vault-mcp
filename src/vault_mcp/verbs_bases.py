@@ -14,7 +14,7 @@ every OTHER annotation lazy, which is why nothing else here needed the same
 treatment.
 
 `subscribe_base` is also the one verb with live state — it registers the caller
-on the SubscriptionManager and stamps `_active_sessions` — so it reaches back
+on the SubscriptionManager and stamps `server._active_sessions` — so it reaches back
 into server.py for both. That coupling is why the accessors stayed there rather
 than moving with the verbs.
 """
@@ -25,6 +25,21 @@ from dataclasses import asdict
 from typing import Any
 
 from mcp.server.fastmcp import Context
+
+# Only the live server state comes from server.py — the FastMCP instance, the
+# lazy accessors, and the session set that subscribe_base stamps.
+# IMPORTED AS A MODULE, NOT AS NAMES — deliberately.
+#
+# `from vault_mcp.server import HADES_URL` binds the VALUE at import time, so a
+# test doing `monkeypatch.setattr(server, "HADES_URL", ...)` would patch a name
+# this module never reads again. That is not hypothetical: it broke three
+# test_carve_materialize tests the moment _read_dissolved_row moved out of
+# server.py, and it fails as a confusing runtime error ("phdb unreachable")
+# rather than as an import error.
+#
+# Qualifying every server-owned name keeps the indirection the tests rely on and
+# makes the coupling visible at each use site.
+from vault_mcp import server
 
 # The bases helpers come STRAIGHT FROM vault_mcp.bases, not via server.py.
 # Routing them through the façade cannot work: once these verbs left server.py
@@ -47,15 +62,13 @@ from vault_mcp.bases import (
     write_base_to_file as _write_base_to_file_impl,
 )
 
-# Only the live server state comes from server.py — the FastMCP instance, the
-# lazy accessors, and the session set that subscribe_base stamps.
-from vault_mcp.server import (
-    VAULT_PATH,
-    _active_sessions,
-    _get_index,
-    _get_sub_manager,
-    mcp,
-)
+# `mcp` IS imported directly, unlike everything else above. It is a singleton
+# built once at server import and never rebound, so there is nothing for a test
+# to patch — and qualifying it as `server.mcp` costs real type safety: mypy
+# cannot resolve an attribute on a module that is still mid-import, so every
+# decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
+# makes function untyped". 99 errors, entirely from that one indirection.
+from vault_mcp.server import mcp
 
 
 @mcp.tool()
@@ -80,7 +93,7 @@ async def subscribe_base(
         {"handle": str, "initial_results": dict}
 
     """
-    idx = _get_index()
+    idx = server._get_index()
     file_path = idx.vault / path
     if not file_path.exists():
         return {"error": "not_found", "path": path}
@@ -102,9 +115,9 @@ async def subscribe_base(
         }
 
     if ctx:
-        _active_sessions.add(ctx.session)
+        server._active_sessions.add(ctx.session)
 
-    mgr = _get_sub_manager()
+    mgr = server._get_sub_manager()
     handle = mgr.add(path, view, base_index)
 
     base = pf.bases[base_index]
@@ -135,7 +148,7 @@ async def unsubscribe_base(handle: str) -> dict[str, Any]:
         {"ok": bool}
 
     """
-    mgr = _get_sub_manager()
+    mgr = server._get_sub_manager()
     success = mgr.remove(handle)
     return {"ok": success}
 
@@ -154,7 +167,7 @@ def parse_base(path: str) -> dict[str, Any]:
         {"path": str, "count": int, "bases": [...], "errors": [...]}
 
     """
-    file_path = VAULT_PATH / path
+    file_path = server.VAULT_PATH / path
     if not file_path.exists():
         return {"error": "not_found", "path": path}
     pf = _parse_file_impl(file_path)
@@ -186,7 +199,7 @@ def execute_base(
         {"total": int, "view": str|null, "notes": [...], "warnings": [...]}
 
     """
-    file_path = VAULT_PATH / path
+    file_path = server.VAULT_PATH / path
     if not file_path.exists():
         return {"error": "not_found", "path": path}
 
@@ -226,7 +239,7 @@ def execute_base(
                 "detail": "Only table views are executable in Phase 1",
             }
 
-    idx = _get_index()
+    idx = server._get_index()
     result = _execute_base_impl(base, idx, view_name=view)
     return {
         "total": result.total,
@@ -257,7 +270,7 @@ def write_base(
         {"written": true, "path": str, "action": str, "base_index": int} on success.
 
     """
-    file_path = VAULT_PATH / path
+    file_path = server.VAULT_PATH / path
     if not file_path.exists() and not file_path.parent.exists():
         return {"error": "not_found", "path": path}
 

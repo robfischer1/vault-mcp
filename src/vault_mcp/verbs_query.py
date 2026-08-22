@@ -6,25 +6,38 @@ imports it at its foot for the side effect of these `@mcp.tool()` calls.
 Everything here reads the vault INDEX rather than writing, which is why the
 group travels together: the CLI passthroughs, the frontmatter/filename/recency
 lookups, the link-graph walks and the tag-glossary checks all answer off
-`_get_index()` and none of them touches the Convention Gate.
+`server._get_index()` and none of them touches the Convention Gate.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from vault_mcp.index import VaultIndex
-
 # _AUDIT_IGNORES_REL and _TAGS_GLOSSARY_REL are NOT imported: they are defined
 # further down this file. They lived inside the moved range, so they travelled
 # with the verbs that use them — which is correct, since nothing outside this
 # module reads either one.
-from vault_mcp.server import (
-    VAULT_PATH,
-    _get_cli_client,
-    _get_index,
-    mcp,
-)
+# IMPORTED AS A MODULE, NOT AS NAMES — deliberately.
+#
+# `from vault_mcp.server import HADES_URL` binds the VALUE at import time, so a
+# test doing `monkeypatch.setattr(server, "HADES_URL", ...)` would patch a name
+# this module never reads again. That is not hypothetical: it broke three
+# test_carve_materialize tests the moment _read_dissolved_row moved out of
+# server.py, and it fails as a confusing runtime error ("phdb unreachable")
+# rather than as an import error.
+#
+# Qualifying every server-owned name keeps the indirection the tests rely on and
+# makes the coupling visible at each use site.
+from vault_mcp import server
+from vault_mcp.index import VaultIndex
+
+# `mcp` IS imported directly, unlike everything else above. It is a singleton
+# built once at server import and never rebound, so there is nothing for a test
+# to patch — and qualifying it as `server.mcp` costs real type safety: mypy
+# cannot resolve an attribute on a module that is still mid-import, so every
+# decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
+# makes function untyped". 99 errors, entirely from that one indirection.
+from vault_mcp.server import mcp
 
 
 @mcp.tool()
@@ -40,7 +53,7 @@ def obsidian_cli_reload_plugin(id: str) -> dict[str, Any]:
         {"ok": bool, "data": Any} on success.
 
     """
-    return _get_cli_client().run("plugin:reload", id=id)
+    return server._get_cli_client().run("plugin:reload", id=id)
 
 
 @mcp.tool()
@@ -57,7 +70,7 @@ def obsidian_cli_eval(code: str) -> dict[str, Any]:
         {"ok": bool, "data": Any} on success.
 
     """
-    return _get_cli_client().run("eval", code=code)
+    return server._get_cli_client().run("eval", code=code)
 
 
 @mcp.tool()
@@ -77,7 +90,7 @@ def obsidian_cli_command(
         {"ok": bool, "data": Any} on success.
 
     """
-    return _get_cli_client().run(command, **(params or {}))
+    return server._get_cli_client().run(command, **(params or {}))
 
 
 @mcp.tool()
@@ -98,7 +111,9 @@ def find_notes_by_frontmatter(
         {"count": int, "results": [{path, frontmatter}]}
 
     """
-    results = _get_index().find_notes_by_frontmatter(filters, scope=scope)
+    results = server._get_index().find_notes_by_frontmatter(
+        filters, scope=scope
+    )
     return {"count": len(results), "results": results}
 
 
@@ -118,7 +133,7 @@ def find_by_filename(
         {"count": int, "results": [{stem, path}]}
 
     """
-    results = _get_index().find_by_filename(pattern, scope=scope)
+    results = server._get_index().find_by_filename(pattern, scope=scope)
     return {"count": len(results), "results": results}
 
 
@@ -139,7 +154,7 @@ def recent_edits(
         {"count": int, "results": [{path, modified, stem}]}
 
     """
-    results = _get_index().recent_edits(since, scope=scope, limit=limit)
+    results = server._get_index().recent_edits(since, scope=scope, limit=limit)
     return {"count": len(results), "results": results}
 
 
@@ -161,7 +176,7 @@ def read_note(
     full path when unambiguous, or flagged as "ambiguous"/"unresolved".
 
     """
-    return _get_index().read_note(stem_or_path)
+    return server._get_index().read_note(stem_or_path)
 
 
 @mcp.tool()
@@ -175,7 +190,7 @@ def reindex() -> dict[str, Any]:
         {"indexed": int, "names": int, "elapsed_ms": int}
 
     """
-    return _get_index().reindex()
+    return server._get_index().reindex()
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +211,7 @@ def backlinks_to(stem: str) -> dict[str, Any]:
         {"stem": str, "count": int, "results": [{stem, path}]}
 
     """
-    results = _get_index().backlinks_to(stem)
+    results = server._get_index().backlinks_to(stem)
     return {"stem": stem, "count": len(results), "results": results}
 
 
@@ -215,7 +230,7 @@ def outbound_links(
         {"stem": str, "count": int, "results": [{stem, path|resolution}]}
 
     """
-    results = _get_index().outbound_links(
+    results = server._get_index().outbound_links(
         stem, include_image_embeds=include_image_embeds
     )
     return {"stem": stem, "count": len(results), "results": results}
@@ -234,8 +249,8 @@ def find_orphans(scope: str | None = None) -> dict[str, Any]:
         {"count": int, "results": [{path, stem, reason}]}
 
     """
-    idx = _get_index()
-    ignores_path = VAULT_PATH / _AUDIT_IGNORES_REL
+    idx = server._get_index()
+    ignores_path = server.VAULT_PATH / _AUDIT_IGNORES_REL
     exempt = VaultIndex.parse_audit_ignores(ignores_path)
     results = idx.find_orphans(scope=scope, exempt_prefixes=exempt)
     return {"count": len(results), "results": results}
@@ -257,7 +272,7 @@ def find_dangling_links(scope: str | None = None) -> dict[str, Any]:
         link_type is "wikilink" or "up".
 
     """
-    idx = _get_index()
+    idx = server._get_index()
     results = idx.find_dangling_links(scope=scope)
     return {"count": len(results), "results": results}
 
@@ -282,8 +297,8 @@ def tag_glossary_check() -> dict[str, Any]:
          "results": [{path, invalid_tags: [str]}]}
 
     """
-    idx = _get_index()
-    glossary_path = VAULT_PATH / _TAGS_GLOSSARY_REL
+    idx = server._get_index()
+    glossary_path = server.VAULT_PATH / _TAGS_GLOSSARY_REL
     results = idx.tag_glossary_check(glossary_path)
     return {"files_with_violations": len(results), "results": results}
 
@@ -304,7 +319,7 @@ def all_tags(include_body: bool = True) -> dict[str, Any]:
         {"count": int, "tags": [{tag, count, frontmatter_count, body_count, sources}]}
 
     """
-    results = _get_index().all_tags(include_body=include_body)
+    results = server._get_index().all_tags(include_body=include_body)
     return {"count": len(results), "tags": results}
 
 
@@ -324,7 +339,7 @@ def vault_stats() -> dict[str, Any]:
          "edit_volume_by_week": [{week, count}]}
 
     """
-    idx = _get_index()
+    idx = server._get_index()
     stats = idx.vault_stats()
     stats["last_indexed_at"] = idx.last_indexed_at
     stats["watcher_active"] = idx._watcher_active

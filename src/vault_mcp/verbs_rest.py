@@ -5,7 +5,7 @@ LOC; server.py was 5x over. This is a REGISTRATION MODULE: importing it is what
 puts these verbs on the surface, which is why server.py imports it for its side
 effect rather than for a name.
 
-THE `if not REST_DISABLE` GUARD IS LOAD-BEARING AND MOVED WITH THE BLOCK. These
+THE `if not server.REST_DISABLE` GUARD IS LOAD-BEARING AND MOVED WITH THE BLOCK. These
 16 are the only conditionally-registered verbs in the package, so the surface is
 54 verbs with the REST lane enabled and 38 without. A split that dropped the
 guard would silently register them against a disabled lane; one that dropped the
@@ -17,7 +17,26 @@ from __future__ import annotations
 
 from typing import Any
 
-from vault_mcp.server import REST_DISABLE, _get_rest_client, mcp
+# IMPORTED AS A MODULE, NOT AS NAMES — deliberately.
+#
+# `from vault_mcp.server import HADES_URL` binds the VALUE at import time, so a
+# test doing `monkeypatch.setattr(server, "HADES_URL", ...)` would patch a name
+# this module never reads again. That is not hypothetical: it broke three
+# test_carve_materialize tests the moment _read_dissolved_row moved out of
+# server.py, and it fails as a confusing runtime error ("phdb unreachable")
+# rather than as an import error.
+#
+# Qualifying every server-owned name keeps the indirection the tests rely on and
+# makes the coupling visible at each use site.
+from vault_mcp import server
+
+# `mcp` IS imported directly, unlike everything else above. It is a singleton
+# built once at server import and never rebound, so there is nothing for a test
+# to patch — and qualifying it as `server.mcp` costs real type safety: mypy
+# cannot resolve an attribute on a module that is still mid-import, so every
+# decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
+# makes function untyped". 99 errors, entirely from that one indirection.
+from vault_mcp.server import mcp
 
 
 def _object_or_error(
@@ -50,7 +69,7 @@ def _object_or_error(
     return out
 
 
-if not REST_DISABLE:
+if not server.REST_DISABLE:
 
     @mcp.tool()
     def rest_health() -> dict[str, Any]:
@@ -65,7 +84,7 @@ if not REST_DISABLE:
              "last_probed": float, "last_error": str|None}
 
         """
-        return _get_rest_client().probe()
+        return server._get_rest_client().probe()
 
     @mcp.tool()
     def active_note() -> dict[str, Any]:
@@ -83,7 +102,7 @@ if not REST_DISABLE:
              "as_of": "rest"} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.get(
             "/active/", accept="application/vnd.olrapi.note+json"
         )
@@ -116,7 +135,7 @@ if not REST_DISABLE:
         path = f"/periodic/{level}/"
         if date:
             path = f"/periodic/{level}/{date}"
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.get(
             path,
             accept="application/vnd.olrapi.note+json",
@@ -142,7 +161,7 @@ if not REST_DISABLE:
              "as_of": "rest"} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.get(
             f"/vault/{path}",
             accept="application/vnd.olrapi.note+json",
@@ -180,7 +199,7 @@ if not REST_DISABLE:
             {"ok": True, "patched": path} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         headers: dict[str, str] = {
             "Target-Type": target_type,
             "Operation": operation,
@@ -213,7 +232,7 @@ if not REST_DISABLE:
             {"ok": True, "appended": path} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.post(
             f"/vault/{path}",
             content=content,
@@ -240,7 +259,7 @@ if not REST_DISABLE:
             {"ok": True, "field": key, "path": path} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         headers: dict[str, str] = {
             "Target-Type": "frontmatter",
             "Target": key,
@@ -285,7 +304,7 @@ if not REST_DISABLE:
         path = f"/periodic/{level}/"
         if date:
             path = f"/periodic/{level}/{date}"
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.post(
             path, content=content, content_type="text/markdown"
         )
@@ -308,7 +327,7 @@ if not REST_DISABLE:
             {"count": int, "results": [{filename, score, matches}]}
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.post(
             "/search/simple/",
             params={"query": query},
@@ -356,7 +375,7 @@ if not REST_DISABLE:
                 "detail": f"command not in allowlist: {command_id}. "
                 f"Allowed: {sorted(REST_COMMAND_ALLOWLIST)}",
             }
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.post(f"/commands/{command_id}/")
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
@@ -384,7 +403,7 @@ if not REST_DISABLE:
             {"count": int, "results": [{filename, result: {field: value}}]} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.post(
             "/search/",
             content=dql,
@@ -419,7 +438,7 @@ if not REST_DISABLE:
             {"count": int, "results": [...]} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.post(
             "/search/",
             json_body=query,
@@ -447,7 +466,7 @@ if not REST_DISABLE:
             {"count": int, "tags": [{"name": str, "count": int}]}
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         result = client.get("/tags/")
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
@@ -469,7 +488,7 @@ if not REST_DISABLE:
             {"files": [str]} — filenames and subdirectory names.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         endpoint = f"/vault/{path}" if path else "/vault/"
         if not endpoint.endswith("/"):
             endpoint += "/"
@@ -497,7 +516,7 @@ if not REST_DISABLE:
             {"opened": str} on success.
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         params = {"newLeaf": "true"} if new_leaf else None
         result = client.post(f"/open/{path}", params=params)
         if not result["ok"]:
@@ -519,7 +538,7 @@ if not REST_DISABLE:
             {"headings": [str], "blocks": [str], "frontmatterFields": [str]}
 
         """
-        client = _get_rest_client()
+        client = server._get_rest_client()
         endpoint = f"/vault/{path}" if path else "/active/"
         result = client.get(
             endpoint,
