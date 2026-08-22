@@ -8,10 +8,20 @@ belong here; test doubles belong in `tests/substrate/`.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+
+# SET BEFORE ANY vault_mcp.server IMPORT. server.py resolves the vault at MODULE
+# scope (server.py:90) and raises FileNotFoundError when it cannot find one, so
+# the module is unimportable without this — which is the structural reason the
+# repo had no tests/test_server.py at all and why that 3,074-line module sat at
+# 32% coverage. conftest is imported before any test module, so this lands first.
+os.environ.setdefault(
+    "VAULT_MCP_PATH", str(Path(__file__).parent / "fixtures" / "mini-vault")
+)
 
 from tests.substrate import FakeVault
 from vault_mcp.gate import ConventionGate
