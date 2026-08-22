@@ -7,18 +7,25 @@ repos:
     rev: v0.15.16
     hooks:
       - id: ruff            # lint only (uses [tool.ruff] in pyproject); no ruff-format
+        stages: [pre-commit]
         args: [--fix]
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
+        stages: [pre-commit]
         args: ['--baseline', '.secrets.baseline']
         exclude: ^tests/fixtures/
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: check-yaml
+        stages: [pre-commit]
       - id: check-added-large-files
+        stages: [pre-commit]
       - id: check-merge-conflict
+        stages: [pre-commit]

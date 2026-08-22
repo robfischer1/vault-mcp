@@ -12,6 +12,7 @@
 # Dockerfile and no slag record in the fleet roster. Before `variant`, `mcp` had
 # to carry both meanings, and a repo like this one could only be described by
 # lying about one of them.
+_commit: v0.26.0
 _src_path: https://forgejo.notusmi.com/rob/python-repo-template.git
 author_name: Rob Fischer
 core_backed: false
