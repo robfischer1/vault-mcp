@@ -333,7 +333,9 @@ class TestFormulaEvaluation:
         for note in result.notes:
             tags = note["frontmatter"].get("tags", [])
             if tags:
-                # tags_str: 'tags.map(t => "#" + t).join(", ")'
+                # the tags_str formula under test, verbatim, in the Bases
+                # expression language rather than Python —
+                #     tags.map(t => "#" + t).join(", ")
                 expected = ", ".join(f"#{t}" for t in tags)
                 assert note["formulas"]["tags_str"] == expected
 
@@ -345,7 +347,9 @@ class TestFormulaEvaluation:
         result = execute_base(base, idx)
         assert len(result.warnings) == 0
         for note in result.notes:
-            # full_path: 'file.folder + "/" + file.name + "." + file.ext'
+            # the full_path formula under test, verbatim, in the Bases
+            # expression language rather than Python —
+            #     file.folder + "/" + file.name + "." + file.ext
             expected = note["path"]
             assert note["formulas"]["full_path"] == expected
 

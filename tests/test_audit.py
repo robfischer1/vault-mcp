@@ -95,7 +95,8 @@ class TestScan:
         )
         report = gate.audit("Knowledge", resolve=False)
         cats = {d["category"] for d in report["notes"][0]["drift"]}
-        assert "tag" in cats and "field" in cats
+        assert "tag" in cats
+        assert "field" in cats
 
 
 class TestHeal:

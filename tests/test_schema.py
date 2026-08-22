@@ -193,8 +193,10 @@ class TestTypeConfig:
         schema = load_schema(VALID)
         dossier = schema.type_config("Dossier")
         signal = schema.type_config("signal")
-        assert dossier is not None and dossier.write_mode == "materialize-only"
-        assert signal is not None and signal.write_mode == "pure-DB"
+        assert dossier is not None
+        assert dossier.write_mode == "materialize-only"
+        assert signal is not None
+        assert signal.write_mode == "pure-DB"
 
     def test_invalid_write_mode_rejected(self):
         with pytest.raises(SchemaValidationError) as exc:

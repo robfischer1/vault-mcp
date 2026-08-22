@@ -62,7 +62,9 @@ def test_gate_is_conservative_when_the_clock_is_unknown(tmp_path: Path) -> None:
     )
 
 
-def test_gate_is_conservative_when_the_file_is_unstattable(tmp_path: Path) -> None:
+def test_gate_is_conservative_when_the_file_is_unstattable(
+    tmp_path: Path,
+) -> None:
     assert is_probably_stale(
         "missing.md",
         vault_root=str(tmp_path),
@@ -82,7 +84,7 @@ def test_gated_records_are_marked_and_skip_the_store_read() -> None:
         list_files=lambda _d: ["a.md", "b.md"],
         read_vault=lambda _p: "body",
         read_stored=read_stored,
-        build_payload=lambda p, r: {"source_path": p},
+        build_payload=lambda p, _r: {"source_path": p},
         write_stored=lambda _p: {"ok": True},
         cheap_gate=lambda p: p == "a.md",  # only a.md may be stale
     )
@@ -110,7 +112,7 @@ def test_gate_never_suppresses_a_write_on_its_own() -> None:
         read_stored=lambda p: StoredCopy(
             p, raw_hash=body_hash(body), body_bytes=len(body)
         ),
-        build_payload=lambda p, r: {"source_path": p},
+        build_payload=lambda p, _r: {"source_path": p},
         write_stored=_write_stored,
         refresh=True,
         cheap_gate=lambda _p: True,  # gate says "check it"

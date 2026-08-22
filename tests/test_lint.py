@@ -98,7 +98,8 @@ class TestCollectAll:
         assert tag.field == "tags"
         assert tag.severity is Severity.ERROR
         d = tag.to_dict()
-        assert d["code"] == "tag" and d["severity"] == "error"
+        assert d["code"] == "tag"
+        assert d["severity"] == "error"
         assert "topic/nope" in d["message"]
 
 

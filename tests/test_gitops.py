@@ -22,26 +22,151 @@ from vault_mcp.gitops import (
 )
 
 
-def _git(repo: Path, *args: str) -> str:
-    cp = subprocess.run(
-        ["git", "-C", str(repo), *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+# ONE READER PER GIT INVOCATION, instead of one variadic `_git(repo, *args)`.
+#
+# THE VARIADIC HELPER GUARANTEED THE FINDING IT THEN HAD TO SUPPRESS. ruff's
+# S603 fires unless every argv element is an inline literal AT THE CALL SITE —
+# routing argv through `*args` can never satisfy that, no matter how literal
+# every caller looks, because the rule reads the `subprocess.run`. narcissus
+# names this exact shape as the wrong one and records rewriting its own call
+# sites rather than excusing them; this is the same move at smaller scale.
+#
+# So each distinct invocation gets its own small function whose argv is written
+# out in full, and the only thing that varies — the repository — rides `cwd=`,
+# a keyword the rule cannot see. `/usr/bin/git` is absolute, which closes S607
+# at the same time: nothing walks PATH, so whoever controls PATH no longer
+# controls which binary runs.
+#
+# The call sites stay one-liners and read BETTER than `_git(repo, "rev-list",
+# "--count", "HEAD")` did, because each one now says what it means.
+def _out(cp: subprocess.CompletedProcess[str]) -> str:
     return cp.stdout.strip()
+
+
+def _commit_count(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "rev-list", "--count", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    )
+
+
+def _paths_in_head(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "show", "--name-only", "--format=", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    )
+
+
+def _head_subject(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "log", "-1", "--format=%s"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    )
+
+
+def _tracked(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "ls-files"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    )
+
+
+def _head_identity(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "log", "-1", "--format=%an|%ae|%cn|%ce"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    )
+
+
+def _head_author_name(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "log", "-1", "--format=%an"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    )
 
 
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
-    """A temp git repo with one initial commit and a base identity."""
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    _git(tmp_path, "config", "user.name", "Base User")
-    _git(tmp_path, "config", "user.email", "base@example.com")
+    """A temp git repo with one initial commit and a base identity.
+
+    The identity is written as real `git config` rather than handed in through
+    the environment ON PURPOSE: TestBotIdentity asserts that the committer's bot
+    identity OVERRIDES a configured one, so the base identity has to live where
+    a real repo would keep it.
+    """
+    subprocess.run(
+        ["/usr/bin/git", "init", "-q"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["/usr/bin/git", "config", "user.name", "Base User"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["/usr/bin/git", "config", "user.email", "base@example.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
     (tmp_path / "README.md").write_text("init\n", encoding="utf-8")
-    _git(tmp_path, "add", "-A")
-    _git(tmp_path, "commit", "-q", "-m", "init")
+    subprocess.run(
+        ["/usr/bin/git", "add", "-A"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["/usr/bin/git", "commit", "-q", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
     return tmp_path
 
 
@@ -55,12 +180,11 @@ class TestCommitPaths:
         gc = _committer(repo)
         (repo / "note.md").write_text("hello\n", encoding="utf-8")
         sha = gc.commit_paths(["note.md"], "vault: create note.md")
-        assert sha is not None and len(sha) == 40
-        assert _git(repo, "rev-list", "--count", "HEAD") == "2"  # init + this
+        assert sha is not None
+        assert len(sha) == 40
+        assert _commit_count(repo) == "2"  # init + this
         # the path is in the new commit
-        assert "note.md" in _git(
-            repo, "show", "--name-only", "--format=", "HEAD"
-        )
+        assert "note.md" in _paths_in_head(repo)
 
     def test_sequential_writes_n_commits(self, repo: Path) -> None:
         gc = _committer(repo)
@@ -70,23 +194,20 @@ class TestCommitPaths:
             shas.append(gc.commit_paths([f"n{i}.md"], f"vault: create n{i}.md"))
         assert all(s is not None for s in shas)
         assert len(set(shas)) == 3  # three distinct commits
-        assert _git(repo, "rev-list", "--count", "HEAD") == "4"  # init + 3
+        assert _commit_count(repo) == "4"  # init + 3
 
     def test_message_used_verbatim(self, repo: Path) -> None:
         gc = _committer(repo)
         (repo / "n.md").write_text("x\n", encoding="utf-8")
         gc.commit_paths(["n.md"], "outputs: a rich caller-supplied subject")
-        assert (
-            _git(repo, "log", "-1", "--format=%s")
-            == "outputs: a rich caller-supplied subject"
-        )
+        assert _head_subject(repo) == "outputs: a rich caller-supplied subject"
 
     def test_no_change_returns_none(self, repo: Path) -> None:
         gc = _committer(repo)
         # committing an unmodified, already-tracked file stages nothing
         sha = gc.commit_paths(["README.md"], "vault: noop")
         assert sha is None
-        assert _git(repo, "rev-list", "--count", "HEAD") == "1"
+        assert _commit_count(repo) == "1"
 
     def test_commits_a_deletion(self, repo: Path) -> None:
         gc = _committer(repo)
@@ -97,13 +218,13 @@ class TestCommitPaths:
             ["doomed.md"], "vault: dissolve doomed.md", wait_for_create=False
         )
         assert sha is not None
-        assert "doomed.md" not in _git(repo, "ls-files")
+        assert "doomed.md" not in _tracked(repo)
 
     def test_disabled_is_noop(self, repo: Path) -> None:
         gc = _committer(repo, enabled=False)
         (repo / "note.md").write_text("hello\n", encoding="utf-8")
         assert gc.commit_paths(["note.md"], "vault: create") is None
-        assert _git(repo, "rev-list", "--count", "HEAD") == "1"
+        assert _commit_count(repo) == "1"
 
     def test_non_repo_is_failsafe(self, tmp_path: Path) -> None:
         # not a git repo -> every op fails-safe, never raises
@@ -119,9 +240,7 @@ class TestBotIdentity:
         gc = _committer(repo)
         (repo / "n.md").write_text("x\n", encoding="utf-8")
         gc.commit_paths(["n.md"], "vault: create n.md")
-        an, ae, cn, ce = _git(
-            repo, "log", "-1", "--format=%an|%ae|%cn|%ce"
-        ).split("|")
+        an, ae, cn, ce = _head_identity(repo).split("|")
         assert an == DEFAULT_BOT_NAME
         assert ae == DEFAULT_BOT_EMAIL
         assert (
@@ -133,7 +252,7 @@ class TestBotIdentity:
         gc = _committer(repo, author_name="custom[bot]", author_email="c@x.dev")
         (repo / "n.md").write_text("x\n", encoding="utf-8")
         gc.commit_paths(["n.md"], "vault: create n.md")
-        assert _git(repo, "log", "-1", "--format=%an") == "custom[bot]"
+        assert _head_author_name(repo) == "custom[bot]"
 
 
 class TestSweep:
@@ -146,8 +265,9 @@ class TestSweep:
         result = gc.sweep_commit("vault: periodic sweep")
         assert result["committed"] is True
         assert result["sha"] is not None
-        tracked = _git(repo, "ls-files")
-        assert "a.md" in tracked and "b.md" in tracked
+        tracked = _tracked(repo)
+        assert "a.md" in tracked
+        assert "b.md" in tracked
 
     def test_sweep_nothing_to_commit(self, repo: Path) -> None:
         gc = _committer(repo)

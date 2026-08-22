@@ -74,12 +74,16 @@ def test_with_overrides_is_config() -> None:
     )
     assert custom.classify("References/Paper.md").dissolve is True
     assert custom.classify("Garden/Canon/Voice.md").dissolve is False
-    assert custom.classify("Brain Soup/Note.md").dissolve is False  # no longer listed
+    assert (
+        custom.classify("Brain Soup/Note.md").dissolve is False
+    )  # no longer listed
 
 
 def test_open_decisions_are_surfaced() -> None:
     # The unconfirmed cut + Obsidian disposition ride on the policy, loudly.
     assert POLICY.open_decisions == OPEN_DECISIONS
     assert any("SCOPE CUT UNCONFIRMED" in d for d in POLICY.open_decisions)
-    assert any("OBSIDIAN DISPOSITION UNDECIDED" in d for d in POLICY.open_decisions)
+    assert any(
+        "OBSIDIAN DISPOSITION UNDECIDED" in d for d in POLICY.open_decisions
+    )
     assert POLICY.obsidian_disposition == "undecided"

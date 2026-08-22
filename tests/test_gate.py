@@ -174,7 +174,8 @@ class TestTypeEnforcement:
                 directory="Knowledge",
                 created="2026-05-30",
             )
-        assert "Gadget" in str(exc.value) and "serial" in str(exc.value)
+        assert "Gadget" in str(exc.value)
+        assert "serial" in str(exc.value)
         assert len(writer.calls) == 0
 
     def test_required_field_present_passes(self):
@@ -199,7 +200,9 @@ class TestTypeEnforcement:
                 created="2026-05-30",
             )
         msg = str(exc.value)
-        assert "Gadget" in msg and "condition" in msg and "Mint" in msg
+        assert "Gadget" in msg
+        assert "condition" in msg
+        assert "Mint" in msg
         assert len(writer.calls) == 0
 
     def test_in_vocabulary_value_passes(self):
@@ -223,7 +226,8 @@ class TestTypeEnforcement:
                 extra_fields={"coords": "not-coords"},
                 created="2026-05-30",
             )
-        assert "Spot" in str(exc.value) and "geo" in str(exc.value)
+        assert "Spot" in str(exc.value)
+        assert "geo" in str(exc.value)
 
     def test_good_format_passes(self):
         gate, _ = _gate()
@@ -670,7 +674,8 @@ class TestTagEnhancements:
             created="2026-05-30",
         )
         content = vault.store[result.path]
-        assert "\\#cooking" in content and "\\#fitness" in content
+        assert "\\#cooking" in content
+        assert "\\#fitness" in content
 
     def test_inline_tag_exemptions(self):
         gate, vault = _gate()
@@ -682,10 +687,8 @@ class TestTagEnhancements:
             created="2026-05-30",
         )
         content = vault.store[result.path]
-        assert (
-            "#activity/processed" in content
-            and "\\#activity/processed" not in content
-        )
+        assert "#activity/processed" in content
+        assert "\\#activity/processed" not in content
         assert "x.com#frag" in content  # URL fragment not escaped
 
     def test_no_escaping_outside_imported_dirs(self):
@@ -698,7 +701,8 @@ class TestTagEnhancements:
             created="2026-05-30",
         )
         content = vault.store[result.path]
-        assert "#realtag" in content and "\\#realtag" not in content
+        assert "#realtag" in content
+        assert "\\#realtag" not in content
 
 
 class TestBodyValidation:
@@ -712,7 +716,8 @@ class TestBodyValidation:
                 body="Hello <Name>, welcome.",
                 created="2026-05-30",
             )
-        assert "<Name>" in str(exc.value) and "{Name}" in str(exc.value)
+        assert "<Name>" in str(exc.value)
+        assert "{Name}" in str(exc.value)
 
     def test_angle_bracket_inside_code_allowed(self):
         gate, _ = _gate()
@@ -975,7 +980,9 @@ class TestProtection:
         with pytest.raises(ProtectionError):
             gate.check_protection("Atlas", Actor.AGENT, WriteMode.CREATE)
         with pytest.raises(ProtectionError):
-            gate.check_protection("Atlas/Periodic", Actor.AGENT, WriteMode.CREATE)
+            gate.check_protection(
+                "Atlas/Periodic", Actor.AGENT, WriteMode.CREATE
+            )
 
 
 class TestUpdateNote:
@@ -1177,7 +1184,8 @@ class TestDelete:
         gate, vault = _gate()
         path = self._seed(gate)
         result = gate.delete(path)
-        assert result["ok"] is True and result["deleted"] is True
+        assert result["ok"] is True
+        assert result["deleted"] is True
         assert path not in vault.store
         assert path in vault.deleted
 
@@ -1217,7 +1225,8 @@ class TestMoveNote:
         gate, vault = _gate()
         src = self._seed(gate, vault)
         result = gate.move_note(src, "Projects/Movable.md")
-        assert result["ok"] is True and result["moved"] is True
+        assert result["ok"] is True
+        assert result["moved"] is True
         assert src not in vault.store
         assert "Projects/Movable.md" in vault.store
 

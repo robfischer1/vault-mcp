@@ -286,7 +286,9 @@ def test_vault_read_failure_is_per_plan() -> None:
 def test_store_read_failure_is_per_plan() -> None:
     """A store read that raises becomes an error record, not a crash."""
 
-    def read_stored(p: str) -> StoredCopy | None:
+    # `read_stored(source_path)` — called positionally; this one raises before
+    # it could read the path. The other three doubles in this file DO read it.
+    def read_stored(_p: str) -> StoredCopy | None:
         raise RuntimeError("store down")
 
     report = sweep_plans(

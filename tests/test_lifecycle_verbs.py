@@ -75,7 +75,8 @@ def test_dissolve_writes_both_then_declares_then_deletes() -> None:
     poster = FakePoster()
     res, state = _run(poster)
 
-    assert res["ok"] is True and res["deleted"] is True
+    assert res["ok"] is True
+    assert res["deleted"] is True
     # C5: the bridge is retired — no wave is declared, no dissolution id.
     assert res["dissolution_id"] is None
     # C3: plan notes dissolve document-only (the plans sink is retired).
@@ -91,7 +92,8 @@ def test_write_failure_does_not_delete() -> None:
     poster = FakePoster(fail_endpoint="/write/document")
     res, state = _run(poster)
 
-    assert res["ok"] is False and res["stage"] == "write"
+    assert res["ok"] is False
+    assert res["stage"] == "write"
     assert res["endpoint"] == "/write/document"
     # The write failed so the file must remain (content recoverable).
     assert state["deleted"] is False
@@ -104,7 +106,8 @@ def test_declare_failure_does_not_delete() -> None:
     poster = FakePoster(fail_endpoint="/dissolution/declare")
     res, state = _run(poster)
 
-    assert res["ok"] is True and res["deleted"] is True
+    assert res["ok"] is True
+    assert res["deleted"] is True
     assert state["deleted"] is True  # write succeeded -> delete proceeds
 
 
