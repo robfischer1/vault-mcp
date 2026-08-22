@@ -17,22 +17,26 @@ import sys
 from typing import TYPE_CHECKING
 
 from vault_mcp import server as _srv
+from vault_mcp import verbs_query as _query
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import Any
 
+# Sourced from vault_mcp.verbs_query since vault-mcp#5294 moved the read-side
+# verbs out of server.py. Importing verbs_query here is also what registers
+# them if the CLI is the entry point rather than the server.
 TOOLS: dict[str, Callable[..., Any]] = {
-    "find_notes_by_frontmatter": _srv.find_notes_by_frontmatter,
-    "find_by_filename": _srv.find_by_filename,
-    "recent_edits": _srv.recent_edits,
-    "read_note": _srv.read_note,
-    "reindex": _srv.reindex,
-    "backlinks_to": _srv.backlinks_to,
-    "outbound_links": _srv.outbound_links,
-    "find_orphans": _srv.find_orphans,
-    "tag_glossary_check": _srv.tag_glossary_check,
-    "vault_stats": _srv.vault_stats,
+    "find_notes_by_frontmatter": _query.find_notes_by_frontmatter,
+    "find_by_filename": _query.find_by_filename,
+    "recent_edits": _query.recent_edits,
+    "read_note": _query.read_note,
+    "reindex": _query.reindex,
+    "backlinks_to": _query.backlinks_to,
+    "outbound_links": _query.outbound_links,
+    "find_orphans": _query.find_orphans,
+    "tag_glossary_check": _query.tag_glossary_check,
+    "vault_stats": _query.vault_stats,
 }
 
 # REST tools (Phases 6-7) — only present when REST is enabled.
