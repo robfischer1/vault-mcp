@@ -1,0 +1,335 @@
+{
+  "recorded_from": "Obsidian Local REST API v4.1.7 on 127.0.0.1:27123",
+  "recorded_at": "2026-08-22",
+  "content": "SYNTHETIC. Shapes are recorded from the live API; every value is invented.",
+  "cases": [
+    {
+      "verb": "GET /active/",
+      "args": {
+        "accept": "application/vnd.olrapi.note+json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "path": "Knowledge/Notes/Example Note.md",
+          "content": "# Example Note\n\nSynthetic body.\n",
+          "tags": [],
+          "frontmatter": {
+            "name": "Example Note",
+            "created": "2026-01-02",
+            "author_type": "ai",
+            "author_level": "ai",
+            "updated": "2026-01-02",
+            "note_type": "note",
+            "identifier": "example-note",
+            "status": "Active"
+          },
+          "links": [],
+          "backlinks": [
+            "Knowledge/Notes/Other.md"
+          ],
+          "stat": {
+            "ctime": 1717000000000,
+            "mtime": 1717000000000,
+            "size": 32
+          }
+        }
+      }
+    },
+    {
+      "verb": "GET /periodic/daily/",
+      "args": {
+        "accept": "application/vnd.olrapi.note+json",
+        "Target-Type": "note"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "path": "Journal/2026-01-02.md",
+          "content": "# 2026-01-02\n\nSynthetic daily.\n",
+          "tags": [],
+          "frontmatter": {
+            "name": "2026-01-02",
+            "note_type": "daily"
+          },
+          "links": [],
+          "backlinks": [],
+          "stat": {
+            "ctime": 1717000000000,
+            "mtime": 1717000000000,
+            "size": 31
+          }
+        }
+      }
+    },
+    {
+      "verb": "GET /vault/CLAUDE.md",
+      "args": {
+        "accept": "application/vnd.olrapi.note+json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "path": "CLAUDE.md",
+          "content": "# CLAUDE.md\n\nSynthetic governance shim.\n",
+          "tags": [],
+          "frontmatter": {},
+          "links": [],
+          "backlinks": [
+            "System/System.md"
+          ],
+          "stat": {
+            "ctime": 1717000000000,
+            "mtime": 1717000000000,
+            "size": 40
+          }
+        }
+      }
+    },
+    {
+      "verb": "GET /vault/DOES_NOT_EXIST_12345.md",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": false,
+        "error": "rest_not_found",
+        "detail": "{\n  \"message\": \"Not Found\",\n  \"errorCode\": 40400\n}"
+      }
+    },
+    {
+      "verb": "GET /vault/",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "files": [
+            "Archives/",
+            "Artifacts/",
+            "Atlas/",
+            "Entities/",
+            "Garden/",
+            "Inbox/",
+            "Journal/",
+            "Knowledge/",
+            "System/",
+            "CLAUDE.md",
+            "README.md"
+          ]
+        }
+      }
+    },
+    {
+      "verb": "GET /vault/System/",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "files": [
+            "Logs/",
+            "Prompts/",
+            "Reference/",
+            "Folder Hierarchy.md",
+            "System.md"
+          ]
+        }
+      }
+    },
+    {
+      "verb": "GET /vault/NONEXISTENT_DIR_12345/",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": false,
+        "error": "rest_not_found",
+        "detail": "{\n  \"message\": \"Not Found\",\n  \"errorCode\": 40400\n}"
+      }
+    },
+    {
+      "verb": "GET /tags/",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "tags": [
+            {
+              "name": "topic/example",
+              "count": 12
+            },
+            {
+              "name": "status/active",
+              "count": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "verb": "GET /commands/",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "commands": [
+            {
+              "id": "editor:focus",
+              "name": "Focus on editor"
+            },
+            {
+              "id": "app:go-back",
+              "name": "Navigate back"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "verb": "POST /commands/editor:focus/",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": true,
+        "data": null
+      }
+    },
+    {
+      "verb": "POST /open/CLAUDE.md",
+      "args": {
+        "accept": "application/json"
+      },
+      "response": {
+        "ok": true,
+        "data": null
+      }
+    },
+    {
+      "verb": "GET /active/",
+      "args": {
+        "accept": "application/vnd.olrapi.document-map+json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "headings": [
+            "Example Note",
+            "Detail"
+          ],
+          "blocks": [],
+          "frontmatterFields": [
+            "name",
+            "created",
+            "note_type"
+          ]
+        }
+      }
+    },
+    {
+      "verb": "GET /vault/CLAUDE.md",
+      "args": {
+        "accept": "application/vnd.olrapi.document-map+json"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "headings": [
+            "CLAUDE.md"
+          ],
+          "blocks": [],
+          "frontmatterFields": []
+        }
+      }
+    },
+    {
+      "verb": "POST /search/simple/",
+      "args": {
+        "query": "CLAUDE"
+      },
+      "response": {
+        "ok": true,
+        "data": [
+          {
+            "filename": "CLAUDE.md",
+            "score": -1.5,
+            "matches": [
+              {
+                "match": {
+                  "start": 2,
+                  "end": 12
+                },
+                "context": "# CLAUDE.md"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "verb": "POST /search/simple/",
+      "args": {
+        "query": ""
+      },
+      "response": {
+        "ok": false,
+        "error": "rest_invalid_request",
+        "detail": "{\n  \"message\": \"Bad Request\",\n  \"errorCode\": 40000\n}"
+      }
+    },
+    {
+      "verb": "POST /search/",
+      "args": {
+        "content_type": "application/vnd.olrapi.jsonlogic+json",
+        "glob": "System/*"
+      },
+      "response": {
+        "ok": true,
+        "data": [
+          {
+            "filename": "System/System.md",
+            "result": true
+          },
+          {
+            "filename": "System/AGENTS.md",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "verb": "POST /search/",
+      "args": {
+        "content_type": "application/vnd.olrapi.jsonlogic+json",
+        "frontmatter.note_type": "folder-note"
+      },
+      "response": {
+        "ok": true,
+        "data": [
+          {
+            "filename": "System/System.md",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "verb": "POST /search/",
+      "args": {
+        "content_type": "application/vnd.olrapi.dataview.dql+txt"
+      },
+      "response": {
+        "ok": false,
+        "error": "rest_invalid_request",
+        "detail": "{\n  \"message\": \"Unknown or invalid Content-Type specified in Content-Type header.\",\n  \"errorCode\": 40012\n}"
+      }
+    }
+  ]
+}

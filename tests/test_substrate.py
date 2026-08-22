@@ -14,6 +14,8 @@ from __future__ import annotations
 import pytest
 
 from tests.substrate import FakeVault
+
+NOTE_JSON = "application/vnd.olrapi.note+json"
 from vault_mcp.cli_client import ObsidianIOError
 
 
@@ -134,3 +136,49 @@ class TestAtomFilenameRegression:
         assert first.path != second.path
         assert first.path in vault.store
         assert second.path in vault.store
+
+
+class TestTapeRefusal:
+    """The tape must REFUSE what it was never told — the pinned-fake property.
+
+    A permissive fake answers any call with a canned success, which is how a
+    suite ends up green about behaviour nobody recorded. These tests assert the
+    inversion directly, so the property cannot rot silently.
+    """
+
+    def test_unrecorded_path_raises(self):
+        from tests.substrate.rest import TapeRESTClient, UntapedCallError
+
+        with pytest.raises(UntapedCallError):
+            TapeRESTClient().get("/vault/Never/Recorded.md")
+
+    def test_unrecorded_accept_header_raises(self):
+        """Same path, different Accept — a different response, so a different case."""
+        from tests.substrate.rest import TapeRESTClient, UntapedCallError
+
+        client = TapeRESTClient()
+        assert client.get("/vault/CLAUDE.md", accept=NOTE_JSON)["ok"] is True
+        with pytest.raises(UntapedCallError):
+            client.get("/vault/CLAUDE.md", accept="application/x-not-recorded")
+
+    def test_recorded_call_replays_exactly(self):
+        from tests.substrate.rest import TapeRESTClient
+
+        result = TapeRESTClient().get("/vault/CLAUDE.md", accept=NOTE_JSON)
+        assert result["ok"] is True
+        assert result["data"]["path"] == "CLAUDE.md"
+
+    def test_tape_carries_no_real_vault_content(self):
+        """The tape is synthetic by design — vault-mcp is published to GitHub.
+
+        A verbatim recording would commit real note paths, frontmatter and
+        journal bodies to a public repo. This asserts the marker that says so
+        is present, so a future re-record cannot quietly drop the rule.
+        """
+        import json
+
+        from tests.substrate.rest import TAPE
+
+        raw = json.loads(TAPE.read_text(encoding="utf-8"))
+        assert "SYNTHETIC" in raw["content"]
+        assert raw["recorded_from"].startswith("Obsidian Local REST API")
