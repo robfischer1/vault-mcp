@@ -403,14 +403,22 @@ class ConventionGate:
     def _atom_filename(
         self, created: str, note_type: str, directory: str
     ) -> str:
-        """Dated atom slug YYYY-MM-DD-{type}.{seq}; seq probes for the next free name."""
+        """Dated atom slug YYYY-MM-DD-{type}.{seq}; seq probes for the next free name.
+
+        ObsidianIOError is load-bearing in the except, not defensive breadth:
+        it is what BOTH real NoteIO implementations raise for a missing note,
+        and "missing" is the answer this probe is looking for. Without it every
+        atom write failed in production while the suite stayed green, because
+        the only NoteIOs the tests ever used were dict fakes raising KeyError
+        (vault-mcp#5258). The two sibling call sites already caught all three.
+        """
         base = f"{created}-{note_type}"
         seq = 0
         while True:
             candidate = f"{base}.{seq}"
             try:
                 self._io.read_note(f"{directory}/{candidate}.md")
-            except (KeyError, OSError):
+            except (KeyError, OSError, ObsidianIOError):
                 return candidate
             seq += 1
 

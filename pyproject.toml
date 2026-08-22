@@ -193,7 +193,10 @@ disable_error_code = ["no-any-return"]
 [tool.pyright]
 include = ["src", "tests"]
 exclude = ["**/__pycache__", ".venv"]
-extraPaths = ["src"]
+# "." so `tests.substrate` resolves: pytest puts the rootdir on sys.path via
+# tests/__init__.py, but pyright reads only what it is told. Without it the
+# substrate package is a reportMissingImports error in every file that uses it.
+extraPaths = ["src", "."]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 venvPath = "."
