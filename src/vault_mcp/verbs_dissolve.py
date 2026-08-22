@@ -26,6 +26,7 @@ from vault_mcp import server
 # cannot resolve an attribute on a module that is still mid-import, so every
 # decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
 # makes function untyped". 99 errors, entirely from that one indirection.
+from vault_mcp.phdb_client import _phdb_post
 from vault_mcp.server import mcp
 
 if TYPE_CHECKING:
@@ -78,7 +79,7 @@ def dissolve(
         vault_rel_path=path,
         plan_slug=plan_slug,
         rationale=rationale,
-        post=server._phdb_post,
+        post=_phdb_post,
         delete_file=abs_path.unlink,
         declared_by=declared_by,
         repo=repo,

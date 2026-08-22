@@ -30,35 +30,24 @@ Config resolution (highest priority first):
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import json
 import logging
 import os
 import sys
 import threading
-import uuid
-from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import FastMCP
 
 if TYPE_CHECKING:
-    from vault_mcp.bases import QueryResult
     from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
     from vault_mcp.gitops import GitCommitter
     from vault_mcp.lifecycle import Materializer
     from vault_mcp.rest_client import ObsidianRESTClient
+    from vault_mcp.subscriptions import SubscriptionManager
 
-from vault_mcp.bases import (
-    execute_base as _execute_base_impl,
-)
-from vault_mcp.bases import (
-    parse_file as _parse_file_impl,
-)
 from vault_mcp.index import VaultIndex
 from vault_mcp.rest_client import DEFAULT_REST_URL
 
@@ -113,180 +102,18 @@ REST_KEY = os.environ.get("VAULT_MCP_REST_KEY", "")
 _active_sessions: set[Any] = set()
 
 
-@dataclass
-class Subscription:
-    """A live-update subscription: a handle bound to a base path/view plus its last result hash."""
-
-    handle: str
-    path: str
-    view: str | None
-    base_index: int
-    last_result_hash: str | None = None
-
-
-class SubscriptionManager:
-    """Manages Bases live update subscriptions and pushes notifications."""
-
-    def __init__(self, mcp_server: FastMCP):
-        """Initialize the subscription manager bound to the FastMCP server."""
-        self.mcp = mcp_server
-        self.subscriptions: dict[str, Subscription] = {}
-        self.lock = threading.Lock()
-        self.log = logging.getLogger(__name__)
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._queue: asyncio.Queue[Path] | None = None
-        self._worker_task: asyncio.Task[None] | None = None
-
-    def _ensure_worker(self) -> None:
-        """Ensure the background worker is running."""
-        if self._worker_task is not None:
-            return
-
-        try:
-            self._loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # Not in an event loop yet
-            return
-
-        self._queue = asyncio.Queue()
-        self._worker_task = self._loop.create_task(self._worker())
-        self.log.info("Subscription worker started")
-
-    async def _worker(self) -> None:
-        while True:
-            if self._queue is None:
-                break
-            path = await self._queue.get()
-            try:
-                await self.notify_all(path)
-            except Exception:
-                self.log.exception("Error in subscription worker for %s", path)
-            finally:
-                self._queue.task_done()
-
-    def on_file_invalidated(self, path: Path) -> None:
-        """Sync callback for VaultIndex."""
-        if self._loop and self._queue:
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, path)
-
-    def add(self, path: str, view: str | None, base_index: int) -> str:
-        """Register a subscription for a base path/view and return its handle."""
-        self._ensure_worker()
-        handle = f"sub_{uuid.uuid4().hex[:8]}"
-        with self.lock:
-            self.subscriptions[handle] = Subscription(
-                handle=handle,
-                path=path,
-                view=view,
-                base_index=base_index,
-            )
-        return handle
-
-    def remove(self, handle: str) -> bool:
-        """Remove the subscription with `handle`; return True if it existed."""
-        with self.lock:
-            if handle in self.subscriptions:
-                del self.subscriptions[handle]
-                return True
-        return False
-
-    def _hash_result(self, result: QueryResult) -> str:
-        """Create a stable hash of a QueryResult.
-
-        Typed concretely rather than `Any`. Both call sites pass the return of
-        `_execute_base_impl`, which is a QueryResult — so the previous
-        `asdict(x) if hasattr(x, "__dataclass_fields__") else x` branch was
-        dead defensive weight, and the `Any` that permitted it was hiding the
-        fact. `.get()` on the else-branch would have raised on any non-mapping
-        that ever reached it.
-        """
-        data = asdict(result)
-
-        hash_data = {
-            "notes": [
-                {"path": n["path"], "formulas": n["formulas"]}
-                for n in data.get("notes", [])
-            ],
-            "summaries": data.get("summaries", {}),
-            "total": data.get("total", 0),
-        }
-        dump = json.dumps(hash_data, sort_keys=True)
-        return hashlib.sha256(dump.encode("utf-8")).hexdigest()
-
-    async def notify_all(self, _changed_path: Path) -> None:
-        """Re-evaluate every subscription and push notifications for changed result sets."""
-        subs_to_check = []
-        with self.lock:
-            subs_to_check = list(self.subscriptions.values())
-
-        if not subs_to_check:
-            return
-
-        idx = _get_index()
-
-        for sub in subs_to_check:
-            file_path = idx.vault / sub.path
-            if not file_path.exists():
-                continue
-
-            try:
-                pf = _parse_file_impl(file_path)
-                if sub.base_index >= len(pf.bases):
-                    continue
-                base = pf.bases[sub.base_index]
-
-                if sub.view:
-                    matched = [v for v in base.views if v.name == sub.view]
-                    if not matched:
-                        continue
-
-                result = _execute_base_impl(base, idx, view_name=sub.view)
-                current_hash = self._hash_result(result)
-
-                if current_hash == sub.last_result_hash:
-                    continue
-
-                sub.last_result_hash = current_hash
-                await self._push_notification(sub, result)
-            except Exception:
-                self.log.exception("Error updating subscription %s", sub.handle)
-
-    async def _push_notification(
-        self, sub: Subscription, result: QueryResult
-    ) -> None:
-        payload = {
-            "handle": sub.handle,
-            "path": sub.path,
-            "view": sub.view,
-            "results": asdict(result),
-        }
-
-        from mcp.types import JSONRPCNotification
-
-        notification = JSONRPCNotification(
-            jsonrpc="2.0",
-            method="notifications/bases/update",
-            params=payload,
-        )
-
-        disconnected = []
-        for session in _active_sessions:
-            try:
-                await session.send_notification(cast("Any", notification))
-            except Exception:
-                self.log.exception(
-                    "send_notification failed; treating session as gone"
-                )
-                disconnected.append(session)
-
-        for session in disconnected:
-            _active_sessions.discard(session)
+# Subscription / SubscriptionManager MOVED to vault_mcp/subscriptions.py
+# (vault-mcp#5294). `_get_sub_manager()` below imports them lazily.
 
 
 _sub_manager: SubscriptionManager | None = None
 
 
 def _get_sub_manager() -> SubscriptionManager:
+    # DEFERRED: subscriptions.py imports this module, so a module-scope
+    # import would be a hard cycle. Same pattern as the other lazy accessors.
+    from vault_mcp.subscriptions import SubscriptionManager
+
     global _sub_manager
     if _sub_manager is None:
         _sub_manager = SubscriptionManager(mcp)
@@ -462,52 +289,8 @@ HADES_TOKEN = os.environ.get("HADES_TOKEN", "")
 # ---------------------------------------------------------------------------
 
 
-def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """POST a typed-write/declare payload to phdb's HTTP route; structured result.
-
-    Never raises across the verb boundary — an unreachable phdb or a non-200
-    becomes {"ok": False, "error": ...} so dissolve halts before deleting.
-
-    Strangled concerns route to their sovereign star over Hades instead:
-    entity writes (``/write/entity``) call ``harmonia_write_entity_typed``
-    when ``HADES_URL`` is configured — same payload, same result contract.
-    Atom emits (``/emit``) call Terpsichore's ``fleet_emit`` (C1), the last
-    route that kept the retired monolith's :8101 surface load-bearing.
-    """
-    if endpoint == "/write/entity" and HADES_URL:
-        from vault_mcp.hades_client import write_entity_typed
-
-        return write_entity_typed(
-            payload, url=f"{HADES_URL}/", token=HADES_TOKEN
-        )
-
-    if endpoint == "/write/document" and HADES_URL:
-        from vault_mcp.hades_client import write_document
-
-        return write_document(payload, url=f"{HADES_URL}/", token=HADES_TOKEN)
-
-    if endpoint == "/emit" and HADES_URL:
-        from vault_mcp.hades_client import emit_session_event
-
-        return emit_session_event(
-            payload, url=f"{HADES_URL}/", token=HADES_TOKEN
-        )
-
-    import httpx
-
-    try:
-        resp = httpx.post(
-            f"{PHDB_HTTP_URL}{endpoint}", json=payload, timeout=30.0
-        )
-    except httpx.HTTPError as e:
-        return {"ok": False, "error": f"phdb unreachable: {e}"}
-    if resp.status_code != 200:
-        try:
-            detail = resp.json().get("error", resp.text)
-        except ValueError, KeyError, AttributeError:
-            detail = resp.text
-        return {"ok": False, "error": f"phdb HTTP {resp.status_code}: {detail}"}
-    return resp.json()
+# _phdb_post MOVED to vault_mcp/phdb_client.py (vault-mcp#5294) — that
+# module's own docstring already described it as living there.
 
 
 # ---------------------------------------------------------------------------

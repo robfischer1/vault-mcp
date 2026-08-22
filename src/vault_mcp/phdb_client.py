@@ -9,9 +9,9 @@ Obsidian (Constitution II).
 
 Transport (PHDB dissolution C1, 2026-08-03): the poster the MCP layer wires
 (``server._phdb_post``) routes ``/emit`` to **Terpsichore's ``fleet_emit``**
-over Hades when ``HADES_URL`` is set — the R9 CQRS write path. That was the
+over Hades when ``server.HADES_URL`` is set — the R9 CQRS write path. That was the
 last route keeping the retired monolith's :8101 surface load-bearing. With
-``HADES_URL`` unset it still falls back to phdb's HTTP ``/emit`` (#720), the
+``server.HADES_URL`` unset it still falls back to phdb's HTTP ``/emit`` (#720), the
 same symmetry the entity- and document-write routers use.
 
 This module keeps the per-type payload contract (``validate_atom``) that the
@@ -198,3 +198,72 @@ def emit_atom(
         ts=event_ts,
         born_token=born_token if isinstance(born_token, str) else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# The HTTP poster itself, moved here from server.py under vault-mcp#5294. This
+# module's docstring already described `server._phdb_post` as the adapter this
+# layer wires — it simply lived in the wrong file.
+# ---------------------------------------------------------------------------
+def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """POST a typed-write/declare payload to phdb's HTTP route; structured result.
+
+    Never raises across the verb boundary — an unreachable phdb or a non-200
+    becomes {"ok": False, "error": ...} so dissolve halts before deleting.
+
+    Strangled concerns route to their sovereign star over Hades instead:
+    entity writes (``/write/entity``) call ``harmonia_write_entity_typed``
+    when ``server.HADES_URL`` is configured — same payload, same result contract.
+    Atom emits (``/emit``) call Terpsichore's ``fleet_emit`` (C1), the last
+    route that kept the retired monolith's :8101 surface load-bearing.
+    """
+    # DEFERRED: server.py imports this module, so a module-scope import of
+    # server here would be a hard cycle. By call time it is loaded.
+    from vault_mcp import server
+
+    if endpoint == "/write/entity" and server.HADES_URL:
+        from vault_mcp.hades_client import write_entity_typed
+
+        return write_entity_typed(
+            payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
+        )
+
+    if endpoint == "/write/document" and server.HADES_URL:
+        from vault_mcp.hades_client import write_document
+
+        return write_document(
+            payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
+        )
+
+    if endpoint == "/emit" and server.HADES_URL:
+        from vault_mcp.hades_client import emit_session_event
+
+        return emit_session_event(
+            payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
+        )
+
+    import httpx
+
+    try:
+        resp = httpx.post(
+            f"{server.PHDB_HTTP_URL}{endpoint}", json=payload, timeout=30.0
+        )
+    except httpx.HTTPError as e:
+        return {"ok": False, "error": f"phdb unreachable: {e}"}
+    if resp.status_code != 200:
+        try:
+            detail = resp.json().get("error", resp.text)
+        except ValueError, KeyError, AttributeError:
+            detail = resp.text
+        return {"ok": False, "error": f"phdb HTTP {resp.status_code}: {detail}"}
+    # Narrowed rather than returned raw: `resp.json()` is Any, and this was
+    # invisible while the function lived in server.py under that module's
+    # no-any-return override. A phdb reply that is not a JSON object would
+    # otherwise propagate as an Any and fail somewhere further out.
+    body = resp.json()
+    if not isinstance(body, dict):
+        return {
+            "ok": False,
+            "error": f"phdb returned {type(body).__name__}, expected an object",
+        }
+    return body

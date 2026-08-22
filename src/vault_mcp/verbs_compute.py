@@ -31,6 +31,7 @@ from vault_mcp import server
 # cannot resolve an attribute on a module that is still mid-import, so every
 # decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
 # makes function untyped". 99 errors, entirely from that one indirection.
+from vault_mcp.phdb_client import _phdb_post
 from vault_mcp.server import mcp
 from vault_mcp.verbs_plan import _read_dissolved_row
 
@@ -181,7 +182,7 @@ def atom(
     )
 
     try:
-        result = emit_atom(atom_type, payload, ts=ts, post=server._phdb_post)
+        result = emit_atom(atom_type, payload, ts=ts, post=_phdb_post)
         return result.to_dict()
     except AtomError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
