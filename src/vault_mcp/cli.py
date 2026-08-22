@@ -35,22 +35,30 @@ TOOLS: dict[str, Callable[..., Any]] = {
     "vault_stats": _srv.vault_stats,
 }
 
-# REST tools (Phases 6-7) — only present when REST is enabled
+# REST tools (Phases 6-7) — only present when REST is enabled.
+#
+# Sourced from vault_mcp.verbs_rest since vault-mcp#5294 moved them out of
+# server.py. The `if not REST_DISABLE` guard is unchanged and still necessary:
+# with the lane disabled those names are never defined, in that module or any
+# other. Type-checkers caught this move — pytest did not, because no test
+# imports the CLI.
 if not _srv.REST_DISABLE:
+    from vault_mcp import verbs_rest as _rest
+
     TOOLS.update(
         {
-            "rest_health": _srv.rest_health,
-            "active_note": _srv.active_note,
-            "periodic_note": _srv.periodic_note,
-            "unsaved_buffer": _srv.unsaved_buffer,
-            "obsidian_search": _srv.obsidian_search,
-            "execute_command": _srv.execute_command,
-            "dataview_query": _srv.dataview_query,
-            "jsonlogic_search": _srv.jsonlogic_search,
-            "vault_tags": _srv.vault_tags,
-            "list_directory": _srv.list_directory,
-            "open_in_obsidian": _srv.open_in_obsidian,
-            "document_map": _srv.document_map,
+            "rest_health": _rest.rest_health,
+            "active_note": _rest.active_note,
+            "periodic_note": _rest.periodic_note,
+            "unsaved_buffer": _rest.unsaved_buffer,
+            "obsidian_search": _rest.obsidian_search,
+            "execute_command": _rest.execute_command,
+            "dataview_query": _rest.dataview_query,
+            "jsonlogic_search": _rest.jsonlogic_search,
+            "vault_tags": _rest.vault_tags,
+            "list_directory": _rest.list_directory,
+            "open_in_obsidian": _rest.open_in_obsidian,
+            "document_map": _rest.document_map,
         }
     )
 
