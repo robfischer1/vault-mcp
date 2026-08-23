@@ -107,6 +107,28 @@ ignore = [
     "EXE",              # Windows-developed repo — the executable bit isn't meaningful; shebangs are vestigial
 ]
 
+[tool.ruff.lint.flake8-type-checking]
+# FastMCP EVALUATES A VERB'S ANNOTATIONS WHEN IT REGISTERS IT, so any name used
+# in a decorated function's signature must exist at runtime. TC002 does not know
+# that and moves such an import into `if TYPE_CHECKING:`, where it raises
+# InvalidSignature at import time — measured 2026-08-22, when splitting the
+# Bases verbs out of server.py broke `subscribe_base(ctx: Context[...])`.
+#
+# This TELLS RUFF THE TRUTH rather than silencing it: a decorator listed here
+# marks its function's annotations as runtime-evaluated, so TC002 stops
+# proposing a move that cannot work. It is a fact about FastMCP, not an opinion
+# about the rule — which is why it is a setting and not a suppression, and why
+# it is NOT a `tool-conflict:` marker (that is reserved for the ruff/mypy
+# divergence, per Rob 2026-08-18).
+#
+# THE NAME IS THE INSTANCE PATH, not the class method. ruff resolves `@mcp.tool()`
+# back to where that `mcp` object is bound, so the entry is
+# `vault_mcp.server.mcp.tool`. Measured: "mcp.tool" and
+# "mcp.server.fastmcp.FastMCP.tool" both leave TC002 firing; only the instance
+# path silences it. If the FastMCP instance ever moves module, this string moves
+# with it — and TC002 coming back is the signal.
+runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
+
 [tool.ruff.lint.per-file-ignores]
 # Tests assert freely, use subprocess/temp dirs, late imports, no docs/packaging
 # EXACTLY the rules foundry-stocks' stop-justifications gate ratifies for a test

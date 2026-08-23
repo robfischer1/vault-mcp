@@ -26,7 +26,12 @@ jobs:
   mutation:
     uses: foundry/foundry-stocks/.forgejo/workflows/mutation.yml@main
     with:
-      critical-modules: src/vault_mcp/bases.py src/vault_mcp/rest_client.py
+      # bases.py WAS listed here. It is now a façade of re-export statements
+      # (vault-mcp#5294), and mutating that would report a healthy score over
+      # nothing while the 1400 lines of real logic went unmutated — a split
+      # that quietly narrows a gate is worse than the file length it fixed.
+      # The five modules it became are named instead, so coverage is unchanged.
+      critical-modules: src/vault_mcp/bases_model.py src/vault_mcp/bases_parser.py src/vault_mcp/bases_eval.py src/vault_mcp/bases_exec.py src/vault_mcp/bases_io.py src/vault_mcp/rest_client.py
       mode: full
       fail-under: 0
     # pragma comment: detect-secrets flags the word 'secrets' as a Secret Keyword,

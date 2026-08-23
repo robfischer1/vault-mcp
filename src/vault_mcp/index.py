@@ -22,8 +22,6 @@ explicit reindex() call.
 
 from __future__ import annotations
 
-import dataclasses
-import fnmatch
 import logging
 import re
 import threading
@@ -77,6 +75,21 @@ class VaultIndex:
         self._watcher_active = False
         self.last_indexed_at: str | None = None
         self.on_invalidate: list[Callable[[Path], None]] = []
+
+        # DELEGATION (vault-mcp#5294): the query, link-graph and governance
+        # behaviours are named collaborators rather than 790 lines of methods
+        # here. Each takes `self` and reads index state through it, so the
+        # caches stay single-sourced on the index.
+        #
+        # Imported here, not at module scope: each collaborator imports
+        # VaultIndex for typing.
+        from vault_mcp.index_governance import IndexGovernance
+        from vault_mcp.index_links import IndexLinkGraph
+        from vault_mcp.index_queries import IndexQueries
+
+        self._queries = IndexQueries(self)
+        self._links = IndexLinkGraph(self)
+        self._governance = IndexGovernance(self)
 
     def _ensure_fresh(self) -> None:
         if self._watcher_active:
@@ -253,440 +266,9 @@ class VaultIndex:
         self._ensure_fresh()
         return self._by_name
 
-    def find_notes_by_frontmatter(
-        self, filters: dict[str, Any], scope: str | None = None
-    ) -> list[dict[str, Any]]:
-        """Equality-match on frontmatter fields, with optional scope prefix."""
-        results = []
-        for _path, fm, rel in self.content:
-            if scope and not rel.startswith(scope):
-                continue
-            match = True
-            for key, expected in filters.items():
-                val = fm.get(key)
-                if isinstance(val, list):
-                    if expected not in val:
-                        match = False
-                        break
-                elif val != expected:
-                    match = False
-                    break
-            if match:
-                results.append({"path": rel, "frontmatter": fm})
-        return results
-
-    def find_by_filename(
-        self, pattern: str, scope: str | None = None
-    ) -> list[dict[str, Any]]:
-        """Fnmatch over the by_name index keys."""
-        results = []
-        for stem, paths in self.by_name.items():
-            if not fnmatch.fnmatch(stem, pattern):
-                continue
-            for p in paths:
-                rel = str(p.relative_to(self.vault)).replace("\\", "/")
-                if scope and not rel.startswith(scope):
-                    continue
-                results.append({"stem": stem, "path": rel})
-        return results
-
-    def recent_edits(
-        self, since: str, scope: str | None = None, limit: int = 50
-    ) -> list[dict[str, Any]]:
-        """Files modified since a given ISO-8601 date, sorted by mtime desc."""
-        try:
-            since_dt = datetime.fromisoformat(since)
-        except ValueError:
-            return [{"error": f"Invalid date format: {since}"}]
-
-        since_ts = since_dt.timestamp()
-        candidates = []
-
-        for stem, paths in self.by_name.items():
-            for p in paths:
-                rel = str(p.relative_to(self.vault)).replace("\\", "/")
-                if scope and not rel.startswith(scope):
-                    continue
-                mtime = self._mtime.get(p)
-                if mtime is None:
-                    continue
-                if mtime >= since_ts:
-                    candidates.append(
-                        {
-                            "path": rel,
-                            "modified": datetime.fromtimestamp(mtime, tz=UTC)
-                            .astimezone()
-                            .isoformat(timespec="seconds"),
-                            "stem": stem,
-                        }
-                    )
-
-        candidates.sort(key=lambda r: r["modified"], reverse=True)
-        return candidates[:limit]
-
-    def read_note(self, stem_or_path: str) -> dict[str, Any]:
-        """Read a note by wikilink stem or vault-relative path.
-
-        Returns {frontmatter, body, path} with resolved wikilinks per Q7.
-        """
-        target_path: Path | None = None
-
-        if "/" in stem_or_path or stem_or_path.endswith(".md"):
-            candidate = self.vault / stem_or_path
-            if candidate.exists():
-                target_path = candidate
-
-        if target_path is None:
-            stem = stem_or_path.removesuffix(".md")
-            matches = self.by_name.get(stem, [])
-            if len(matches) == 1:
-                target_path = matches[0]
-            elif len(matches) > 1:
-                return {
-                    "error": "ambiguous",
-                    "stem": stem,
-                    "candidates": [
-                        str(p.relative_to(self.vault)).replace("\\", "/")
-                        for p in matches
-                    ],
-                }
-            else:
-                return {"error": "not_found", "query": stem_or_path}
-
-        try:
-            text = target_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as e:
-            return {
-                "error": "read_failed",
-                "path": str(target_path),
-                "detail": str(e),
-            }
-
-        fm = parse_frontmatter(text)
-        body = strip_frontmatter(text).lstrip("\n\r")
-        rel = str(target_path.relative_to(self.vault)).replace("\\", "/")
-
-        outbound = extract_wikilink_targets(body)
-        resolved_links: list[dict[str, Any]] = []
-        for stem in outbound:
-            link_matches = self.by_name.get(stem, [])
-            if len(link_matches) == 1:
-                resolved_links.append(
-                    {
-                        "stem": stem,
-                        "path": str(
-                            link_matches[0].relative_to(self.vault)
-                        ).replace("\\", "/"),
-                    }
-                )
-            elif len(link_matches) > 1:
-                resolved_links.append(
-                    {
-                        "stem": stem,
-                        "resolution": "ambiguous",
-                        "candidates": [
-                            str(p.relative_to(self.vault)).replace("\\", "/")
-                            for p in link_matches
-                        ],
-                    }
-                )
-            else:
-                resolved_links.append(
-                    {"stem": stem, "resolution": "unresolved"}
-                )
-
-        # Resolve base embeds (T008, T009, T010, T014, T015)
-        resolved_embeds: list[dict[str, Any]] = []
-        for m in BASE_EMBED_RE.finditer(body):
-            token = m.group(0)
-            target_stem = m.group(1).strip()
-            view_name = m.group(2).strip() if m.group(2) else None
-
-            # Only resolve if it's a .base file or has a view name
-            if not (target_stem.endswith(".base") or view_name):
-                continue
-
-            stem = target_stem.removesuffix(".md").removesuffix(".base")
-            matches = self.by_name.get(stem, [])
-
-            # Filter matches to prefer .base if it ends in .base
-            if target_stem.endswith(".base"):
-                matches = [p for p in matches if p.suffix == ".base"]
-
-            embed_target_path = None
-            if len(matches) == 1:
-                embed_target_path = matches[0]
-
-            if not embed_target_path:
-                resolved_embeds.append(
-                    {
-                        "token": token,
-                        "error": {
-                            "type": "not_found",
-                            "message": f"File not found: {target_stem}",
-                        },
-                    }
-                )
-                continue
-
-            from .bases import execute_base, parse_file
-
-            pf = parse_file(embed_target_path)
-            if pf.errors:
-                resolved_embeds.append(
-                    {
-                        "token": token,
-                        "path": str(
-                            embed_target_path.relative_to(self.vault)
-                        ).replace("\\", "/"),
-                        "error": {
-                            "type": "parse_error",
-                            "message": pf.errors[0]["message"],
-                        },
-                    }
-                )
-                continue
-
-            if not pf.bases:
-                continue
-
-            # Execute first base
-            base = pf.bases[0]
-            if view_name:
-                view_names = [v.name for v in base.views]
-                if view_name not in view_names:
-                    resolved_embeds.append(
-                        {
-                            "token": token,
-                            "path": str(
-                                embed_target_path.relative_to(self.vault)
-                            ).replace("\\", "/"),
-                            "error": {
-                                "type": "view_not_found",
-                                "message": f"View '{view_name}' not found",
-                            },
-                        }
-                    )
-                    continue
-
-            res = execute_base(base, self, view_name=view_name)
-
-            resolved_embeds.append(
-                {
-                    "token": token,
-                    "path": str(
-                        embed_target_path.relative_to(self.vault)
-                    ).replace("\\", "/"),
-                    "results": dataclasses.asdict(res),
-                }
-            )
-
-        return {
-            "path": rel,
-            "frontmatter": fm,
-            "body": body,
-            "outbound_links": resolved_links,
-            "resolved_embeds": resolved_embeds,
-        }
-
     # ------------------------------------------------------------------
     # Phase 2 — Graph tools
     # ------------------------------------------------------------------
-
-    def backlinks_to(self, stem: str) -> list[dict[str, Any]]:
-        """Files that link to `stem` via body wikilinks or `up:` frontmatter."""
-        self._ensure_fresh()
-        sources = self._inbound.get(stem, [])
-        results = []
-        for src_stem in sources:
-            paths = self._by_name.get(src_stem, [])
-            for p in paths:
-                results.append(
-                    {
-                        "stem": src_stem,
-                        "path": str(p.relative_to(self.vault)).replace(
-                            "\\", "/"
-                        ),
-                    }
-                )
-        return results
-
-    def outbound_links(
-        self, stem: str, include_image_embeds: bool = False
-    ) -> list[dict[str, Any]]:
-        """Wikilinks from `stem`'s body (excluding image embeds by default)."""
-        self._ensure_fresh()
-        targets = self._outbound.get(stem, [])
-
-        if not include_image_embeds:
-            paths = self._by_name.get(stem, [])
-            image_stems: set[str] = set()
-            for p in paths:
-                try:
-                    text = p.read_text(encoding="utf-8")
-                except (OSError, UnicodeDecodeError) as exc:
-                    log.debug(
-                        "image-embed scan: skip unreadable %s: %s", p, exc
-                    )
-                    continue
-                body = strip_frontmatter(text)
-                for m in IMAGE_EMBED_RE.finditer(body):
-                    image_stems.add(m.group(1).strip())
-            targets = [t for t in targets if t not in image_stems]
-
-        results: list[dict[str, Any]] = []
-        for target in targets:
-            matches = self._by_name.get(target, [])
-            if len(matches) == 1:
-                results.append(
-                    {
-                        "stem": target,
-                        "path": str(matches[0].relative_to(self.vault)).replace(
-                            "\\", "/"
-                        ),
-                    }
-                )
-            elif len(matches) > 1:
-                results.append(
-                    {
-                        "stem": target,
-                        "resolution": "ambiguous",
-                        "candidates": [
-                            str(p.relative_to(self.vault)).replace("\\", "/")
-                            for p in matches
-                        ],
-                    }
-                )
-            else:
-                results.append({"stem": target, "resolution": "unresolved"})
-        return results
-
-    def find_orphans(
-        self,
-        scope: str | None = None,
-        exempt_prefixes: list[str] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Files with no inbound links and no `up:` frontmatter.
-
-        Honors folder-prefix exemptions from audit-ignores.md.
-        """
-        self._ensure_fresh()
-        results = []
-        for path, fm, rel in self._content:
-            if scope and not rel.startswith(scope):
-                continue
-
-            if exempt_prefixes:
-                skip = False
-                for prefix in exempt_prefixes:
-                    if rel.startswith(prefix):
-                        skip = True
-                        break
-                if skip:
-                    continue
-
-            stem = path.stem
-            has_up = bool(fm.get("up", ""))
-            has_inbound = stem in self._inbound
-
-            if not has_up and not has_inbound:
-                reasons = []
-                if not has_up:
-                    reasons.append("no up: frontmatter")
-                if not has_inbound:
-                    reasons.append("no inbound links")
-                results.append(
-                    {
-                        "path": rel,
-                        "stem": stem,
-                        "reason": "; ".join(reasons),
-                    }
-                )
-        return results
-
-    def find_dangling_links(
-        self,
-        scope: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """Find wikilinks and ``up:`` values that point at non-existent notes."""
-        self._ensure_fresh()
-        dangles: list[dict[str, Any]] = []
-        seen: set[str] = set()
-
-        for stem, targets in self._outbound.items():
-            if scope:
-                paths = self._by_name.get(stem, [])
-                if paths and not any(
-                    str(p.relative_to(self.vault))
-                    .replace("\\", "/")
-                    .startswith(scope)
-                    for p in paths
-                ):
-                    continue
-            for target in targets:
-                if target not in self._by_name:
-                    key = f"{stem}->{target}"
-                    if key not in seen:
-                        seen.add(key)
-                        src_paths = self._by_name.get(stem, [])
-                        src_path = (
-                            str(src_paths[0].relative_to(self.vault)).replace(
-                                "\\", "/"
-                            )
-                            if src_paths
-                            else stem
-                        )
-                        dangles.append(
-                            {
-                                "source": src_path,
-                                "target": target,
-                                "link_type": "wikilink",
-                            }
-                        )
-
-        for _path, fm, rel in self._content:
-            if scope and not rel.startswith(scope):
-                continue
-            up_val = fm.get("up")
-            if not up_val:
-                continue
-            up_refs = [up_val] if isinstance(up_val, str) else list(up_val)
-            for ref in up_refs:
-                ref_stem = ref.strip().strip("[]").split("|")[0].strip()
-                if ref_stem and ref_stem not in self._by_name:
-                    key = f"{rel}->up:{ref_stem}"
-                    if key not in seen:
-                        seen.add(key)
-                        dangles.append(
-                            {
-                                "source": rel,
-                                "target": ref_stem,
-                                "link_type": "up",
-                            }
-                        )
-
-        return dangles
-
-    @staticmethod
-    def parse_audit_ignores(ignores_path: Path) -> list[str]:
-        """Extract folder-prefix exemptions from audit-ignores.md."""
-        if not ignores_path.exists():
-            return []
-        text = ignores_path.read_text(encoding="utf-8")
-        prefixes = []
-        in_folder_table = False
-        for line in text.split("\n"):
-            if "Folder-level exemptions" in line:
-                in_folder_table = True
-                continue
-            if in_folder_table and line.startswith("| `"):
-                m = re.match(r"\|\s*`([^`]+)`", line)
-                if m:
-                    prefix = m.group(1).rstrip("/")
-                    prefixes.append(prefix + "/")
-            elif in_folder_table and line.startswith("#"):
-                break
-        return prefixes
 
     # ------------------------------------------------------------------
     # Phase 3 — Governance tools
@@ -696,150 +278,83 @@ class VaultIndex:
         r"(?<![\\])#([a-zA-Z][a-zA-Z0-9_/-]*(?:/[a-zA-Z0-9_☀-➿\U0001F300-\U0001FAFF-]+)*)"
     )
 
+    # --- delegated surface --------------------------------------------------
+    # Thin forwards, so VaultIndex's public API is unchanged: every verb and
+    # every test still says `idx.read_note(...)`. The collaborators are
+    # reachable directly (`idx._queries`) when a caller wants to be explicit.
+
+    def find_notes_by_frontmatter(
+        self, *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        """Delegate to the queries collaborator."""
+        return self._queries.find_notes_by_frontmatter(*args, **kwargs)
+
+    def find_by_filename(
+        self, *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        """Delegate to the queries collaborator."""
+        return self._queries.find_by_filename(*args, **kwargs)
+
+    def recent_edits(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Delegate to the queries collaborator."""
+        return self._queries.recent_edits(*args, **kwargs)
+
+    def read_note(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Delegate to the queries collaborator."""
+        return self._queries.read_note(*args, **kwargs)
+
+    def backlinks_to(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Delegate to the links collaborator."""
+        return self._links.backlinks_to(*args, **kwargs)
+
+    def outbound_links(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Delegate to the links collaborator."""
+        return self._links.outbound_links(*args, **kwargs)
+
+    def find_orphans(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Delegate to the links collaborator."""
+        return self._links.find_orphans(*args, **kwargs)
+
+    def find_dangling_links(
+        self, *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        """Delegate to the links collaborator."""
+        return self._links.find_dangling_links(*args, **kwargs)
+
     @staticmethod
-    def parse_tags_glossary(glossary_path: Path) -> set[str]:
-        """Extract the closed tag vocabulary from Tags Glossary.md."""
-        if not glossary_path.exists():
-            return set()
-        text = glossary_path.read_text(encoding="utf-8")
-        tags: set[str] = set()
-        in_code = False
-        for line in text.split("\n"):
-            if line.strip().startswith("```"):
-                in_code = not in_code
-                continue
-            if in_code:
-                stripped = line.strip()
-                if stripped.startswith("#"):
-                    tag = stripped.split(" ")[0].split(" -")[0].strip()
-                    if tag:
-                        tags.add(tag)
-        return tags
+    def parse_audit_ignores(*args: Any, **kwargs: Any) -> list[str]:
+        """Delegate to IndexGovernance.
 
-    def tag_glossary_check(self, glossary_path: Path) -> list[dict[str, Any]]:
-        r"""Find body #tags not in the Tags Glossary.
-
-        Excludes \\#tag escapes and #activity/processed per policy.
+        STATIC, because callers invoke this unbound —
+        `VaultIndex.parse_audit_ignores(path)` in verbs_query and in the
+        tests. A self-taking forward binds the path argument as `self`.
         """
-        self._ensure_fresh()
-        valid_tags = self.parse_tags_glossary(glossary_path)
-        violations: dict[str, list[str]] = {}
+        from vault_mcp.index_governance import IndexGovernance
 
-        for path, _fm, rel in self._content:
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                log.debug("tag check: skip unreadable %s: %s", path, exc)
-                continue
+        return IndexGovernance.parse_audit_ignores(*args, **kwargs)
 
-            body = strip_frontmatter(text)
-            for m in self.BODY_TAG_RE.finditer(body):
-                tag = "#" + m.group(1)
-                if tag in valid_tags:
-                    continue
-                if tag == "#activity/processed":
-                    continue
-                violations.setdefault(rel, []).append(tag)
+    @staticmethod
+    def parse_tags_glossary(*args: Any, **kwargs: Any) -> set[str]:
+        """Delegate to IndexGovernance.
 
-        results = []
-        for file_path, tags in sorted(violations.items()):
-            results.append(
-                {
-                    "path": file_path,
-                    "invalid_tags": sorted(set(tags)),
-                }
-            )
-        return results
-
-    def vault_stats(self) -> dict[str, Any]:
-        """Aggregate stats: counts by @type, top tags, edit volume by week."""
-        self._ensure_fresh()
-        type_counts: dict[str, int] = {}
-        tag_counts: dict[str, int] = {}
-        week_counts: dict[str, int] = {}
-
-        for path, fm, _rel in self._content:
-            at_type = fm.get("@type", fm.get("type", "unknown"))
-            if isinstance(at_type, str):
-                type_counts[at_type] = type_counts.get(at_type, 0) + 1
-
-            fm_tags = fm.get("tags", [])
-            if isinstance(fm_tags, list):
-                for t in fm_tags:
-                    if isinstance(t, str) and t:
-                        tag_counts[t] = tag_counts.get(t, 0) + 1
-
-            mtime = self._mtime.get(path)
-            if mtime is not None:
-                week = (
-                    datetime.fromtimestamp(mtime, tz=UTC)
-                    .astimezone()
-                    .strftime("%Y-W%W")
-                )
-                week_counts[week] = week_counts.get(week, 0) + 1
-
-        top_types = sorted(type_counts.items(), key=lambda x: -x[1])
-        top_tags = sorted(tag_counts.items(), key=lambda x: -x[1])[:20]
-        recent_weeks = sorted(week_counts.items(), reverse=True)[:8]
-
-        return {
-            "total_indexed": len(self._content),
-            "total_names": len(self._by_name),
-            "types": [{"type": t, "count": c} for t, c in top_types],
-            "top_tags": [{"tag": t, "count": c} for t, c in top_tags],
-            "edit_volume_by_week": [
-                {"week": w, "count": c} for w, c in recent_weeks
-            ],
-        }
-
-    def all_tags(self, include_body: bool = True) -> list[dict[str, Any]]:
-        """Collect all tags from frontmatter and optionally body text, with counts.
-
-        Returns sorted list of {tag, count, sources} where sources indicates
-        whether the tag appears in frontmatter, body, or both.
+        STATIC, because callers invoke this unbound —
+        `VaultIndex.parse_tags_glossary(path)` in verbs_query and in the
+        tests. A self-taking forward binds the path argument as `self`.
         """
-        self._ensure_fresh()
-        fm_counts: dict[str, int] = {}
-        body_counts: dict[str, int] = {}
+        from vault_mcp.index_governance import IndexGovernance
 
-        for path, fm, _rel in self._content:
-            fm_tags = fm.get("tags", [])
-            if isinstance(fm_tags, list):
-                for t in fm_tags:
-                    if isinstance(t, str) and t:
-                        fm_counts[t] = fm_counts.get(t, 0) + 1
+        return IndexGovernance.parse_tags_glossary(*args, **kwargs)
 
-            if include_body:
-                try:
-                    text = path.read_text(encoding="utf-8")
-                except (OSError, UnicodeDecodeError) as exc:
-                    log.debug("all_tags: skip unreadable %s: %s", path, exc)
-                    continue
-                body = strip_frontmatter(text)
-                for m in self.BODY_TAG_RE.finditer(body):
-                    tag = "#" + m.group(1)
-                    body_counts[tag] = body_counts.get(tag, 0) + 1
+    def tag_glossary_check(
+        self, *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        """Delegate to the governance collaborator."""
+        return self._governance.tag_glossary_check(*args, **kwargs)
 
-        all_keys = set(fm_counts) | set(body_counts)
-        results = []
-        for tag in all_keys:
-            fc = fm_counts.get(tag, 0)
-            bc = body_counts.get(tag, 0)
-            sources = []
-            if fc:
-                sources.append("frontmatter")
-            if bc:
-                sources.append("body")
-            results.append(
-                {
-                    "tag": tag,
-                    "count": fc + bc,
-                    "frontmatter_count": fc,
-                    "body_count": bc,
-                    "sources": sources,
-                }
-            )
-        results.sort(
-            key=lambda x: -(x["count"] if isinstance(x["count"], int) else 0)
-        )
-        return results
+    def vault_stats(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Delegate to the governance collaborator."""
+        return self._governance.vault_stats(*args, **kwargs)
+
+    def all_tags(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Delegate to the governance collaborator."""
+        return self._governance.all_tags(*args, **kwargs)

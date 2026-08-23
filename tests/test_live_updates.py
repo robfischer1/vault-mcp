@@ -7,7 +7,7 @@ mcp = pytest.importorskip("mcp", reason="requires the 'server' extra (mcp)")
 
 os.environ["VAULT_MCP_PATH"] = "."
 from vault_mcp.index import VaultIndex
-from vault_mcp.server import SubscriptionManager
+from vault_mcp.subscriptions import SubscriptionManager
 
 
 @pytest.fixture
