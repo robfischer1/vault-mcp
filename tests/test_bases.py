@@ -387,37 +387,23 @@ class TestFormulaEvaluation:
         assert len(result.warnings) == 1
         assert "Max nesting depth" in result.warnings[0]["reason"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "vault-mcp#5310 — regex_timeout does not bound anything. `re.sub` "
-            "holds the GIL for its whole run, so the ThreadPoolExecutor worker "
-            "never yields and future.result(timeout=...) cannot wake to honour "
-            "its own timeout. Measured: at regex_timeout=0.001 the same "
-            "expression still ran 1.95s and COMPLETED, while 0.01 timed out — "
-            "the outcome is a scheduling race, not a timeout. STRICT so a real "
-            "fix (the `regex` module's timeout=, or refusing nested "
-            "quantifiers at parse time) fails this loudly instead of landing "
-            "unnoticed."
-        ),
-    )
     def test_regex_timeout_bounds_the_work(self):
         """A pathological regex must cost about `regex_timeout`, not its full run.
 
-        THIS REPLACES A TEST THAT PASSED BY LUCK. The previous version asserted
-        that a "timed out" warning appeared, which is a race — and it cost ~18
-        of the suite's 24 seconds, because it drove `execute_base` over every
-        note in a fixture vault and each catastrophic regex ran to completion.
+        THIS WAS xfail(strict=True) UNTIL #5310 LANDED, and before that it was a
+        test that passed by luck: the original asserted a "timed out" warning
+        appeared, which was a race, and it cost ~18 of the suite's 24 seconds
+        because it drove `execute_base` over every note in a fixture vault with
+        each catastrophic regex running to completion.
 
-        Two things changed. It is now a UNIT check on the evaluator, so the
-        regex runs once rather than once per note; and the input is 22 'a's
-        rather than 25, which is ~0.33s of backtracking instead of ~2.2s — still
-        far over the 0.05s timeout, so the assertion below is just as
-        meaningful, at a fraction of the cost.
+        It is now a UNIT check on the evaluator, so the regex runs once rather
+        than once per note.
 
-        That cost matters out of proportion to its size: the suite is the inner
-        loop of the mutation gate, which runs it once per mutant. On PR #390
-        that was 1159 mutants.
+        WHAT THIS ONE NO LONGER PROVES, which is why the next test exists.
+        `regex` does not merely bound `(a+)+b` — it optimises the pattern away
+        and returns in ~0.000s. So this asserts the CONTRACT (bounded work) and
+        would still pass if the timeout were removed entirely. The mechanism is
+        pinned below, on a pattern the engine genuinely cannot solve.
         """
         evaluator = FormulaEvaluator({}, 5, 0.05)
         expr = '"' + "a" * 22 + '".replace(/(a+)+b/, "c")'
@@ -427,15 +413,54 @@ class TestFormulaEvaluation:
             evaluator.evaluate(expr)
         elapsed = time.monotonic() - start
 
-        # The contract a timeout is supposed to give: bounded work. 3x the
-        # configured timeout is generous enough that this fails on the
-        # MECHANISM rather than on machine speed — the measured cost today is
-        # ~0.33s against a 0.05s timeout, a 6x overrun, and a real fix would
-        # land near 0.05s.
         assert elapsed < 0.15, (
             f"regex ran {elapsed:.2f}s against a 0.05s timeout — "
             f"the timeout bounded nothing"
         )
+
+    def test_the_timeout_fires_on_a_pattern_the_engine_cannot_optimize(self):
+        """The MECHANISM, not just the outcome: the clock actually stops it.
+
+        `(a|a)*$` is the case `regex` cannot rewrite away, so the only thing
+        that ends it is the timeout. Under the old ThreadPoolExecutor this could
+        not work at all — `re.sub` holds the GIL for its whole run, so the
+        waiting thread never woke to honour its own deadline and wall time was
+        ~2.2s whatever the setting said.
+        """
+        evaluator = FormulaEvaluator({}, 5, 0.05)
+        expr = '"' + "a" * 30 + 'b".replace(/(a|a)*$/, "c")'
+
+        start = time.monotonic()
+        with pytest.raises(FormulaTimeoutError):
+            evaluator.evaluate(expr)
+        elapsed = time.monotonic() - start
+
+        # Bounded BELOW too: a fix that simply refused the pattern outright
+        # would raise instantly and pass an upper-bound-only assertion, without
+        # the timeout ever being consulted.
+        assert 0.04 < elapsed < 0.20, (
+            f"expected the 0.05s timeout to end it; took {elapsed:.3f}s"
+        )
+
+    def test_the_configured_timeout_is_the_ceiling(self):
+        """A LONGER timeout must cost proportionally more.
+
+        The sharpest thing the old code got wrong: the configured value changed
+        nothing, because wall time was always the regex's own duration. Pinning
+        two settings against each other is what makes that unmistakable — a
+        constant-time refusal fails this, and so does any fix that ignores the
+        argument.
+        """
+
+        def cost(timeout: float) -> float:
+            evaluator = FormulaEvaluator({}, 5, timeout)
+            expr = '"' + "a" * 30 + 'b".replace(/(a|a)*$/, "c")'
+            start = time.monotonic()
+            with contextlib.suppress(FormulaTimeoutError):
+                evaluator.evaluate(expr)
+            return time.monotonic() - start
+
+        assert cost(0.20) > cost(0.05) * 2
 
 
 class TestLinkCountFormula:

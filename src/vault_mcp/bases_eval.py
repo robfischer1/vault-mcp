@@ -22,16 +22,16 @@ Split out of bases.py under vault-mcp#5294 (1400 LOC, over the 600 block).
 from __future__ import annotations
 
 import ast
-import concurrent.futures
 import logging
 import re
 from pathlib import Path
 from typing import Any
 
+import regex
+
 from vault_mcp.bases_model import (
     _LINKS_FILTER_RE,
     _NOTE_KEY_RE,
-    _REGEX_EXECUTOR,
     FilterNode,
     Formula,
 )
@@ -258,11 +258,18 @@ class FormulaEvaluator:
         if is_regex:
             regex_str = pattern_str[1:-1]
             try:
-                future = _REGEX_EXECUTOR.submit(
-                    re.sub, regex_str, str(replacement), target_str
+                # `regex`, not `re`: the stdlib engine holds the GIL for the
+                # whole substitution, so the ThreadPoolExecutor this replaced
+                # could never be preempted and the timeout bounded nothing
+                # (vault-mcp#5310). `regex` checks the clock DURING matching,
+                # so the configured value is the actual wall-time ceiling.
+                return regex.sub(
+                    regex_str,
+                    str(replacement),
+                    target_str,
+                    timeout=self.regex_timeout,
                 )
-                return future.result(timeout=self.regex_timeout)
-            except concurrent.futures.TimeoutError:
+            except TimeoutError:
                 raise FormulaTimeoutError(
                     f"Regex evaluation timed out after {self.regex_timeout}s"
                 ) from None
