@@ -149,7 +149,14 @@ class ValidationResult:
 # Globals & Constants
 # ---------------------------------------------------------------------------
 
-_BASE_BLOCK_RE = re.compile(r"^```base\s*\n(.*?)^```", re.DOTALL | re.MULTILINE)
+# Flags INLINE as `(?sm)` rather than `re.DOTALL | re.MULTILINE`.
+#
+# The combined form is a mutation site with no killable answer: DOTALL is 16 and
+# MULTILINE is 8, disjoint bits, so `|`, `^` and `+` all fold to 56 and no test
+# can separate them. That is not a reason to exempt the site — it is a reason to
+# write the flags where there is no operator to mutate. Verified identical:
+# same `.flags` value, same extractions.
+_BASE_BLOCK_RE = re.compile(r"(?sm)^```base\s*\n(.*?)^```")
 
 _NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
 _LINKS_FILTER_RE = re.compile(

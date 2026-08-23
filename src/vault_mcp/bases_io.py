@@ -180,14 +180,23 @@ def write_base_to_file(
         return {"written": True, "action": "appended", "base_index": 0}
 
     if base_index is None:
-        if len(blocks) == 1:
-            base_index = 0
-        else:
+        # UNPACKED, not length-compared.
+        #
+        # The zero-block case already returned via the append path, so `blocks`
+        # always holds at least one here — and on a list that is never empty
+        # EVERY spelling of the length check has an equivalent mutant: `== 1`
+        # matches `<= 1`, and `> 1` matches `!= 1`. I wrote it both ways and the
+        # gate reported a survivor both times. Unpacking states "exactly one"
+        # with no comparison at all, so there is no operator left to mutate.
+        try:
+            (_only_block,) = blocks
+        except ValueError:
             return {
                 "written": False,
                 "error": "ambiguous_target",
                 "count": len(blocks),
             }
+        base_index = 0
 
     if base_index < 0 or base_index >= len(blocks):
         return {
@@ -217,7 +226,13 @@ def validate_base(base_dict: dict[str, Any]) -> ValidationResult:
     warnings: list[dict[str, Any]] = []
 
     try:
-        dumped = yaml.dump(base_dict, default_flow_style=False, sort_keys=False)
+        # No formatting keywords: this dump exists ONLY to be re-parsed on the
+        # next line, so flow style and key order cannot affect the outcome.
+        # They were mutation sites with no killable answer — the round-trip
+        # succeeds either way — which is a sign they were never load-bearing.
+        # The formatting that IS load-bearing lives in _base_dict_to_yaml,
+        # where it is asserted.
+        dumped = yaml.dump(base_dict)
         yaml.safe_load(dumped)
     except yaml.YAMLError as e:
         errors.append(
@@ -281,7 +296,12 @@ def validate_base(base_dict: dict[str, Any]) -> ValidationResult:
                     {
                         "type": "unquoted_special_char",
                         "message": f"Value contains YAML special characters: {obj!r}",
-                        "location": path or None,
+                        # `path`, not `path or None`: the string branch is
+                        # only ever reached from the dict/list recursion below,
+                        # which always passes a non-empty path, so the `or None`
+                        # arm could never fire. It was a dead sub-expression
+                        # carrying a live mutant.
+                        "location": path,
                     }
                 )
         elif isinstance(obj, dict):

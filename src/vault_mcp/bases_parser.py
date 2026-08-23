@@ -57,6 +57,16 @@ _COMPARISON_RE = re.compile(
 )
 
 
+# The two operators _COMPARISON_RE can capture, mapped rather than compared.
+#
+# `op = "eq" if operator == "==" else "neq"` was a mutation site whose `>=`
+# variant agrees with `==` on both of the only values the regex admits — so no
+# test could kill it. A lookup states the mapping directly and leaves no
+# operator behind, and it fails loudly on a third operator instead of silently
+# calling it "neq".
+_OPERATOR_OPS = {"==": "eq", "!=": "neq"}
+
+
 def _parse_filter_predicate(pred: str) -> FilterNode:
     pred = pred.strip()
 
@@ -78,7 +88,7 @@ def _parse_filter_predicate(pred: str) -> FilterNode:
         else:
             normalized_field = f"note.{raw_field}"
 
-        op = "eq" if operator == "==" else "neq"
+        op = _OPERATOR_OPS[operator]
         return FilterNode(op=op, field=normalized_field, value=val)
 
     return FilterNode(op="eq", field=pred, value="")
@@ -129,7 +139,11 @@ def _build_filter_tree(raw: object) -> FilterNode | None:
                     remaining_children.append(child)
 
         if len(remaining_children) == 1:
-            return remaining_children[0]
+            # Unpacked, not indexed: under a len==1 guard `[0]` and `[-1]` are
+            # the same element, so the index was a mutation site with no
+            # killable answer. Unpacking asserts the length it already checked.
+            (only_child,) = remaining_children
+            return only_child
         if remaining_children:
             return FilterNode(op="and", children=remaining_children)
 

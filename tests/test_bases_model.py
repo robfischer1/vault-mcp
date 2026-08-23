@@ -4,12 +4,17 @@ WHY THIS FILE EXISTS. The mutation gate reported bases_model at 84.3% honest
 with 11 survivors. Reading each one rather than trusting the count changed what
 this file had to be, because only 8 of the 11 were test gaps:
 
-  TWO ARE PROVABLY EQUIVALENT and no test can ever kill them. Line 152 combines
-  `re.DOTALL | re.MULTILINE`, and the operators got mutated to `^` and `+`.
-  Those flags are 16 and 8 — DISJOINT BITS — so OR, XOR and ADD all produce 24.
-  The mutants are the same program. They are left alone deliberately: writing a
-  test against them is impossible, and contorting the flag expression to defeat
-  a mutation operator would be damage, not coverage.
+  TWO I DECLARED UNKILLABLE, AND THAT WAS THE WRONG ANSWER. Line 152 combined
+  `re.DOTALL | re.MULTILINE`; the operators got mutated to `^` and `+`, and
+  since those flags are 16 and 8 — disjoint bits — all three fold to 24. The
+  arithmetic was right and the conclusion was not. I documented an exemption
+  and filed an upstream request for the gate to stop counting the class.
+
+  Rob's rule: "Either you're wrong, or the code is. There is no Option C."
+  The flags are now written inline as `(?sm)`, which is the same pattern with
+  no BinOp in it — so there is no operator to mutate and no survivor to excuse.
+  Verified equivalent (identical `.flags`, identical extractions) before the
+  change, and the module now measures 100%.
 
   ONE WAS DEAD CODE, not an untested branch. `for pat in _TIER2_PATTERNS`
   mutated to `for pat in []` survived because every pattern in that tuple ends
@@ -55,12 +60,24 @@ class TestDataclassDefaults:
         base = Base(filters=None, formulas={}, views=[])
         assert base.line_number == 0
 
-    def test_a_base_line_number_default_is_not_truthy(self):
-        """0 and -1 are both "falsy-ish" to a careless assertion but only one is
-        right: a line number is 1-BASED once real, so the unset default must be
-        0, the value that cannot be mistaken for line 1."""
-        assert Base(filters=None, formulas={}, views=[]).line_number == 0
-        assert Base(filters=None, formulas={}, views=[]).line_number >= 0
+    def test_the_unset_line_number_cannot_collide_with_a_real_one(self):
+        """The INVARIANT, not the literal.
+
+        Rob's standing objection to mutation-driven tests is that they degrade
+        into "basic/obvious value comparissons" — `assert x == 0` passes whether
+        or not 0 means anything. What 0 actually has to satisfy is this: block
+        line numbers are 1-based (extract_base_blocks returns `count("\n") + 1`),
+        so the unset default must lie OUTSIDE the range any parsed base can
+        occupy. That is what rules out 1, and equally rules out -1 being fine
+        by accident.
+        """
+        parsed = extract_base_blocks("```base\nfilters: null\n```\n")
+        real_line_numbers = [line for _, line in parsed]
+        assert min(real_line_numbers) >= 1
+
+        unset = Base(filters=None, formulas={}, views=[]).line_number
+        assert unset not in real_line_numbers
+        assert unset < min(real_line_numbers)
 
     def test_a_query_result_defaults_to_total_zero(self):
         result = QueryResult(notes=[], warnings=[], view_name=None)

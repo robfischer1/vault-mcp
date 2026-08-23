@@ -54,6 +54,18 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+# Which `extra` keys each view type promotes to top-level view properties.
+#
+# This was `if selected_view.type == "cards":`, a mutation site whose `<=`
+# variant agrees with `==` on the only two types that can reach it — the guard
+# above returns early for anything but table/cards. A lookup keyed by type has
+# no operator to mutate, and it is where a third view type would be added.
+_PROMOTED_VIEW_KEYS: dict[str, tuple[str, ...]] = {
+    "cards": ("cardSize", "image", "imageAspectRatio", "indentProperties"),
+    "table": (),
+}
+
+
 def _partition_results(
     notes: list[dict[str, Any]],
     config: GroupByConfig,
@@ -168,15 +180,9 @@ def execute_base(
     view_props = {}
     if selected_view:
         view_props["type"] = selected_view.type
-        if selected_view.type == "cards":
-            for key in (
-                "cardSize",
-                "image",
-                "imageAspectRatio",
-                "indentProperties",
-            ):
-                if key in selected_view.extra:
-                    view_props[key] = selected_view.extra[key]
+        for key in _PROMOTED_VIEW_KEYS.get(selected_view.type, ()):
+            if key in selected_view.extra:
+                view_props[key] = selected_view.extra[key]
 
     merged_filter: FilterNode | None = None
     if base.filters and selected_view and selected_view.filters:
@@ -281,7 +287,7 @@ def execute_base(
         a = accums[name]
         if s.function == "count":
             results[name] = a["count_with_val"]
-        elif a["count_with_val"] == 0:
+        elif not a["count_with_val"]:
             results[name] = 0 if s.function == "sum" else None
         elif s.function == "sum":
             results[name] = a["sum"]
