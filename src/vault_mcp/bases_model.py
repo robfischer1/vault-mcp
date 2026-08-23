@@ -171,9 +171,6 @@ _MAP_PROPS = {
 _SUMMARY_RE = re.compile(r"^(\w+)(?:\((.+)\))?$")
 
 
-_TIER2_PATTERNS = ("html(", "if(", ".map(", ".join(", ".replace(", ".toString(")
-
-
 def _classify_formula_tier(expression: str) -> int:
     """Classify formula into Tier 1 (simple) or Tier 2 (complex)."""
     # Simple Tier 1 matches
@@ -191,12 +188,15 @@ def _classify_formula_tier(expression: str) -> int:
         ):
             return 1
 
-    # Check for Tier 2 markers
-    for pat in _TIER2_PATTERNS:
-        if pat in expression:
-            return 2
-
-    # Any operators or parentheses likely require Tier 2 evaluator
+    # Any operators or parentheses require the Tier 2 evaluator.
+    #
+    # A `for pat in _TIER2_PATTERNS` loop used to sit above this, listing
+    # "html(", "if(", ".map(", ".join(", ".replace(" and ".toString(". It was
+    # DEAD: every entry ends in "(", so this check already returned 2 for all
+    # of them and the loop could not change an outcome. The mutation gate found
+    # it — `for pat in []` survived, which is the signature of a branch that
+    # never decides anything. Verified equivalent over 2,628 inputs before
+    # removal, not argued. (vault-mcp#5294 follow-up.)
     if any(op in expression for op in ("+", "==", "!=", "(", "=>")):
         return 2
 
