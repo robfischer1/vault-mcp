@@ -386,37 +386,6 @@ if not server.REST_DISABLE:
     # -------------------------------------------------------------------
 
     @mcp.tool()
-    def dataview_query(dql: str) -> dict[str, Any]:
-        """[REST-backed] Run a Dataview DQL TABLE query against the vault.
-
-        Passes the query to the Dataview plugin via the REST API. Only TABLE
-        queries are supported (LIST and TASK are rejected by the API). Full
-        DQL syntax: WHERE, SORT, GROUP BY, FLATTEN, functions.
-
-        Requires the Dataview plugin to be active in Obsidian.
-
-        Args:
-            dql: Dataview TABLE query string.
-                 Example: 'TABLE status FROM "System/Handoffs" WHERE note_type = "handoff" SORT file.mtime DESC LIMIT 5'
-
-        Returns:
-            {"count": int, "results": [{filename, result: {field: value}}]} on success.
-
-        """
-        client = server._get_rest_client()
-        result = client.post(
-            "/search/",
-            content=dql,
-            content_type="application/vnd.olrapi.dataview.dql+txt",
-        )
-        if not result["ok"]:
-            return {"error": result["error"], "detail": result.get("detail")}
-        data = result["data"]
-        if isinstance(data, list):
-            return {"count": len(data), "results": data}
-        return {"count": 0, "results": [], "raw": data}
-
-    @mcp.tool()
     def jsonlogic_search(query: dict[str, Any]) -> dict[str, Any]:
         """[REST-backed] Search vault files using a JsonLogic query.
 

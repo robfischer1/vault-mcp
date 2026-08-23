@@ -57,7 +57,6 @@ if not _srv.REST_DISABLE:
             "unsaved_buffer": _rest.unsaved_buffer,
             "obsidian_search": _rest.obsidian_search,
             "execute_command": _rest.execute_command,
-            "dataview_query": _rest.dataview_query,
             "jsonlogic_search": _rest.jsonlogic_search,
             "vault_tags": _rest.vault_tags,
             "list_directory": _rest.list_directory,
