@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pytest
+
 from vault_mcp.bases import (
     Base,
     FilterNode,
     Formula,
+    FormulaEvaluator,
+    FormulaTimeoutError,
     Summary,
     ViewConfig,
     _classify_formula_tier,
@@ -381,23 +387,55 @@ class TestFormulaEvaluation:
         assert len(result.warnings) == 1
         assert "Max nesting depth" in result.warnings[0]["reason"]
 
-    def test_regex_timeout(self):
-        idx = _vault_idx()
-        # A potentially slow regex (backtracking)
-        # Note: we use a string that takes some time to process but not forever
-        long_str = "a" * 25
-        # This regex is specifically designed to be slow on non-matching strings
-        expr = f'"{long_str}".replace(/(a+)+b/, "c")'
-        base = Base(
-            filters=None,
-            formulas={"slow": Formula("slow", expr, 2)},
-            views=[],
-            raw_yaml="",
-            line_number=1,
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "vault-mcp#5310 — regex_timeout does not bound anything. `re.sub` "
+            "holds the GIL for its whole run, so the ThreadPoolExecutor worker "
+            "never yields and future.result(timeout=...) cannot wake to honour "
+            "its own timeout. Measured: at regex_timeout=0.001 the same "
+            "expression still ran 1.95s and COMPLETED, while 0.01 timed out — "
+            "the outcome is a scheduling race, not a timeout. STRICT so a real "
+            "fix (the `regex` module's timeout=, or refusing nested "
+            "quantifiers at parse time) fails this loudly instead of landing "
+            "unnoticed."
+        ),
+    )
+    def test_regex_timeout_bounds_the_work(self):
+        """A pathological regex must cost about `regex_timeout`, not its full run.
+
+        THIS REPLACES A TEST THAT PASSED BY LUCK. The previous version asserted
+        that a "timed out" warning appeared, which is a race — and it cost ~18
+        of the suite's 24 seconds, because it drove `execute_base` over every
+        note in a fixture vault and each catastrophic regex ran to completion.
+
+        Two things changed. It is now a UNIT check on the evaluator, so the
+        regex runs once rather than once per note; and the input is 22 'a's
+        rather than 25, which is ~0.33s of backtracking instead of ~2.2s — still
+        far over the 0.05s timeout, so the assertion below is just as
+        meaningful, at a fraction of the cost.
+
+        That cost matters out of proportion to its size: the suite is the inner
+        loop of the mutation gate, which runs it once per mutant. On PR #390
+        that was 1159 mutants.
+        """
+        evaluator = FormulaEvaluator({}, 5, 0.05)
+        expr = '"' + "a" * 22 + '".replace(/(a+)+b/, "c")'
+
+        start = time.monotonic()
+        with contextlib.suppress(FormulaTimeoutError):
+            evaluator.evaluate(expr)
+        elapsed = time.monotonic() - start
+
+        # The contract a timeout is supposed to give: bounded work. 3x the
+        # configured timeout is generous enough that this fails on the
+        # MECHANISM rather than on machine speed — the measured cost today is
+        # ~0.33s against a 0.05s timeout, a 6x overrun, and a real fix would
+        # land near 0.05s.
+        assert elapsed < 0.15, (
+            f"regex ran {elapsed:.2f}s against a 0.05s timeout — "
+            f"the timeout bounded nothing"
         )
-        result = execute_base(base, idx)
-        assert len(result.warnings) == 1
-        assert "timed out" in result.warnings[0]["reason"]
 
 
 class TestLinkCountFormula:
