@@ -33,14 +33,17 @@ SCHEMAS = Path(__file__).parent / "fixtures" / "schema"
 # Measured 2026-08-22 against the live registration. These are regression
 # anchors, not aspirations: a verb silently dropping off the surface, or the
 # manifest doubling, should fail a test rather than be noticed months later.
-EXPECTED_VERB_COUNT = 54
-MEASURED_MANIFEST_CHARS = 26026
+EXPECTED_VERB_COUNT = 53
+MEASURED_MANIFEST_CHARS = 25471
 # forge-testkit's F13 schema budget is ~200 chars/verb, derived from urania's
 # measured 196. This repo sits at ~482/verb — 2.4x over. The budget lint is NOT
 # wired (that is a live per-session cost and its own decision, see #5254), so
 # this test holds the line where it currently is instead of enforcing the fleet
 # number: it fails if the manifest GROWS, which is the part that costs Rob.
-MANIFEST_CEILING = 27000
+# RATCHETED DOWN with the #5287 retirement (was 27000, over a 26026 measured).
+# Banking the saving is the point: a ceiling left at the old number lets the
+# next verb silently spend what retiring dataview_query just recovered.
+MANIFEST_CEILING = 26000
 
 
 def _tools() -> list[Any]:
@@ -68,12 +71,28 @@ class TestVerbSurface:
     def test_manifest_does_not_grow(self):
         """The manifest ships on every session's first turn, called or not.
 
-        Currently 26,026 chars across 54 verbs (~482/verb) against
+        Currently 25,471 chars across 53 verbs (~481/verb) against
         forge-testkit's ~200/verb budget. This does not enforce the fleet
         number — it pins the current one so growth is visible.
         """
         total = sum(len(t.description or "") for t in _tools())
         assert total <= MANIFEST_CEILING
+
+    def test_dataview_query_stays_retired(self):
+        """vault-mcp#5287 — it could never succeed, so it ships no schema.
+
+        The Local REST API plugin (4.1.7) advertises exactly three vendor
+        content types — note+json, document-map+json, jsonlogic+json — and DQL
+        is not among them; every spelling returned HTTP 400 in ~0ms against the
+        LIVE server. The bundle contains no Dataview integration at all (its
+        eleven `DataView` hits are the JavaScript typed-array builtin).
+
+        Retired outright rather than left as a tombstone, per the lesson from
+        the seventeen removed under #5294: a stub still costs manifest bytes on
+        every session's first turn to advertise something that cannot work.
+        This asserts the ABSENCE so a copy-paste revival fails loudly.
+        """
+        assert "dataview_query" not in {t.name for t in _tools()}
 
     def test_every_verb_has_an_input_schema(self):
         """A verb without a schema cannot be called correctly by any client."""

@@ -66,7 +66,7 @@ config-addressed call.
     `note_search`, `note_lookup`, `note_list`, `backlinks_to`, `outbound_links`, `find_orphans`,
     `find_dangling_links`, `tag_glossary_check`, `all_tags`, `vault_stats`, `reindex`
   - Obsidian REST bridge: `rest_health`, `active_note`, `periodic_note`, `unsaved_buffer`,
-    `obsidian_search`, `execute_command`, `dataview_query`, `jsonlogic_search`, `vault_tags`,
+    `obsidian_search`, `execute_command`, `jsonlogic_search`, `vault_tags`,
     `list_directory`, `open_in_obsidian`, `document_map`
   - `obsidian-cli` bridge: `obsidian_cli_status`, `obsidian_cli_reload_plugin`,
     `obsidian_cli_eval`, `obsidian_cli_command`

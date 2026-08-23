@@ -21,7 +21,6 @@ Split out of bases.py under vault-mcp#5294 (1400 LOC, over the 600 block).
 
 from __future__ import annotations
 
-import concurrent.futures
 import logging
 import re
 from dataclasses import dataclass, field
@@ -151,9 +150,6 @@ class ValidationResult:
 # ---------------------------------------------------------------------------
 
 _BASE_BLOCK_RE = re.compile(r"^```base\s*\n(.*?)^```", re.DOTALL | re.MULTILINE)
-
-# Shared executor for regex timeouts (FR-010)
-_REGEX_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 _NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
 _LINKS_FILTER_RE = re.compile(

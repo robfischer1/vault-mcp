@@ -19,16 +19,16 @@ WHAT RUNNING THEM FOR THE FIRST TIME FOUND. Four of these tests were asserting
 against a vault that no longer exists:
 
   * System/Governance/ is absent from BOTH the live vault and the WSL checkout,
-    so test_subdirectory, the DQL TABLE query and the JsonLogic glob were all
-    pointed at an empty path. Retargeted to System/, which does exist.
+    so test_subdirectory and the JsonLogic glob were both pointed at an empty
+    path. Retargeted to System/, which does exist.
   * The daily periodic note 404s whenever today's note has not been created —
     an environmental fact, not a defect, so the live arm asserts the CONTRACT
     (a well-formed note envelope OR a well-formed not-found envelope) instead
     of assuming one branch.
   * Dataview DQL cannot succeed at all against plugin 4.1.7, which advertises
-    only note+json, document-map+json and jsonlogic+json. Those tests are
-    xfail(strict=True) pending Rob's ruling on vault-mcp#5287 — strict so they
-    shout if the verb ever starts working rather than passing silently.
+    only note+json, document-map+json and jsonlogic+json — and the bundle holds
+    no Dataview integration whatsoever. Rob ruled #5287 RETIRE, so those tests
+    are gone along with the verb; test_server.py asserts the absence instead.
 """
 
 from __future__ import annotations
@@ -52,7 +52,6 @@ KEY_PATH = os.environ.get(
 REST_URL = os.environ.get("VAULT_MCP_REST_URL", "http://127.0.0.1:27123")
 NOTE_JSON = "application/vnd.olrapi.note+json"
 MAP_JSON = "application/vnd.olrapi.document-map+json"
-DQL_TYPE = "application/vnd.olrapi.dataview.dql+txt"
 JSONLOGIC = "application/vnd.olrapi.jsonlogic+json"
 
 # A directory that exists in the vault. The previous value, System/Governance,
@@ -211,46 +210,6 @@ class TestCommands:
 # -------------------------------------------------------------------
 # Phase 7 — Advanced query tools
 # -------------------------------------------------------------------
-
-
-class TestDataviewDQL:
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "vault-mcp#5287 — DQL cannot succeed against Local REST API 4.1.7, "
-            "which advertises only note+json, document-map+json and "
-            "jsonlogic+json; every DQL content-type spelling returns HTTP 400 "
-            "in ~0ms. STRICT so a plugin upgrade or a reimplementation over "
-            "jsonlogic_search fails loudly rather than passing unnoticed."
-        ),
-    )
-    def test_table_query(self, client):
-        result = client.post(
-            "/search/",
-            content='TABLE file.name FROM "System" LIMIT 3',
-            content_type=DQL_TYPE,
-        )
-        assert result["ok"] is True
-        data = result["data"]
-        assert isinstance(data, list)
-        assert len(data) > 0
-
-    def test_list_query_rejected(self, client):
-        result = client.post(
-            "/search/",
-            content='LIST FROM "System" LIMIT 3',
-            content_type=DQL_TYPE,
-        )
-        assert result["ok"] is False
-        assert result["error"] == "rest_invalid_request"
-
-    def test_invalid_dql(self, client):
-        result = client.post(
-            "/search/",
-            content="NOT A VALID QUERY %%%",
-            content_type=DQL_TYPE,
-        )
-        assert result["ok"] is False
 
 
 class TestJsonLogic:

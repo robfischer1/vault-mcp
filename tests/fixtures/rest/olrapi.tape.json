@@ -319,17 +319,6 @@
           }
         ]
       }
-    },
-    {
-      "verb": "POST /search/",
-      "args": {
-        "content_type": "application/vnd.olrapi.dataview.dql+txt"
-      },
-      "response": {
-        "ok": false,
-        "error": "rest_invalid_request",
-        "detail": "{\n  \"message\": \"Unknown or invalid Content-Type specified in Content-Type header.\",\n  \"errorCode\": 40012\n}"
-      }
     }
   ]
 }

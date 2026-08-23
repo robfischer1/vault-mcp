@@ -179,28 +179,6 @@ class TestBackoff:
 class TestContentTypes:
     """Phase 7: raw content body + content-type support."""
 
-    def test_post_with_dql_content_type(self):
-        client = ObsidianRESTClient(key_path=None)
-        client._api_key = "test-key"
-        client._reachable = True
-        client._last_probed = time.time()
-        client._client = MagicMock()
-        client._client.request.return_value = _mock_response(
-            200, [{"filename": "foo.md", "result": {"status": "Active"}}]
-        )
-        result = client.post(
-            "/search/",
-            content='TABLE status FROM "System"',
-            content_type="application/vnd.olrapi.dataview.dql+txt",
-        )
-        assert result["ok"] is True
-        assert len(result["data"]) == 1
-        call_kwargs = client._client.request.call_args
-        assert (
-            call_kwargs[1]["headers"]["Content-Type"]
-            == "application/vnd.olrapi.dataview.dql+txt"
-        )
-
     def test_post_with_jsonlogic_content_type(self):
         client = ObsidianRESTClient(key_path=None)
         client._api_key = "test-key"
