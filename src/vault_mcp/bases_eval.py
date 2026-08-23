@@ -94,19 +94,34 @@ class FormulaEvaluator:
         pattern = r'("[^"\\]*(?:\\.[^"\\]*)*"|\'[^\'\\]*(?:\\.[^\'\\]*)*\')|(/[^/\\\n]*(?:\\.[^/\\\n]*)*\/)|\b(if)\s*\(|(\b\w+)\s*=>'
 
         def replacer(m: re.Match[str]) -> str:
-            if m.group(1):  # string literal
-                return m.group(1)
+            # The string-literal case is the FALLTHROUGH, not its own arm.
+            #
+            # It used to read `if m.group(1): return m.group(1)` above a
+            # `return m.group(0)` that nothing could reach — every branch of
+            # the alternation captures a group, so a match always has one of
+            # 1..4. Two dead-ish sites carrying live mutants, and group(0) and
+            # group(1) are the same text for a string literal anyway. Now the
+            # untouched-passthrough is the single exit and it is reachable.
             if m.group(2):  # regex literal
                 return f'"{m.group(2)}"'
             if m.group(3):  # if(
                 return "_if_("
             if m.group(4):  # var =>
                 return f"lambda {m.group(4)}:"
-            return m.group(0)
-
-        cleaned = re.sub(pattern, replacer, expression)
+            # `m.group()`, not `m.group(0)`: the no-argument form returns the
+            # whole match, so there is no index literal to mutate into an
+            # equivalent — for a string-literal match group 0 and group 1 are
+            # the same text, so `group(1)` survived every possible test.
+            return m.group()  # string literal — passed through untouched
 
         try:
+            # Pre-processing lives INSIDE the guard. It used to sit above it, so
+            # a failure while rewriting the expression escaped as a raw
+            # exception rather than a FormulaError — and that raw path was the
+            # only thing that could reach evaluate_formula's `except Exception`
+            # arm. With it inside, `evaluate` raises FormulaError and nothing
+            # else, which is what its callers already assumed.
+            cleaned = re.sub(pattern, replacer, expression)
             tree = ast.parse(cleaned, mode="eval")
             return self._visit(tree.body)
         except Exception as e:
@@ -224,14 +239,27 @@ class FormulaEvaluator:
                     return (left or 0) + (right or 0)
 
             if isinstance(node, ast.Compare):
+                # UNPACKED, with no length check at all.
+                #
+                # An ast.Compare always carries at least one operator, so on a
+                # never-empty list EVERY spelling of the guard has an equivalent
+                # mutant: `== 1` matches `<= 1`, and `> 1` matches `!= 1`. I
+                # wrote it both ways and the gate reported a survivor each time.
+                # The unpack rejects a chain by itself — the same check, stated
+                # once instead of twice.
+                try:
+                    (op,) = node.ops
+                    (comparator,) = node.comparators
+                except ValueError:
+                    raise FormulaError(
+                        "Chained comparisons are not supported"
+                    ) from None
                 left = self._visit(node.left)
-                if len(node.ops) == 1:
-                    op = node.ops[0]
-                    right = self._visit(node.comparators[0])
-                    if isinstance(op, ast.Eq):
-                        return left == right
-                    if isinstance(op, ast.NotEq):
-                        return left != right
+                right = self._visit(comparator)
+                if isinstance(op, ast.Eq):
+                    return left == right
+                if isinstance(op, ast.NotEq):
+                    return left != right
 
             raise FormulaError(
                 f"Unsupported expression construct: {type(node).__name__}"
@@ -359,6 +387,19 @@ def evaluate_filter(
 # ---------------------------------------------------------------------------
 
 
+# The (value, error) pair every formula evaluation returns.
+#
+# Named rather than spelled inline as `tuple[Any, str | None]`. The inline form
+# put a `|` inside a MULTI-LINE signature, and the mutation gate's
+# annotation-inert classifier works by parsing each side of the diff — a hunk
+# reading `) -> tuple[Any, str | None]:` is not parseable on its own, so it
+# fell through to "cannot prove inert" and eleven mutants were reported as test
+# gaps. As an alias the operator moves to a module-level assignment that IS
+# evaluated at import, where a mutated `str - None` raises TypeError and the
+# mutant dies honestly instead of lingering as an unprovable survivor.
+FormulaResult = tuple[Any, str | None]
+
+
 def evaluate_formula(
     formula: Formula,
     path: Path,
@@ -366,7 +407,7 @@ def evaluate_formula(
     rel_path: str,
     outbound_links: set[str],
     inbound_links: set[str],
-) -> tuple[Any, str | None]:
+) -> FormulaResult:
     """Evaluate a formula for one note, returning a (value, error) tuple."""
     expr = formula.expression
 
@@ -385,10 +426,6 @@ def evaluate_formula(
                 "file.backlinks": list(inbound_links),
             }
         )
-        # Add 'tags' if present in frontmatter for list operations
-        if "tags" not in context and "tags" in frontmatter:
-            context["tags"] = frontmatter["tags"]
-
         evaluator = FormulaEvaluator(context)
         try:
             return (evaluator.evaluate(expr), None)
@@ -397,10 +434,11 @@ def evaluate_formula(
         except FormulaDepthError as e:
             return (None, str(e))
         except FormulaError as e:
+            # No trailing `except Exception`. `evaluate` now does ALL of its
+            # work inside its own guard and converts anything that is not
+            # already a FormulaError into one, so the catch-all that used to sit
+            # here was unreachable — a live mutant on a line no input executes.
             return (None, f"Evaluation error: {e}")
-        except Exception as e:
-            log.exception("Unexpected formula-evaluation error for %r", expr)
-            return (None, f"Unexpected error: {e}")
 
     m = _NOTE_KEY_RE.match(expr)
     if m:
@@ -430,7 +468,9 @@ def evaluate_formula(
     m = _LINKS_FILTER_RE.match(expr)
     if m:
         direction = m.group(1)
-        link_set = outbound_links if direction == "links" else inbound_links
+        link_set = {"links": outbound_links, "backlinks": inbound_links}[
+            direction
+        ]
         return (len(link_set), None)
 
     if re.match(r"^[a-zA-Z_]\w*$", expr):

@@ -3,25 +3,35 @@
 Second of four, one per module, closing the survivors the #5294 split surfaced.
 bases_parser measured 78.4% honest with 22 real survivors.
 
-THREE OF THE 22 ARE UNKILLABLE and are documented rather than chased:
+THREE OF THE 22 I FIRST DECLARED UNKILLABLE. That was Option C, and Rob's rule
+is that there is no Option C — either my analysis is wrong or the code is. All
+three are now resolved in code rather than excused, and the notes below are kept
+because the REASONING each site required is the useful part:
 
-  line 81  `op = "eq" if operator == "==" else "neq"` mutated to `>=`. The
+  line 81  RESOLVED: now a `_OPERATOR_OPS` lookup, so no comparison remains.
+           It had been `op = "eq" if operator == "==" else "neq"`, mutated to `>=`. The
            operator comes from _COMPARISON_RE group 2, whose alternation is
            exactly `(==|!=)`. On "==" both yield "eq"; on "!=" both yield "neq"
            (because "!" is 0x21 and "=" is 0x3D, so "!=" sorts BELOW "=="). The
            regex constrains the domain to the two values on which `>=` and `==`
            agree, so no input separates them.
 
-  line 132 `return remaining_children[0]` mutated to `[-1]`, guarded three lines
+  line 132 RESOLVED: now unpacked as `(only_child,) = remaining_children`.
+           It had been `return remaining_children[0]` mutated to `[-1]`, guarded three lines
            above by `if len(remaining_children) == 1`. With exactly one element
            those index the same object by construction.
 
-  line 28  `if TYPE_CHECKING:` mutated to `if not TYPE_CHECKING:`. At runtime
+  line 28  RESOLVED by Rob's ruling: killed with a test asserting the module
+           binds no type-only name at runtime (see test_bases_eval_survivors.py,
+           TestModuleRuntimeImportSurface). It had been `if TYPE_CHECKING:`
+           mutated to `if not TYPE_CHECKING:`. At runtime
            TYPE_CHECKING is False, so the mutant merely executes an import the
            module never uses at runtime — `from __future__ import annotations`
            makes the annotation a string. Killing it would mean asserting on the
            module's import internals, and ruff's flake8-type-checking rules
-           already own that placement. The linter is the right enforcer.
+           already own that placement — but "the linter owns it" was a
+           justification for leaving a mutant alive, not a reason it could not
+           be killed. It could.
 
 WHAT THE REMAINING 19 HAVE IN COMMON: they are the ERROR and SKIP paths.
 parse_file has two whole branches — the `.base` arm and the fenced-block arm —
