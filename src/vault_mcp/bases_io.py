@@ -161,8 +161,20 @@ def write_base_to_file(
     blocks = list(_BASE_BLOCK_RE.finditer(text))
 
     if not blocks:
-        separator = "\n" if text and not text.endswith("\n") else ""
-        if text and not text.endswith("\n\n"):
+        # Exactly ONE blank line between existing content and the new block,
+        # whatever the file already ends with.
+        #
+        # The previous form computed a separator and then unconditionally
+        # overwrote it: the `"\n"` branch could never survive, because the
+        # second condition was true in every case that produced it. Dead, and
+        # it also gave a file ending in a single newline TWO blank lines while
+        # the other two cases got one. Found by asserting the output rather
+        # than just `written` — mutants on both lines had been surviving.
+        if not text or text.endswith("\n\n"):
+            separator = ""
+        elif text.endswith("\n"):
+            separator = "\n"
+        else:
             separator = "\n\n"
         file_path.write_text(text + separator + new_block, encoding="utf-8")
         return {"written": True, "action": "appended", "base_index": 0}
