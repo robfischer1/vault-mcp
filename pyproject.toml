@@ -50,7 +50,7 @@ dependencies = [
     # moves. Verified against the live index, same date. Until that port lands,
     # this ceiling stays; renovate will offer to lift it, and lifting it without
     # doing the port re-introduces the warning.
-    "pydantic-settings<2.15",
+    "pydantic-settings<2.16",
 ]
 
 [project.urls]
