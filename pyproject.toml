@@ -66,7 +66,7 @@ vault-mcp-cli = "vault_mcp.cli:main"
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.23",
-    "pytest-cov>=5",
+    "pytest-cov>=7.1.0",
     # The fleet's test-only SDK. vault-mcp was one of two Python stars without
     # it (the other is fleet-crew, whose future is unruled) — which is why this
     # suite grew five hand-rolled permissive FakeVaults and no conftest.py.
