@@ -30,7 +30,7 @@ dependencies = [
     #
     # Floor MEASURED, not guessed: 2022.1.18 is the oldest release tested here
     # that honours `timeout=` (verified against 2024.11.6 as well).
-    "regex>=2022.1.18",
+    "regex>=2026.7.19",
     # A TRANSITIVE dep constrained deliberately, not a direct import.
     # pydantic-settings 2.15.0 added IncompleteFieldDefinitionWarning, and mcp
     # 1.x's FastMCP.Settings trips it on the `lifespan` field at construction —
