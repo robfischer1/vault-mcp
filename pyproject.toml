@@ -76,7 +76,7 @@ dev = [
     # forge-testkit lints the pre-commit config runs. Lives only on the Forgejo
     # PyPI, so its source is pinned below.
     "forge-testkit>=1.3.0",
-    "ruff>=0.15.17",
+    "ruff>=0.16.5",
     "mypy>=2.1.0",
     "pyright==1.1.411",
     "types-PyYAML>=6.0.12.20260518",
