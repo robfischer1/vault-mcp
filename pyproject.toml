@@ -80,7 +80,7 @@ dev = [
     "mypy>=2.1.0",
     "pyright==1.1.411",
     "types-PyYAML>=6.0.12.20260518",
-    "types-regex>=2024.11.6",
+    "types-regex>=2026.8.31.20260831",
     "pre-commit>=3.5",
 ]
 
