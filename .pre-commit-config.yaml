@@ -21,10 +21,15 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      - id: trailing-whitespace
-        stages: [pre-commit]
-      - id: end-of-file-fixer
-        stages: [pre-commit]
+      # trailing-whitespace REMOVED 2026-08-16, end-of-file-fixer REMOVED
+      # 2026-08-08 — fleet-wide decision, see ananke/.pre-commit-config.yaml:47-69.
+      # trailing-whitespace: measured 0.7% yield across 6 repos/998 files, not
+      # worth a fixer rewriting a file mid-commit. end-of-file-fixer: caused a
+      # 24-repo red-CI cascade over an unterminated `#copier updated` sentinel
+      # (rob/renovate-config#2558) and raises PermissionError under a
+      # forge-git-locked primary (rob/foundry-stocks#2563); its only real
+      # catches were generated files, never source. This repo was a straggler
+      # that never received the fleet-wide removal.
       - id: check-yaml
         stages: [pre-commit]
       - id: check-added-large-files
