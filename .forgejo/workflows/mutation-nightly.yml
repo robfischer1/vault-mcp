@@ -16,10 +16,14 @@
 name: mutation-nightly
 
 on:
-  schedule:
-    # Staggered off the hour and off each other, so twenty-odd full runs do not
-    # queue onto llm01 at the same minute.
-    - cron: '48 9 * * *'
+  # SCHEDULE REMOVED 2026-09-08 (Faraday14) — the nightly sweep OOM-killed on
+  # llm01's shared act-runner lane (--memory=3g, capacity 6) at ~2.97 GiB RSS.
+  # Measured: 4 kills 07:36-08:50Z (python family) and furnace-7431b30 at
+  # 13:06:39Z on 09-07 (rust family), so both families exceeded the cap. Docker
+  # reported OOMKilled=false throughout, because the kernel killed the child
+  # process and not PID 1 — the container-level flag cannot see this class.
+  # Manual dispatch only until the run is routed to a lane that fits it
+  # (act-runner-bigmem: --memory=12g, capacity 1, label llm01-bigmem).
   workflow_dispatch:
 
 jobs:
