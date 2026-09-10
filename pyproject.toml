@@ -31,6 +31,19 @@ dependencies = [
     # Floor MEASURED, not guessed: 2022.1.18 is the oldest release tested here
     # that honours `timeout=` (verified against 2024.11.6 as well).
     "regex>=2022.1.18",
+    # GIT IN-PROCESS, WHICH IS WHY IT IS A RUNTIME DEPENDENCY AND NOT A
+    # CONVENIENCE. gitops.py used to spawn the `git` binary, and the spawn cost
+    # three things at once: the bot identity was only a DEFAULT that an
+    # inherited GIT_AUTHOR_NAME silently beat (a live defect — the commit went
+    # out under whoever started the service); every invocation carried
+    # `-c safe.directory=*`, a repo-wide relaxation, to get past git's
+    # dubious-ownership guard under the LocalSystem service; and the argument
+    # vector could never satisfy ruff's S603/S607 on a cross-platform binary
+    # path. dulwich takes author and committer as explicit bytes with no
+    # configuration fallback, has no ownership guard to defuse, and is pure
+    # Python — so all three are answered by the same change rather than
+    # excused. Floor is the version this was written and measured against.
+    "dulwich>=1.2.14",
 ]
 
 [project.urls]
@@ -165,40 +178,22 @@ runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
 # config. The one real finding it hid, a missing D103 docstring, is answered
 # rather than re-silenced.
 "benchmarks/**" = ["INP001"]
-# S603 ALONE, on the two modules that spawn a process, and BLE001 is gone from
-# the first of them because it was DEAD — measured 2026-09-10 by deleting the
-# entry and re-running: gitops.py already catches
-# `(OSError, subprocess.SubprocessError)` at every boundary, so the blind-except
-# rule silenced nothing and the entry claimed a population it did not have.
+# ⚑ ONE ENTRY, ONE RULE, ONE FILE. Read this before touching it.
 #
-# S603 IS NOT SATISFIABLE BY REFACTOR HERE, and that was measured too, not
-# assumed. ruff clears the rule only when EVERY element of the argv is an inline
-# string literal at the call site: a `Final` constant, `shutil.which(...)`,
-# `str(Path(...))`, `os.path.join` of literals, an f-string element and a
-# `[literal, *args]` splat all still fire (probed against ruff 0.16.3). The
-# escape the fleet's other Python stars take — narcissus and techne both inline
-# `/usr/bin/git` and ride the dynamic parts on `cwd=` — is closed to this repo:
-# production is an NSSM service on nas01, so a hardcoded POSIX path is a
-# regression, and making argv[0] a bare `"git"` literal trades S603 for S607.
+# WHAT LEFT, AND HOW. gitops.py's `S603, BLE001` entry is gone entirely.
+# BLE001 was DEAD (measured 2026-09-10: that module already caught
+# `(OSError, subprocess.SubprocessError)` at every boundary, so it silenced
+# nothing). S603 went the only way a lint finding honestly can — the code
+# stopped doing the thing. gitops.py drives dulwich in-process and spawns no
+# binary at all.
 #
-# The two sites are also not the same KIND of finding, which is why neither is
-# answered with a line directive:
-#   gitops.py    — a structural false positive. The argv is this module's own,
-#                  the repo rides `-C repo_root`, and the identity now rides the
-#                  child environment; only the configurable binary is dynamic.
-#   cli_client.py — a TRUE positive that the design accepts. `obsidian_cli_eval`
-#                  exists to run caller-supplied JavaScript in Obsidian, so
-#                  "check for execution of untrusted input" is correct; the
-#                  answer is the command allowlist in `ObsidianCLI.run()`, not a
-#                  claim that ruff is wrong.
-#
-# ⚑ THIS IS THE ONE THING THE GATE STILL OBJECTS TO. fleet:stop-justifications
-# counts a config-level entry as a suppression regardless of the measurement
-# above, and the fleet's ratified route for exactly this is Rob's signoff on a
-# DIRECTORY_EXEMPT row in foundry-stocks' ci/lib/stop_justifications.py — the
-# precedent is cerberus, S603 under probe/ and probes/, granted 2026-08-19 after
-# the same alternative was measured and reported. Not self-granted here.
-"src/vault_mcp/gitops.py" = ["S603"]
+# WHAT REMAINS IS NOT THE SAME SHAPE. `ObsidianCLI` runs the `obsidian` binary,
+# discovered at runtime from VAULT_MCP_OBSIDIAN_BIN or PATH, and
+# `obsidian_cli_eval` exists to hand it caller-supplied JavaScript. S603 says
+# "check for execution of untrusted input"; there that is a TRUE POSITIVE and
+# the rule is right, so neither a `# noqa` nor a refactor is the answer — a
+# suppression would assert the checker is mistaken about a call that really
+# does execute untrusted input. This entry is a placeholder for a decision.
 "src/vault_mcp/cli_client.py" = ["S603"]
 
 

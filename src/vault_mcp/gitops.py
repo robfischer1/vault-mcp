@@ -9,28 +9,92 @@ Gate write commits the written path and returns the commit sha (the session's
 checkpoint handshake); a scheduled sweep commits + pushes the whole tree to
 capture the human Obsidian edits the Gate never sees.
 
+IN-PROCESS, NOT A SUBPROCESS. This module drives dulwich (a pure-Python git
+implementation) rather than spawning the `git` binary, and three problems went
+away with the spawn:
+
+* **Identity.** `-c user.name=` only set a DEFAULT, which `GIT_AUTHOR_NAME` in
+  the inherited environment silently beat — so the bot author was whoever
+  started the service. dulwich takes author and committer as explicit bytes
+  arguments with no configuration fallback, which is what makes the docstring's
+  promise (the bot stays visually distinct from Rob's hand commits) TRUE rather
+  than merely intended.
+* **`safe.directory`.** The old `-c safe.directory=*` defused git's
+  dubious-ownership guard, needed because the service runs as LocalSystem while
+  the vault repo is owned by the interactive user. dulwich has no such guard, so
+  the flag — a repo-wide relaxation carried on every invocation — is simply gone.
+* **The binary.** Nothing walks `PATH` or depends on where git is installed, and
+  no caller-supplied string ever reaches an argument vector. ruff's S603/S607
+  had nothing left to say about this module once the spawn went, which is the
+  honest way to answer a lint rather than excuse it.
+
 Commits are **fail-safe**: a git error is logged and never propagated, so a
 commit failure can't break the write that already succeeded (mirrors the Gate's
-diff-sink contract — "emission failure never blocks the write"). Identity is set
-per-invocation through ``GIT_AUTHOR_*``/``GIT_COMMITTER_*`` in the child's
-environment, so the global git config is never touched, an inherited author
-cannot outrank the bot, and the bot author stays visually distinct from Rob's
-hand commits.
+diff-sink contract — "emission failure never blocks the write").
 """
 
 from __future__ import annotations
 
+import io
 import logging
 import os
-import subprocess
 import threading
 import time
 from pathlib import Path
+
+from dulwich import porcelain
+from dulwich.errors import (
+    CommitError,
+    GitProtocolError,
+    HangupException,
+    HookError,
+    NotGitRepository,
+    ObjectFormatException,
+    PackedRefsException,
+    RefFormatError,
+    SendPackError,
+)
+from dulwich.repo import Repo
 
 log = logging.getLogger(__name__)
 
 DEFAULT_BOT_NAME = "vault-mcp[bot]"
 DEFAULT_BOT_EMAIL = "vault-mcp[bot]@users.noreply.github.com"
+
+# THE FAIL-SOFT BOUNDARY, NAMED IN FULL rather than caught as `Exception`. The
+# git sidecar must never break a vault write, so every handler below logs and
+# degrades — but "must not propagate" was never a reason to swallow everything,
+# and a blind except here would hide a TypeError in this module's own code.
+#
+# Each entry is a failure this layer can actually produce:
+#   NotGitRepository  repo_root is not a checkout — and it is ALSO what a push
+#                     to an unconfigured remote raises ("no git repository was
+#                     found at origin").
+#   porcelain.Error   the porcelain layer's own refusals.
+#   CommitError       the object could not be written.
+#   HookError         a repo hook (pre-commit / commit-msg) rejected the commit.
+#   SendPackError,    the push leg: protocol, transport, and a server that hung
+#   GitProtocolError, up mid-negotiation.
+#   HangupException
+#   ObjectFormatException, PackedRefsException, RefFormatError
+#                     a corrupt or unreadable object / refs file.
+#   ValueError        dulwich's own guard on a path handed in absolute when it
+#                     must be repository-relative.
+#   OSError           the filesystem underneath all of it.
+_GIT_FAILURES = (
+    NotGitRepository,
+    porcelain.Error,
+    CommitError,
+    HookError,
+    SendPackError,
+    GitProtocolError,
+    HangupException,
+    ObjectFormatException,
+    PackedRefsException,
+    RefFormatError,
+    ValueError,
+    OSError,
+)
 
 
 def committer_from_env(repo_root: Path | str) -> GitCommitter:
@@ -64,7 +128,6 @@ class GitCommitter:
         author_email: str = DEFAULT_BOT_EMAIL,
         enabled: bool = True,
         push_enabled: bool = False,
-        git_bin: str = "git",
     ) -> None:
         """Initialize a serialized committer over a repo root with bot identity and enable/push flags."""
         self.repo_root = Path(repo_root)
@@ -72,78 +135,58 @@ class GitCommitter:
         self.author_email = author_email
         self.enabled = enabled
         self.push_enabled = push_enabled
-        self._git = git_bin
         self._git_lock = threading.RLock()  # serializes git index ops
         self._inflight = 0  # writes between begin_write/end_write
         self._inflight_lock = threading.Lock()
 
-    # -- subprocess plumbing ------------------------------------------------
-    # FAIL-SOFT IS DELIBERATE, AND NARROW. Every handler below catches
-    # (OSError, subprocess.SubprocessError) rather than Exception: those are
-    # what `subprocess.run(check=False)` can actually raise here — git absent,
-    # not executable, or the spawn itself failing. The git sidecar must never
-    # break a vault write, so it logs and degrades instead of propagating, but
-    # "must not propagate" was never a reason to catch everything.
-    def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        # ``safe.directory=*`` defuses git's dubious-ownership guard: the service
-        # runs as LocalSystem while the vault repo is owned by the interactive
-        # user, which otherwise blocks every command. It is scoped by
-        # construction — every invocation also passes ``-C repo_root``, so git
-        # only ever operates on the one trusted repo.
-        return subprocess.run(
-            [
-                self._git,
-                "-C",
-                str(self.repo_root),
-                "-c",
-                "safe.directory=*",
-                *args,
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-            env=self._identity_env(),
-        )
+    # -- dulwich plumbing ---------------------------------------------------
+    def _open(self) -> Repo:
+        """Open ``repo_root`` itself as a checkout.
 
-    def _identity_env(self) -> dict[str, str]:
-        """Return the process environment with the bot identity forced onto it.
-
-        THE `-c user.name` FORM THIS REPLACES DID NOT WIN. git resolves an
-        author from ``GIT_AUTHOR_NAME``/``GIT_AUTHOR_EMAIL`` first and only
-        falls back to ``user.*``, so any inherited value silently outranked the
-        bot identity and the commit went out under whoever's environment the
-        service happened to have. The old comment asserted the opposite ("git
-        derives author from user.* unless GIT_AUTHOR_* / --author override, so
-        these two -c flags cover both") — measured false 2026-09-10, and
-        measured by the suite: TestBotIdentity fails under an environment that
-        exports GIT_AUTHOR_NAME, which is the shape a service inherits.
-
-        Setting all four variables makes the identity authoritative rather than
-        merely default, which is what "the bot author stays visually distinct
-        from Rob's hand commits" needs to be true.
+        EXACT, NOT DISCOVERED. `git -C <dir>` walks up until it finds a
+        repository, so a misconfigured ``repo_root`` used to commit into
+        whatever enclosing checkout it happened to land in. `Repo(path)` refuses
+        instead, which is the safer failure for a component whose whole job is
+        writing commits: a wrong root now raises NotGitRepository and the
+        fail-safe boundary turns it into a logged no-op.
         """
-        return {
-            **os.environ,
-            "GIT_AUTHOR_NAME": self.author_name,
-            "GIT_AUTHOR_EMAIL": self.author_email,
-            "GIT_COMMITTER_NAME": self.author_name,
-            "GIT_COMMITTER_EMAIL": self.author_email,
-        }
+        return Repo(str(self.repo_root))
+
+    def _identity(self) -> bytes:
+        """Return the bot identity as git's ``Name <email>`` byte string.
+
+        Passed to BOTH author and committer on every commit. There is no
+        configuration fallback behind it — that is the point, and the reason
+        this is a value rather than a `-c` flag or an environment variable.
+        """
+        return f"{self.author_name} <{self.author_email}>".encode()
+
+    @staticmethod
+    def _has_staged(repo: Repo) -> bool:
+        """Whether the index differs from HEAD (the `diff --cached` question)."""
+        status = porcelain.status(repo, untracked_files="no")
+        return any(status.staged.values())
+
+    @staticmethod
+    def _message(message: str) -> bytes:
+        # git normalises a `-m` message to end in a newline; dulwich stores
+        # exactly what it is given, so do it here or the history diverges in a
+        # way `%s` hides and a raw `cat-file` does not.
+        text = message if message.endswith("\n") else message + "\n"
+        return text.encode("utf-8")
 
     def head_sha(self) -> str | None:
         """Return the repo's current HEAD sha, or None on failure."""
         try:
-            cp = self._run("rev-parse", "HEAD")
-            return cp.stdout.strip() if cp.returncode == 0 else None
-        except (OSError, subprocess.SubprocessError) as exc:
+            with self._open() as repo:
+                return repo.head().decode("ascii")
+        except KeyError:
+            # An unborn branch: the ref exists in HEAD but points at nothing.
+            log.warning("git head_sha: no commit on the current branch yet")
+            return None
+        except _GIT_FAILURES as exc:
             log.warning("git head_sha failed: %s", exc)
             return None
-
-    def _has_staged(self) -> bool:
-        # `diff --cached --quiet` exits 1 when staged changes exist, 0 when none.
-        return self._run("diff", "--cached", "--quiet").returncode != 0
 
     def _wait_for_path(self, abs_path: Path, timeout: float = 2.0) -> bool:
         """Poll briefly for a just-written file to land (REST write → disk)."""
@@ -178,32 +221,31 @@ class GitCommitter:
         Returns None when disabled, on any git failure (fail-safe), or when the
         write changed nothing (no staged diff — e.g. an idempotent rewrite).
         ``wait_for_create=False`` skips the disk-landing poll (used for deletes).
+
+        ``paths`` are repository-relative, as they always were. One `stage()`
+        covers creates, modifications AND deletions: dulwich drops an index
+        entry whose file is gone, which is what makes the dissolve path work
+        without a second `git rm` call.
         """
         if not self.enabled or not paths:
             return None
         try:
-            with self._git_lock:
+            with self._git_lock, self._open() as repo:
                 if wait_for_create:
                     for rel in paths:
                         self._wait_for_path(self.repo_root / rel)
-                add = self._run("add", "--", *paths)
-                if add.returncode != 0:
-                    log.warning(
-                        "git add failed for %s: %s", paths, add.stderr.strip()
-                    )
+                worktree = repo.get_worktree()
+                worktree.stage(paths)
+                if not self._has_staged(repo):
                     return None
-                if not self._has_staged():
-                    return None
-                commit = self._run("commit", "-m", message)
-                if commit.returncode != 0:
-                    log.warning(
-                        "git commit failed for %s: %s",
-                        paths,
-                        commit.stderr.strip(),
-                    )
-                    return None
-                return self.head_sha()
-        except (OSError, subprocess.SubprocessError) as exc:
+                identity = self._identity()
+                sha = worktree.commit(
+                    message=self._message(message),
+                    author=identity,
+                    committer=identity,
+                )
+                return sha.decode("ascii")
+        except _GIT_FAILURES as exc:
             log.warning("commit_paths failed for %s: %s", paths, exc)
             return None
 
@@ -214,6 +256,12 @@ class GitCommitter:
         Checkpoint-silent by design (no session, no checkpoint emit). Defers if a
         Gate write is in flight so it never captures a half-written transaction.
         Returns a structured result; never raises.
+
+        The `git add -A` equivalent is `unstaged + untracked`: dulwich reports a
+        tracked file that was modified OR deleted under ``unstaged``, and a new
+        file under ``untracked`` with .gitignore already applied. Staging that
+        union reproduces `-A` exactly, deletions included — which matters,
+        because a note Rob deletes in Obsidian is the case the sweep exists for.
         """
         if not self.enabled:
             return {"committed": False, "reason": "disabled"}
@@ -221,37 +269,47 @@ class GitCommitter:
             if self._inflight > 0:
                 return {"committed": False, "reason": "deferred_inflight_write"}
         try:
-            with self._git_lock:
-                add = self._run("add", "-A")
-                if add.returncode != 0:
-                    log.warning(
-                        "sweep git add -A failed: %s", add.stderr.strip()
-                    )
-                    return {"committed": False, "reason": "add_failed"}
-                if not self._has_staged():
+            with self._git_lock, self._open() as repo:
+                status = porcelain.status(repo, untracked_files="all")
+                changed = [
+                    path.decode("utf-8")
+                    for path in [*status.unstaged, *status.untracked]
+                ]
+                worktree = repo.get_worktree()
+                if changed:
+                    worktree.stage(changed)
+                if not self._has_staged(repo):
                     return {"committed": False, "reason": "nothing_to_commit"}
-                commit = self._run("commit", "-m", message)
-                if commit.returncode != 0:
-                    log.warning(
-                        "sweep commit failed: %s", commit.stderr.strip()
-                    )
-                    return {"committed": False, "reason": "commit_failed"}
-                sha = self.head_sha()
+                identity = self._identity()
+                sha = worktree.commit(
+                    message=self._message(message),
+                    author=identity,
+                    committer=identity,
+                ).decode("ascii")
                 pushed = self.push() if self.push_enabled else False
                 return {"committed": True, "sha": sha, "pushed": pushed}
-        except (OSError, subprocess.SubprocessError) as exc:
+        except _GIT_FAILURES as exc:
             log.warning("sweep_commit failed: %s", exc)
             return {"committed": False, "reason": f"error: {exc}"}
 
     def push(self) -> bool:
-        """Push the current branch; fail-safe (logs + returns False on error)."""
+        """Push the current branch; fail-safe (logs + returns False on error).
+
+        THE STREAMS ARE CAPTURED, and that is not tidiness. dulwich's push
+        writes its progress to real stdout by default, and vault-mcp's default
+        transport is MCP over stdio — anything this leg printed would land in
+        the middle of a JSON-RPC frame and corrupt the session. The subprocess
+        form got this for free from `capture_output=True`; here it has to be
+        asked for.
+        """
         try:
-            with self._git_lock:
-                cp = self._run("push")
-                if cp.returncode != 0:
-                    log.warning("git push failed: %s", cp.stderr.strip())
-                    return False
+            with self._git_lock, self._open() as repo:
+                porcelain.push(
+                    repo,
+                    outstream=io.BytesIO(),
+                    errstream=io.BytesIO(),
+                )
                 return True
-        except (OSError, subprocess.SubprocessError) as exc:
+        except _GIT_FAILURES as exc:
             log.warning("push failed: %s", exc)
             return False
