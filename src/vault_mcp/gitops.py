@@ -12,8 +12,10 @@ capture the human Obsidian edits the Gate never sees.
 Commits are **fail-safe**: a git error is logged and never propagated, so a
 commit failure can't break the write that already succeeded (mirrors the Gate's
 diff-sink contract — "emission failure never blocks the write"). Identity is set
-per-commit via ``-c user.name/-c user.email`` so the global git config is never
-touched and the bot author stays visually distinct from Rob's hand commits.
+per-invocation through ``GIT_AUTHOR_*``/``GIT_COMMITTER_*`` in the child's
+environment, so the global git config is never touched, an inherited author
+cannot outrank the bot, and the bot author stays visually distinct from Rob's
+hand commits.
 """
 
 from __future__ import annotations
@@ -102,17 +104,33 @@ class GitCommitter:
             encoding="utf-8",
             errors="replace",
             check=False,
+            env=self._identity_env(),
         )
 
-    def _identity_args(self) -> list[str]:
-        # Sets BOTH author and committer: git derives author from user.* unless
-        # GIT_AUTHOR_* / --author override, so these two -c flags cover both.
-        return [
-            "-c",
-            f"user.name={self.author_name}",
-            "-c",
-            f"user.email={self.author_email}",
-        ]
+    def _identity_env(self) -> dict[str, str]:
+        """Return the process environment with the bot identity forced onto it.
+
+        THE `-c user.name` FORM THIS REPLACES DID NOT WIN. git resolves an
+        author from ``GIT_AUTHOR_NAME``/``GIT_AUTHOR_EMAIL`` first and only
+        falls back to ``user.*``, so any inherited value silently outranked the
+        bot identity and the commit went out under whoever's environment the
+        service happened to have. The old comment asserted the opposite ("git
+        derives author from user.* unless GIT_AUTHOR_* / --author override, so
+        these two -c flags cover both") — measured false 2026-09-10, and
+        measured by the suite: TestBotIdentity fails under an environment that
+        exports GIT_AUTHOR_NAME, which is the shape a service inherits.
+
+        Setting all four variables makes the identity authoritative rather than
+        merely default, which is what "the bot author stays visually distinct
+        from Rob's hand commits" needs to be true.
+        """
+        return {
+            **os.environ,
+            "GIT_AUTHOR_NAME": self.author_name,
+            "GIT_AUTHOR_EMAIL": self.author_email,
+            "GIT_COMMITTER_NAME": self.author_name,
+            "GIT_COMMITTER_EMAIL": self.author_email,
+        }
 
     def head_sha(self) -> str | None:
         """Return the repo's current HEAD sha, or None on failure."""
@@ -176,9 +194,7 @@ class GitCommitter:
                     return None
                 if not self._has_staged():
                     return None
-                commit = self._run(
-                    *self._identity_args(), "commit", "-m", message
-                )
+                commit = self._run("commit", "-m", message)
                 if commit.returncode != 0:
                     log.warning(
                         "git commit failed for %s: %s",
@@ -214,9 +230,7 @@ class GitCommitter:
                     return {"committed": False, "reason": "add_failed"}
                 if not self._has_staged():
                     return {"committed": False, "reason": "nothing_to_commit"}
-                commit = self._run(
-                    *self._identity_args(), "commit", "-m", message
-                )
+                commit = self._run("commit", "-m", message)
                 if commit.returncode != 0:
                     log.warning(
                         "sweep commit failed: %s", commit.stderr.strip()
