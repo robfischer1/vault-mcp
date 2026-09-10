@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The Gate's FRONTMATTER collaborator — build, migrate, lint and diff it.
 
 Extracted from ConventionGate under vault-mcp#5294 (gate.py was 1173 LOC over a

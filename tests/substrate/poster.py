@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Records POSTs in order and fails at a configured endpoint.
 
 Lives here rather than in the test module because

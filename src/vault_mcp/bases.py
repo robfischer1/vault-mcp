@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Obsidian Bases — parse, evaluate, execute, serialize and validate.
 
 THIS MODULE IS A FAÇADE. The implementation was 1400 lines, well over the

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """MCP server for vault-mcp.
 
 Read-only query tools over an Obsidian vault's frontmatter, filenames,
@@ -37,10 +41,9 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 if TYPE_CHECKING:
-    from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
     from vault_mcp.gitops import GitCommitter
@@ -191,35 +194,35 @@ def _get_rest_client() -> ObsidianRESTClient:
     return _rest_client
 
 
-# CLI client (Phase 006)
-_cli_client: ObsidianCLI | None = None
-
-
-def _get_cli_client() -> ObsidianCLI:
-    global _cli_client
-    if _cli_client is None:
-        from vault_mcp.cli_client import ObsidianCLI
-
-        _cli_client = ObsidianCLI()
-        _cli_client.probe()
-    return _cli_client
+# ---------------------------------------------------------------------------
+# THE obsidian-cli BRIDGE IS RETIRED (2026-09-10) — module, verbs and doubles.
+#
+# `obsidian_cli_status`, `obsidian_cli_reload_plugin`, `obsidian_cli_command`
+# and `obsidian_cli_eval` are gone, with `vault_mcp/cli_client.py` itself.
+#
+# IT COULD NOT WORK ON THE LIVE SERVICE, and `_get_gate()` below has said so in
+# prose the whole time: obsidian-cli reaches Obsidian over SAME-SESSION IPC,
+# vault-mcp runs as a session-0 service, and the desktop Obsidian is session-1.
+# The REST API is HTTP on loopback and crosses that boundary; the CLI does not.
+#
+# NOTHING DEPENDED ON IT. `ObsidianNoteIO` — the CLI-backed write path — was
+# never constructed anywhere in src/; the Gate is built unconditionally on
+# `RestNoteIO`, and the only `ObsidianNoteIO(...)` calls in the repo were four
+# in its own test file. Of the four verbs, `obsidian_cli_eval` had three
+# invocations across the entire transcript corpus and the other three had none.
+#
+# `ObsidianIOError` MOVED rather than died: it is the `NoteIO` protocol's error
+# and `RestNoteIO` raises it, so it now lives in gate.py next to the protocol.
+#
+# tests/test_server.py::test_the_obsidian_cli_bridge_stays_retired asserts the
+# absence of all four verbs.
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
 # MCP server + tools
 # ---------------------------------------------------------------------------
-mcp = FastMCP("vault-mcp")
-
-
-@mcp.tool()
-def obsidian_cli_status() -> dict[str, Any]:
-    """Check Obsidian CLI availability and version.
-
-    Returns:
-        {"available": bool, "version": str|None, "error": str|None, "detail": str|None}
-
-    """
-    return _get_cli_client().probe()
+mcp: MCPServer[Any] = MCPServer("vault-mcp")
 
 
 # ---------------------------------------------------------------------------
@@ -462,8 +465,7 @@ def _get_materializer() -> Materializer:
 
 def _gate_error_envelope(exc: Exception) -> dict[str, Any]:
     """Map Gate/schema/IO exceptions to a structured tool error."""
-    from vault_mcp.cli_client import ObsidianIOError
-    from vault_mcp.gate import GateError
+    from vault_mcp.gate import GateError, ObsidianIOError
     from vault_mcp.schema import RouteError, SchemaError
 
     if isinstance(exc, SchemaError) and not isinstance(exc, RouteError):
@@ -491,26 +493,48 @@ def _gate_error_envelope(exc: Exception) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# VERB REGISTRATION — imported for SIDE EFFECT, at the foot of the module.
+# VERB REGISTRATION — loaded for SIDE EFFECT, at the foot of the module.
 #
 # Each module below does `from vault_mcp.server import mcp, ...` at its own top.
 # That is a cycle only if it runs too early: by this point every name they close
-# over — the FastMCP instance, the config constants, the lazy accessors — is
+# over — the MCPServer instance, the config constants, the lazy accessors — is
 # already bound, so the partially-initialised module in sys.modules is complete
-# enough to import from. Moving these imports to the top of the file would break
+# enough to import from. Hoisting this call to the top of the file would break
 # that and is the one edit to make carefully.
 #
-# A dropped import here does not raise. It silently unregisters that module's
+# A dropped name here does not raise. It silently unregisters that module's
 # verbs and the server still starts, which is why
-# tests/test_server.py::test_every_verb_is_registered pins the count at 54.
-# ---------------------------------------------------------------------------
-import vault_mcp.verbs_bases  # noqa: E402  (registration side effect)
-import vault_mcp.verbs_compute  # noqa: E402  (registration side effect)
-import vault_mcp.verbs_dissolve  # noqa: E402  (registration side effect)
-import vault_mcp.verbs_plan  # noqa: E402  (registration side effect)
-import vault_mcp.verbs_query  # noqa: E402  (registration side effect)
-import vault_mcp.verbs_rest  # noqa: E402  (registration side effect)
-import vault_mcp.verbs_write  # noqa: E402, F401  (registration side effect)
+# tests/test_server.py::test_every_verb_is_registered pins the count at 53.
+#
+# WHY `import_module` AND NOT SEVEN `import` STATEMENTS. Seven bottom-of-file
+# imports are seven E402s plus an F401 on the last one, and the lines that used
+# to carry them carried seven per-line lint waivers — a claim that ruff was
+# wrong about all of them. It is not: a module-scope import genuinely does belong at
+# the top, and the reason these cannot go there is that they are not imports for
+# a NAME, they are a load-for-effect. Saying that in code instead of in a
+# suppression is what this is. The names stay a tuple so the count is still one
+# readable list, and a typo raises ModuleNotFoundError at import rather than
+# silently dropping a verb family.
+_VERB_MODULES = (
+    "vault_mcp.verbs_bases",
+    "vault_mcp.verbs_compute",
+    "vault_mcp.verbs_dissolve",
+    "vault_mcp.verbs_plan",
+    "vault_mcp.verbs_query",
+    "vault_mcp.verbs_rest",
+    "vault_mcp.verbs_write",
+)
+
+
+def _register_verb_modules() -> None:
+    """Import every verb module for the side effect of its `@mcp.tool()` calls."""
+    import importlib
+
+    for name in _VERB_MODULES:
+        importlib.import_module(name)
+
+
+_register_verb_modules()
 
 
 def main() -> None:
@@ -550,20 +574,36 @@ def main() -> None:
         file=sys.stderr,
     )
 
-    if args.transport != "stdio":
-        from mcp.server.transport_security import TransportSecuritySettings
+    # mcp 2.x MOVED THE BIND SETTINGS OUT OF `mcp.settings`. In 1.x host, port
+    # and transport_security were mutable fields on the server's Settings model
+    # and `run()` read them back; in 2.x `Settings` carries only debug,
+    # log_level, the duplicate-warning flags, dependencies, lifespan and auth,
+    # and every transport option is a keyword argument to `run()` — one
+    # `@overload` per transport, so the stdio call must NOT pass them.
+    if args.transport == "stdio":
+        _start_sweep_scheduler()
+        mcp.run(transport="stdio")
+        return
 
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
-        mcp.settings.transport_security = TransportSecuritySettings(
-            enable_dns_rebinding_protection=False,
-        )
-        print(
-            f"vault-mcp: listening on {args.host}:{args.port}", file=sys.stderr
-        )
+    from mcp.server.transport_security import TransportSecuritySettings
 
+    security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    print(f"vault-mcp: listening on {args.host}:{args.port}", file=sys.stderr)
     _start_sweep_scheduler()
-    mcp.run(transport=args.transport)
+    if args.transport == "sse":
+        mcp.run(
+            transport="sse",
+            host=args.host,
+            port=args.port,
+            transport_security=security,
+        )
+    else:
+        mcp.run(
+            transport="streamable-http",
+            host=args.host,
+            port=args.port,
+            transport_security=security,
+        )
 
 
 if __name__ == "__main__":

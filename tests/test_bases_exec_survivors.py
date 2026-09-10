@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for bases_exec — the property and function dispatch arms.
 
 Third of four, one per module, closing the survivors the #5294 split surfaced.

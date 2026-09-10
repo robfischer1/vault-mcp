@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Transitional compatibility shim — not part of the service-repo standard.
 
 The canonical entry point is the ``vault-mcp`` console script

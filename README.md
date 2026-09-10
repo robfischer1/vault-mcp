@@ -9,7 +9,7 @@ vault. It has two halves:
 
 - **Read side** — a TTL-cached index over frontmatter, filenames, and the wikilink graph, plus
   an optional bridge to Obsidian's Local REST API (active note, search, Dataview/JSONLogic
-  queries, Bases execution) and the `obsidian-cli` (plugin reload, eval, whitelisted commands).
+  queries, Bases execution).
 - **Write side — the Convention Gate** — the single write chokepoint for the vault. Every write
   is generated as compliant frontmatter, checked against a closed tag glossary, routed to the
   schema-resolved directory, checked against per-directory write-protection rules
@@ -74,7 +74,6 @@ src/vault_mcp/
 ├── parsers.py             # frontmatter / wikilink parsing helpers — canonical home
 ├── watcher.py             # filesystem watcher, incremental index invalidation
 ├── rest_client.py         # HTTP client for the Obsidian Local REST API
-├── cli_client.py          # subprocess wrapper for obsidian-cli (whitelisted commands)
 ├── bases.py               # Obsidian Bases parser / formula evaluator / writer
 ├── gate.py                # Convention Gate — the governed write API
 ├── schema.py              # schema engine: loads/validates the external governance YAML

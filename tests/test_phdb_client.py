@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.phdb_client — the atom-emit write surface.
 
 Atom Emit (#138): per-type payload contracts (#140) and the emit envelope

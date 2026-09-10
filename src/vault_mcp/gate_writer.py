@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The Gate's WRITE collaborator — create, update, delete and move a note.
 
 Extracted from ConventionGate under vault-mcp#5294 (gate.py was 1173 LOC over a
@@ -16,9 +20,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from vault_mcp.cli_client import ObsidianIOError
 from vault_mcp.gate import (
     FieldError,
+    ObsidianIOError,
     ProtectionError,
     WriteResult,
     _render_note,

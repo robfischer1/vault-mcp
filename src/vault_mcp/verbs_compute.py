@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Materialize / compute-receiver / atom — the lifecycle write verbs.
 
 Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE.
@@ -38,7 +42,9 @@ from vault_mcp.verbs_plan import _read_dissolved_row
 log = logging.getLogger(__name__)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Rehydrate a dissolved row from Calliope back into a Convention-Gate note. The inverse of dissolve, and the sanctioned path for materialize-only @types such as Plan."
+)
 def materialize(table: str, row_id: int) -> dict[str, Any]:
     """Materialize a dissolved row back into a Convention-Gate note (VDV F3).
 
@@ -84,7 +90,9 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Render a periodic compute job's payload through a named template (substitution only, no LLM) and write it as an ai-computed note by the Gate's compute-only path."
+)
 def compute_receive(
     payload: dict[str, Any], created: str | None = None
 ) -> dict[str, Any]:
@@ -112,7 +120,9 @@ def compute_receive(
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Write a compute result as a durable note through the Gate with mode=COMPUTE - the path for materialize-only @types that agent-create refuses. Same payload, same bytes."
+)
 def compute_receiver(
     payload: dict[str, Any], created: str | None = None
 ) -> dict[str, Any]:
@@ -145,7 +155,9 @@ def compute_receiver(
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Record an AI-observed atom - decision, reversal, tension or pushback - straight onto the session plane, touching no vault file."
+)
 def atom(
     atom_type: str,
     payload: dict[str, Any],

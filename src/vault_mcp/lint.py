@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Convention Linter — the standalone, collect-all validation core.
 
 Extracted from the Convention Gate's inline-and-raise validation so the *same*

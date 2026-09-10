@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The index's LINK-GRAPH collaborator — backlinks, outbound links, orphans, dangling refs.
 
 Extracted from VaultIndex under vault-mcp#5294 (index.py was 845 LOC over a 600

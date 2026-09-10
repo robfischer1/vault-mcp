@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Bulk-carve driver tests (C6) — proven via fixtures / dry-run, never a live sweep.
 
 Every test injects a fake file lister + a fake ``dissolve_one``; no real vault

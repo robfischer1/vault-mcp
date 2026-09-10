@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The Gate's AUDIT collaborator — scan the vault for drift and heal it.
 
 Extracted from ConventionGate under vault-mcp#5294 (gate.py was 1173 LOC over a
@@ -16,8 +20,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from vault_mcp.cli_client import ObsidianIOError
-from vault_mcp.gate import _render_note, _split_note
+from vault_mcp.gate import ObsidianIOError, _render_note, _split_note
 from vault_mcp.lint import LintCandidate
 from vault_mcp.provenance import Actor, WriteMode
 from vault_mcp.schema import RouteError

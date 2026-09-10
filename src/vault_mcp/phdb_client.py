@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Atom write client — the atom-emit write surface for ``session_events``.
 
 The ``atom`` lifecycle verb records an AI-observed *atom* (a decision,

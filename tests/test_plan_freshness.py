@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for the plan-freshness sweep (F1).
 
 Every test runs over injected callables and a tmp_path vault — no network, no

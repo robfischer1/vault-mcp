@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The REST-backed verb surface — 16 verbs over the Obsidian Local REST API.
 
 Split out of server.py under vault-mcp#5294, which blocks a source file at 600
@@ -71,7 +75,9 @@ def _object_or_error(
 
 if not server.REST_DISABLE:
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Cheap probe of the Obsidian Local REST API: reachable, plugin version, last error. Returns no vault data."
+    )
     def rest_health() -> dict[str, Any]:
         """[REST-backed] Check Obsidian Local REST API reachability.
 
@@ -86,7 +92,9 @@ if not server.REST_DISABLE:
         """
         return server._get_rest_client().probe()
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Read the note open in Obsidian's active pane, live editor buffer included. Code-only; errors when Obsidian is not running."
+    )
     def active_note() -> dict[str, Any]:
         """[REST-backed] Get the currently active note in Obsidian's editor.
 
@@ -110,7 +118,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return _object_or_error(result["data"], stamp_as_of=True)
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Read a periodic note - daily, weekly, monthly, quarterly or yearly - for a given date, defaulting to today."
+    )
     def periodic_note(
         level: str,
         date: str | None = None,
@@ -145,7 +155,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return _object_or_error(result["data"], stamp_as_of=True)
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Read a note's current editor buffer, unsaved edits included. Use read_note instead for disk state, which works without Obsidian."
+    )
     def unsaved_buffer(path: str) -> dict[str, Any]:
         """[REST-backed] Read a note's current editor buffer from Obsidian.
 
@@ -170,7 +182,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return _object_or_error(result["data"], stamp_as_of=True)
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Modify one heading, block or frontmatter field of a note in place, without rewriting the file. Call document_map first to find valid targets."
+    )
     def patch_note(
         path: str,
         content: str,
@@ -217,7 +231,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "patched": path}
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Append markdown to the end of a note's existing body."
+    )
     def append_note(path: str, content: str) -> dict[str, Any]:
         """[REST-backed] Append content to the end of a note.
 
@@ -242,7 +258,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "appended": path}
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Set one frontmatter field on a note, creating it when absent. Obsidian YAML-parses the value, so 'true' lands as a boolean."
+    )
     def set_field(path: str, key: str, value: str) -> dict[str, Any]:
         """[REST-backed] Set a single frontmatter field on a note.
 
@@ -275,7 +293,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "field": key, "path": path}
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Append markdown to a periodic note (daily, weekly, ...), creating it if it does not exist. The Journal capture path."
+    )
     def periodic_append(
         level: str,
         content: str,
@@ -312,7 +332,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "appended": level, "date": date}
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Search the vault with Obsidian's own engine, query passed verbatim - every operator works (tag:, path:, file:, section:), ranked by its relevance scoring."
+    )
     def obsidian_search(query: str) -> dict[str, Any]:
         """[REST-backed] Search the vault using Obsidian's built-in search engine.
 
@@ -354,7 +376,9 @@ if not server.REST_DISABLE:
         "update-time-on-edit:update-current",
     }
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Run an allowlisted Obsidian command by ID over loopback HTTP, so it works headless where the CLI cannot."
+    )
     def execute_command(command_id: str) -> dict[str, Any]:
         """[REST-backed] Execute an Obsidian command by ID (allowlisted only).
 
@@ -385,7 +409,9 @@ if not server.REST_DISABLE:
     # Phase 7 — Advanced query tools
     # -------------------------------------------------------------------
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Query every vault file with a JsonLogic expression over path, frontmatter, tags, stat and content; adds glob and regexp operators."
+    )
     def jsonlogic_search(query: dict[str, Any]) -> dict[str, Any]:
         """[REST-backed] Search vault files using a JsonLogic query.
 
@@ -420,7 +446,9 @@ if not server.REST_DISABLE:
             return {"count": len(data), "results": data}
         return {"count": 0, "results": [], "raw": data}
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Every tag with counts from Obsidian's live index, hierarchical parents included. Needs Obsidian running; all_tags is the headless equivalent."
+    )
     def vault_tags() -> dict[str, Any]:
         """[REST-backed] Get all tags in the vault with counts from Obsidian's live index.
 
@@ -443,7 +471,9 @@ if not server.REST_DISABLE:
         tags = data.get("tags", []) if isinstance(data, dict) else []
         return {"count": len(tags), "tags": tags}
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] List a vault directory's filenames and subdirectory names (directories end with '/'). An empty path lists the vault root."
+    )
     def list_directory(path: str = "") -> dict[str, Any]:
         """[REST-backed] List files in a vault directory via Obsidian's file index.
 
@@ -466,7 +496,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return _object_or_error(result["data"])
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Open a file in Obsidian's editor UI, optionally in a new pane. WARNING: a path that does not exist is CREATED, empty."
+    )
     def open_in_obsidian(path: str, new_leaf: bool = False) -> dict[str, Any]:
         """[REST-backed] Open a file in Obsidian's editor UI.
 
@@ -492,7 +524,9 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"opened": path}
 
-    @mcp.tool()
+    @mcp.tool(
+        description="[REST-backed] Get a note's PATCH-targetable structure - heading paths, block IDs, frontmatter field names. The lookup before patch_note."
+    )
     def document_map(path: str | None = None) -> dict[str, Any]:
         """[REST-backed] Get the structural map of a note (headings, blocks, frontmatter fields).
 

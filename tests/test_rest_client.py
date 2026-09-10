@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.rest_client with mocked httpx.Client."""
 
 from __future__ import annotations

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.lifecycle — the materialize verb.
 
 Covers Lifecycle Verbs / Materialize (#135): payload contract validation,

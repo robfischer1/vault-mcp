@@ -31,26 +31,19 @@ dependencies = [
     # Floor MEASURED, not guessed: 2022.1.18 is the oldest release tested here
     # that honours `timeout=` (verified against 2024.11.6 as well).
     "regex>=2022.1.18",
-    # A TRANSITIVE dep constrained deliberately, not a direct import.
-    # pydantic-settings 2.15.0 added IncompleteFieldDefinitionWarning, and mcp
-    # 1.x's FastMCP.Settings trips it on the `lifespan` field at construction —
-    # which for this package is IMPORT time, since server.py builds its FastMCP
-    # global at module scope. The warning is not cosmetic: it says settings
-    # sources may fail to resolve that field's value, so it is a runtime risk
-    # for anyone installing vault-mcp, not only a test-suite nuisance. That is
-    # why it is constrained here rather than filtered in the pytest config —
-    # every other Python star in the fleet holds `filterwarnings = ["error"]`
-    # with no escapes, and this suite now does too.
-    #
-    # Measured 2026-08-22 on Python 3.14: pydantic-settings 2.14.2 constructs
-    # FastMCP clean under `-W error::Warning`; 2.15.0 raises.
-    #
-    # THE REAL REMEDY IS THE mcp 2.x PORT, which is NOT a version bump — mcp
-    # 2.0.0 removes `mcp.server.fastmcp` outright, so every import in server.py
-    # moves. Verified against the live index, same date. Until that port lands,
-    # this ceiling stays; renovate will offer to lift it, and lifting it without
-    # doing the port re-introduces the warning.
-    "pydantic-settings<2.16",
+    # GIT IN-PROCESS, WHICH IS WHY IT IS A RUNTIME DEPENDENCY AND NOT A
+    # CONVENIENCE. gitops.py used to spawn the `git` binary, and the spawn cost
+    # three things at once: the bot identity was only a DEFAULT that an
+    # inherited GIT_AUTHOR_NAME silently beat (a live defect — the commit went
+    # out under whoever started the service); every invocation carried
+    # `-c safe.directory=*`, a repo-wide relaxation, to get past git's
+    # dubious-ownership guard under the LocalSystem service; and the argument
+    # vector could never satisfy ruff's S603/S607 on a cross-platform binary
+    # path. dulwich takes author and committer as explicit bytes with no
+    # configuration fallback, has no ownership guard to defuse, and is pure
+    # Python — so all three are answered by the same change rather than
+    # excused. Floor is the version this was written and measured against.
+    "dulwich>=1.2.14",
 ]
 
 [project.urls]
@@ -76,7 +69,12 @@ dev = [
     # forge-testkit lints the pre-commit config runs. Lives only on the Forgejo
     # PyPI, so its source is pinned below.
     "forge-testkit>=1.3.0",
-    "ruff>=0.15.17",
+    # FLOOR IS THE GATE'S PIN, not a guess: foundry-tools' python:ruff-check
+    # and python:ruff-format atoms both run `uvx ruff@0.16.3`. Held below it
+    # (0.15.17), the local run was blind to CPY001 and to markdown code-block
+    # formatting and reported clean on a tree the gate failed — measured
+    # 2026-09-10, 91 + 3 findings apart.
+    "ruff>=0.16.3",
     "mypy>=2.1.0",
     "pyright==1.1.412",
     "types-PyYAML>=6.0.12.20260518",
@@ -180,10 +178,35 @@ runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
 # config. The one real finding it hid, a missing D103 docstring, is answered
 # rather than re-silenced.
 "benchmarks/**" = ["INP001"]
-# gitops wraps git subprocesses with deliberately fail-safe boundaries (logged, never propagated)
-"src/vault_mcp/gitops.py" = ["S603", "BLE001"]
-# cli_client shells out to the obsidian binary (configured path / allowlisted commands)
-"src/vault_mcp/cli_client.py" = ["S603"]
+# NO src/ CARVE-OUTS REMAIN, and the two that were here are worth a sentence
+# because of HOW they went — neither was narrowed, exempted or signed off.
+#
+# gitops.py carried `S603, BLE001`. BLE001 was DEAD (measured 2026-09-10: that
+# module already caught `(OSError, subprocess.SubprocessError)` at every
+# boundary, so it silenced nothing). S603 went when the module stopped spawning
+# `git` at all and started driving dulwich in-process.
+#
+# cli_client.py carried `S603` on the `obsidian` spawn. It went when the file
+# did: the obsidian-cli bridge is retired, because it could never work in
+# production — obsidian-cli uses same-session IPC, vault-mcp is a session-0
+# service, the desktop Obsidian is session-1, and the Gate was always built on
+# RestNoteIO with no fallback.
+#
+# ⚑ THE RULE THIS LEAVES BEHIND: a per-file-ignores entry under src/ is not a
+# tool disagreeing with you, it is a spawn or a suppression that has not been
+# designed away yet. Both of these had a comment explaining why they were
+# necessary. Both comments were wrong.
+
+
+# CPY001 (ruff 0.16 promoted flake8-copyright out of preview, and `select =
+# ["ALL"]` adopts a new rule the moment it lands — which is what turned 91
+# clean files red on the gate's pinned ruff while the project's own 0.15.17
+# said nothing). The answer is the REUSE / SPDX per-file header every other
+# Python star in this fleet already carries, stamped on all 91 files, not a
+# widened ignore list. Same spelling as athena/nyx/iris/terpsichore:
+# `# SPDX-FileCopyrightText: <year> <holder>`.
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = '(?i)SPDX-FileCopyrightText:.*\d{4}'
 
 [tool.mypy]
 python_version = "3.14"
@@ -234,13 +257,14 @@ disallow_untyped_calls = false
 disallow_incomplete_defs = false
 warn_return_any = false
 
-# server.py is the MCP-tool entry layer: it bridges dynamic Obsidian REST JSON
-# and the untyped phdb sibling, so tool returns are dict[str, Any] by contract
-# while the values are runtime-dynamic Any. Structural checks (type-arg,
-# untyped-def, etc.) stay on; only the inherent boundary-Any return is relaxed.
-[[tool.mypy.overrides]]
-module = "vault_mcp.server"
-disable_error_code = ["no-any-return"]
+# The vault_mcp.server override is RETIRED (2026-09-10). It carried
+# `disable_error_code = ["no-any-return"]` on the claim that the MCP-tool entry
+# layer inherently returns boundary `Any`. Measured by emptying the list and
+# re-running: mypy --strict is clean over src AND tests with nothing silenced,
+# so the entry silenced nothing — the same dead-config shape the tests.*
+# block above was already trimmed for. The `dict[str, Any]` boundary decision
+# it recorded still stands; it is stated in server.py's own VERIFY block,
+# where a reader will actually meet it.
 
 # pyright runs strict as a peer to mypy (the authoritative type gate). mypy owns
 # ignore-necessity (warn_unused_ignores), so reportUnnecessaryTypeIgnoreComment

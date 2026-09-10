@@ -1,7 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.gitops — the single-writer git committer (VG initiative).
 
-Runs real ``git`` against a throwaway temp repo (no network, no live vault).
-Covers Commit-on-Write (#226), bot identity (#230), and the sweep (#227).
+Throwaway temp repo, no network, no live vault. Covers Commit-on-Write (#226),
+bot identity (#230), and the sweep (#227).
+
+THE ORACLE IS A DIFFERENT IMPLEMENTATION FROM THE SUBJECT, and since the
+dulwich port that is worth saying out loud: the committer under test writes
+objects with dulwich, while every assertion below reads them back with real
+``git``. A round-trip bug that both halves shared would be invisible; here they
+cannot share one, because they share no code.
 """
 
 from __future__ import annotations
@@ -255,6 +265,35 @@ class TestBotIdentity:
         gc.commit_paths(["n.md"], "vault: create n.md")
         assert _head_author_name(repo) == "custom[bot]"
 
+    def test_bot_identity_survives_a_hostile_environment(
+        self, repo: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GIT_AUTHOR_NAME in the environment must not reach the commit.
+
+        THE REGRESSION THIS PINS was live and shipped. `-c user.name=` sets a
+        DEFAULT, and git resolves an author from GIT_AUTHOR_NAME first, so a
+        service started from a shell that exported one committed under that
+        name — and the module docstring's promise that the bot stays visually
+        distinct from Rob's hand commits was false exactly when it mattered, on
+        the NSSM service that inherits whatever environment it is given.
+
+        It cannot regress quietly now: dulwich takes the identity as an
+        argument and consults no configuration and no environment at all. This
+        test is the executable form of that claim.
+        """
+        monkeypatch.setenv("GIT_AUTHOR_NAME", "Impostor")
+        monkeypatch.setenv("GIT_AUTHOR_EMAIL", "impostor@example.com")
+        monkeypatch.setenv("GIT_COMMITTER_NAME", "Impostor")
+        monkeypatch.setenv("GIT_COMMITTER_EMAIL", "impostor@example.com")
+        gc = _committer(repo)
+        (repo / "n.md").write_text("x\n", encoding="utf-8")
+        gc.commit_paths(["n.md"], "vault: create n.md")
+        an, ae, cn, ce = _head_identity(repo).split("|")
+        assert an == DEFAULT_BOT_NAME
+        assert ae == DEFAULT_BOT_EMAIL
+        assert cn == DEFAULT_BOT_NAME
+        assert ce == DEFAULT_BOT_EMAIL
+
 
 class TestSweep:
     def test_sweep_commits_whole_tree(self, repo: Path) -> None:
@@ -269,6 +308,25 @@ class TestSweep:
         tracked = _tracked(repo)
         assert "a.md" in tracked
         assert "b.md" in tracked
+
+    def test_sweep_commits_a_human_deletion(self, repo: Path) -> None:
+        """The half of `-A` nothing else covers: a note deleted OUTSIDE the Gate.
+
+        This is the sweep's entire reason to exist — Rob removes a note in
+        Obsidian, the Gate never sees it, and the periodic sweep has to capture
+        the removal. dulwich reports a deleted tracked file under
+        `status.unstaged`, NOT `untracked`, so a sweep that staged only
+        untracked paths would commit every addition and leave the deleted file
+        tracked forever, looking green the whole time.
+        """
+        gc = _committer(repo)
+        (repo / "gone.md").write_text("bye\n", encoding="utf-8")
+        assert gc.sweep_commit("vault: create gone.md")["committed"] is True
+        assert "gone.md" in _tracked(repo)
+        (repo / "gone.md").unlink()
+        result = gc.sweep_commit("vault: periodic sweep")
+        assert result["committed"] is True
+        assert "gone.md" not in _tracked(repo)
 
     def test_sweep_nothing_to_commit(self, repo: Path) -> None:
         gc = _committer(repo)

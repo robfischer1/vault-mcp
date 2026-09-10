@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP client for the Obsidian Local REST API.
 
 Wraps httpx.Client with reachability caching, backoff on repeated failures,
@@ -38,7 +42,7 @@ from typing import Any, Self
 
 import httpx
 
-from vault_mcp.cli_client import ObsidianIOError
+from vault_mcp.gate import ObsidianIOError
 
 log = logging.getLogger(__name__)
 

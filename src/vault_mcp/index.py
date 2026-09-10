@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """TTL-cached vault index.
 
 Wraps parsers.build_content_index with a time-based cache. The index

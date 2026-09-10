@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Hades write client — the constellation seam for strangled phdb concerns.
 
 As phdb concerns strangle onto sovereign stars, their write paths leave

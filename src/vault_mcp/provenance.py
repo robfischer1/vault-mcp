@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Provenance System — the single-axis provenance spectrum for vault-mcp v2.
 
 Replaces the coarse ``author_type`` field with a closed, ordered spectrum that

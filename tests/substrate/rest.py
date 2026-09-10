@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """A tape-replaying stand-in for `ObsidianRESTClient` — the Golden-Fake shape.
 
 WHY A TAPE AND NOT A MOCK. tests/test_rest_smoke.py exercised the REST seam

@@ -1,5 +1,23 @@
 # Feature Specification: Obsidian CLI Integration
 
+> **⚑ THIS ENTIRE FEATURE IS RETIRED — 2026-09-10.** `vault_mcp/cli_client.py`,
+> `ObsidianNoteIO` and all four `obsidian_cli_*` verbs are deleted. Kept as the
+> dated design record of what was built and why it was withdrawn; nothing below
+> describes shipping behaviour.
+>
+> **Why.** obsidian-cli reaches Obsidian over SAME-SESSION IPC. vault-mcp runs
+> as a session-0 service and the desktop Obsidian is session-1, so the bridge
+> could not work in production — `server._get_gate()` recorded exactly that, and
+> the Convention Gate was built unconditionally on `RestNoteIO` with no
+> fallback. `ObsidianNoteIO` was never constructed anywhere in `src/`; the only
+> four constructions in the repo were in its own test file. `obsidian_cli_eval`
+> had three invocations across the entire transcript corpus (two sessions) and
+> the other three verbs had none.
+>
+> The write path is unaffected: it was always REST (`PUT/GET /vault/{path}`), so
+> Obsidian's indexing and plugins still fire. `ObsidianIOError` survives in
+> `gate.py` as the `NoteIO` protocol's error.
+
 **Feature Branch**: `006-obsidian-cli-integration`
 
 **Created**: 2026-05-21
@@ -58,11 +76,11 @@ Before attempting CLI operations, an agent or the server itself checks if the CL
 
 ### Functional Requirements
 
-- **FR-001**: System MUST detect the presence of the `obsidian` executable in the system PATH.
-- **FR-002**: System MUST provide a `obsidian_cli_status` tool to report CLI availability and version.
-- **FR-003**: System MUST provide a `obsidian_cli_reload_plugin` tool that wraps `obsidian plugin:reload id=<id>`.
-- **FR-004**: System MUST provide a `obsidian_cli_eval` tool that wraps `obsidian eval code=<code>`.
-- **FR-005**: System MUST provide a `obsidian_cli_command` tool for a whitelist of other useful CLI commands (e.g., `devtools`, `dev:errors`).
+- **FR-001**: ~~System MUST detect the presence of the `obsidian` executable in the system PATH.~~ **RETIRED 2026-09-10** with the bridge.
+- **FR-002**: ~~System MUST provide a `obsidian_cli_status` tool to report CLI availability and version.~~ **RETIRED 2026-09-10** with the bridge.
+- **FR-003**: ~~System MUST provide a `obsidian_cli_reload_plugin` tool that wraps `obsidian plugin:reload id=<id>`.~~ **RETIRED 2026-09-10** with the bridge — zero recorded invocations.
+- **FR-004**: ~~System MUST provide a `obsidian_cli_eval` tool that wraps `obsidian eval code=<code>`.~~ **RETIRED 2026-09-10.** Measured three invocations across the whole transcript corpus, in two sessions, with no skill/rule/note consuming it — against a manifest entry on every session's first turn and a caller-supplied arbitrary-code path on every one of them. Superseded by the retirement of the whole bridge on the same date: `ObsidianNoteIO`, which had kept the `eval` command alive internally, is deleted too.
+- **FR-005**: ~~System MUST provide a `obsidian_cli_command` tool for a whitelist of other useful CLI commands (e.g., `devtools`, `dev:errors`).~~ **RETIRED 2026-09-10** with the bridge — zero recorded invocations.
 - **FR-006**: CLI tools MUST return a uniform error envelope consistent with the REST client (`{ "ok": False, "error": "cli_error", "detail": "..." }`).
 - **FR-007**: System MUST handle "silent" execution where possible (CLI parameters like `silent` or flags) to avoid disruptive GUI focus stealing unless intended.
 - **FR-008**: System MUST capture and return both stdout and stderr from CLI invocations for debugging.

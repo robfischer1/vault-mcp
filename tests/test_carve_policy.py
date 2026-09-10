@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Scope-policy tests (C6) — the config-driven, fail-safe dissolvable cut."""
 
 from __future__ import annotations

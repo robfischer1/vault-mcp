@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the Schema Introspection epic — list_* + query (describe_type).
 
 The schema-as-a-service read surface: a session can enumerate types, tags, and

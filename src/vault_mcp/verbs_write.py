@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The Convention Gate write surface — write_note, delete, move, lint, query, audit.
 
 Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE.
@@ -36,7 +40,9 @@ from vault_mcp.server import mcp
 log = logging.getLogger(__name__)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Create or update a vault note through the Convention Gate - the write surface. Routes by title/note_type/pillar, generates frontmatter, enforces the tag glossary and write-protection."
+)
 def write_note(
     title: str,
     note_type: str | None = None,
@@ -96,7 +102,9 @@ def write_note(
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Move a vault note to Obsidian's .trash/ through the Gate (reversible). Write-protection applies: an agent cannot trash a voice-only or immutable note."
+)
 def delete(
     path: str, actor: str = "agent", commit_message: str | None = None
 ) -> dict[str, Any]:
@@ -131,7 +139,9 @@ def delete(
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Move a note from src to dst through the Gate, content and frontmatter intact. Does NOT rewrite backlinks - enumerate them with backlinks_to first."
+)
 def move_note(
     src: str,
     dst: str,
@@ -176,7 +186,9 @@ def move_note(
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Dry-run a note payload through the Convention Gate's validator and get every finding at once, writing nothing. Assemble, lint, fix, then write_note."
+)
 def lint(
     title: str = "",
     note_type: str | None = None,
@@ -269,7 +281,9 @@ def list_keys() -> dict[str, Any]:
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Describe a note type's authoring contract: settable fields, value constraints, routing, and body guidance. Assemble a compliant note without reading governance prose."
+)
 def query(note_type: str) -> dict[str, Any]:
     """Describe a note type's authoring contract — the spec sheet for a @type.
 
@@ -303,7 +317,9 @@ def query(note_type: str) -> dict[str, Any]:
         return server._gate_error_envelope(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Scan a vault directory for schema drift; resolve=True heals what is deterministically fixable and reports the rest. Reports only by default."
+)
 def audit(
     directory: str = "", resolve: bool = False, all_dirs: bool = False
 ) -> dict[str, Any]:

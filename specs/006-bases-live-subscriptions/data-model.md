@@ -7,15 +7,15 @@ A `Subscription` represents a client's interest in the results of a specific Bas
 ```python
 @dataclass
 class Subscription:
-    handle: str            # Unique identifier for the subscription
-    path: str              # Vault-relative path to the file containing the Base
+    handle: str  # Unique identifier for the subscription
+    path: str  # Vault-relative path to the file containing the Base
     view_name: str | None  # Optional view name
-    base_index: int        # Index of the Base in the file
-    session_id: str | None # Optional MCP session identifier
+    base_index: int  # Index of the Base in the file
+    session_id: str | None  # Optional MCP session identifier
 
     # Dependencies (computed on registration)
-    dependency_keys: set[str]   # Frontmatter keys (e.g., "status", "note.type")
-    depends_on_links: bool      # True if query uses file.links/backlinks
+    dependency_keys: set[str]  # Frontmatter keys (e.g., "status", "note.type")
+    depends_on_links: bool  # True if query uses file.links/backlinks
     depends_on_structure: bool  # True if query depends on folder/path/filename
 ```
 

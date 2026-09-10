@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for the Hades write client (the strangled-concern seam).
 
 All offline — the transport is injected. Covers the pure result parsing

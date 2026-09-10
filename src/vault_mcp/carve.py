@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The vault carve bulk-sweep driver (C6).
 
 Takes vault-mcp's one-note, Calliope-wired ``dissolve`` (write -> verify ->

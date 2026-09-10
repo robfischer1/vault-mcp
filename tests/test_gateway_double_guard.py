@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Guard: no hand-rolled permissive Hades-gateway double in this repo's tests.
 
 The Hades gateway seam is ``call(verb, arguments) -> result``. A test double

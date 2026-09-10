@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Live-update subscriptions — the handle registry and its change notifier.
 
 Split out of server.py under vault-mcp#5294. NOT a registration module: these
@@ -28,7 +32,7 @@ from vault_mcp.bases import parse_file as _parse_file_impl
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
     from vault_mcp.bases import QueryResult
 
@@ -49,8 +53,8 @@ class Subscription:
 class SubscriptionManager:
     """Manages Bases live update subscriptions and pushes notifications."""
 
-    def __init__(self, mcp_server: FastMCP):
-        """Initialize the subscription manager bound to the FastMCP server."""
+    def __init__(self, mcp_server: MCPServer[Any]):
+        """Initialize the subscription manager bound to the MCPServer instance."""
         self.mcp = mcp_server
         self.subscriptions: dict[str, Subscription] = {}
         self.lock = threading.Lock()
