@@ -30,7 +30,7 @@ dependencies = [
     #
     # Floor MEASURED, not guessed: 2022.1.18 is the oldest release tested here
     # that honours `timeout=` (verified against 2024.11.6 as well).
-    "regex>=2022.1.18",
+    "regex>=2026.9.3",
     # GIT IN-PROCESS, WHICH IS WHY IT IS A RUNTIME DEPENDENCY AND NOT A
     # CONVENIENCE. gitops.py used to spawn the `git` binary, and the spawn cost
     # three things at once: the bot identity was only a DEFAULT that an
