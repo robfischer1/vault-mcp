@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for bases_io — serialization, writing, and validation.
 
 bases_io is the fifth critical module and had NEVER been measured on its own; a

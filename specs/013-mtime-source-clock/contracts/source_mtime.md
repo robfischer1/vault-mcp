@@ -23,8 +23,12 @@ it, so omitting the key is the established way to say "unknown".
 
 ```python
 def note_to_payloads(
-    frontmatter, body, source_path, *, file_path=None,
-    source_mtime: str | None = None,   # NEW — rung 1, resolved by the caller
+    frontmatter,
+    body,
+    source_path,
+    *,
+    file_path=None,
+    source_mtime: str | None = None,  # NEW — rung 1, resolved by the caller
 ) -> list[dict[str, Any]]: ...
 ```
 

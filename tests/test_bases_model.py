@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for the Bases model — dataclass defaults and helpers.
 
 WHY THIS FILE EXISTS. The mutation gate reported bases_model at 84.3% honest

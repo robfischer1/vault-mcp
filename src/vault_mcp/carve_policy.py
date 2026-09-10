@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Scope policy for the vault carve (C6) — which files dissolve, which stay.
 
 CONFIG, not hardcoded. The exact pillar cut is an **open Rob-decision**: the

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Dissolve and dissolve-sweep — the vault-carve write verbs.
 
 Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE.
@@ -33,7 +37,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Carve one vault note into Calliope and delete the original: write, verify, declare the wave, delete. Idempotent, and a failure never deletes the file."
+)
 def dissolve(
     path: str,
     plan_slug: str,
@@ -108,7 +114,9 @@ def _vault_md_paths() -> Iterator[str]:
         yield p.relative_to(root).as_posix()
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Bulk-carve the vault into Calliope under the scope policy. Dry-run by default; a live sweep deletes every dissolvable file and also demands confirm='DISSOLVE'."
+)
 def dissolve_sweep(
     dry_run: bool = True,
     limit: int | None = None,

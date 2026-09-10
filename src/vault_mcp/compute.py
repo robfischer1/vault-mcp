@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Compute Receiver — turns structured payloads into vault notes.
 
 phdb's periodic compute jobs (Atlas recomputes, summaries, rollups) emit a

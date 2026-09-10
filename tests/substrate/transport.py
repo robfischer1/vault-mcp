@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """A scriptable HTTP transport: records calls, returns queued (status, text).
 
 Lives here rather than in the test module because

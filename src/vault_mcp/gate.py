@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Convention Gate — the deterministic write API for vault-mcp v2.
 
 Every vault write passes through here. The Gate generates compliant
@@ -34,7 +38,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import yaml
 
@@ -46,11 +50,16 @@ from .provenance import (
     WriteMode,
 )
 
-# RUNTIME import, despite ruff's TC001. These names are not annotation-only:
-# `_protection_for` returns a WriteProtectionRule and the collaborators import
-# them from here at runtime, so moving them into TYPE_CHECKING breaks the
-# import chain. TC001 reads this module in isolation and cannot see that.
-from .schema import VaultSchema, WriteProtectionRule  # noqa: TC001
+# TC001 WAS RIGHT AND THE SUPPRESSION WAS WRONG. The TC001 waiver this
+# replaces claimed the two names were runtime-needed because "`_protection_for`
+# returns a WriteProtectionRule and the collaborators import them from here at
+# runtime". Measured 2026-09-10, both halves are false: the only two uses in
+# this module are the annotations on `ConventionGate.__init__` and
+# `_protection_for`, both lazy under `from __future__ import annotations`; and
+# nothing anywhere re-imports either name FROM `.gate` (the collaborators take
+# them from `.schema` directly). `WriteResult` is a dataclass but names neither.
+if TYPE_CHECKING:
+    from .schema import VaultSchema, WriteProtectionRule
 
 log = logging.getLogger(__name__)
 

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The Bases verb surface — parse, execute, write and subscribe to Obsidian Bases.
 
 Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE: server.py
@@ -24,7 +28,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from mcp.server.fastmcp import Context
+from mcp.server.mcpserver import Context
 
 # Only the live server state comes from server.py — the FastMCP instance, the
 # lazy accessors, and the session set that subscribe_base stamps.
@@ -71,7 +75,9 @@ from vault_mcp.bases import (
 from vault_mcp.server import mcp
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Watch an Obsidian Base and get pushed a notifications/bases/update whenever its result set changes; returns a handle plus the initial results."
+)
 async def subscribe_base(
     path: str,
     view: str | None = None,
@@ -153,7 +159,9 @@ async def unsubscribe_base(handle: str) -> dict[str, Any]:
     return {"ok": success}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Read the Obsidian Bases blocks in a markdown file as structure - filter tree, formulas, view configs - without executing them."
+)
 def parse_base(path: str) -> dict[str, Any]:
     """Parse a markdown file for Obsidian Bases code blocks.
 
@@ -179,7 +187,9 @@ def parse_base(path: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Run a file's Base query against the vault index and return the matching notes with their computed formula columns, optionally narrowed to one named view."
+)
 def execute_base(
     path: str,
     view: str | None = None,
@@ -250,7 +260,9 @@ def execute_base(
     }
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Write or replace an inline Base code block in a markdown file, validated first - the way to author a Base instead of hand-editing its YAML."
+)
 def write_base(
     path: str,
     base: dict[str, Any],
@@ -292,7 +304,9 @@ def write_base(
     return result
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Check a Base config - YAML, formula references, sort properties - without writing it. Use before write_base, or to diagnose a Base that matches nothing."
+)
 def validate_base_tool(base: dict[str, Any]) -> dict[str, Any]:
     """Validate a base configuration without writing it.
 

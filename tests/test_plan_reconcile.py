@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for the automatic re-dissolve trigger (F4).
 
 No threads, no clock, no network: the loop's decision logic is a pure function

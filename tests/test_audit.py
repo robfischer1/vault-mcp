@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the Audit epic — drift scan + heal through the Convention Gate.
 
 The healing path: scan a directory for schema drift, report it, and (with

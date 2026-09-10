@@ -1,10 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The MCP verb surface — the module that had no test file at all.
 
 server.py is 3,074 lines and was at 32% coverage with 631 statements never
 executed, the largest untested surface in the repo by a wide margin. It had no
 test file because it could not be imported: `_resolve_vault_path()` runs at
 MODULE scope (server.py:90) and raises FileNotFoundError without VAULT_MCP_PATH,
-and `FastMCP("vault-mcp")` is constructed at module scope too (server.py:370).
+and `MCPServer("vault-mcp")` is constructed at module scope too.
 tests/conftest.py now points the former at the mini-vault fixture, which is all
 it took to make the whole module reachable.
 
@@ -34,16 +38,20 @@ SCHEMAS = Path(__file__).parent / "fixtures" / "schema"
 # anchors, not aspirations: a verb silently dropping off the surface, or the
 # manifest doubling, should fail a test rather than be noticed months later.
 EXPECTED_VERB_COUNT = 53
-MEASURED_MANIFEST_CHARS = 25471
+# RE-MEASURED 2026-09-10, and this is the number that moved: 25,471 -> 7,509.
 # forge-testkit's F13 schema budget is ~200 chars/verb, derived from urania's
-# measured 196. This repo sits at ~482/verb — 2.4x over. The budget lint is NOT
-# wired (that is a live per-session cost and its own decision, see #5254), so
-# this test holds the line where it currently is instead of enforcing the fleet
-# number: it fails if the manifest GROWS, which is the part that costs Rob.
-# RATCHETED DOWN with the #5287 retirement (was 27000, over a 26026 measured).
-# Banking the saving is the point: a ceiling left at the old number lets the
-# next verb silently spend what retiring dataview_query just recovered.
-MANIFEST_CEILING = 26000
+# measured 196; this repo sat at ~481/verb, 2.4x over, on the strength of a
+# comment saying the budget lint was "NOT wired". It is wired now — the gate
+# runs python:forge-testkit-schema-budget — so the 48 over-budget verbs each
+# took an explicit `description=` wire cue while their docstrings kept the
+# engineering detail for whoever reads the source. That is F13's own stated
+# pattern, not an exemption: nothing is in schema_budget_exempt.
+MEASURED_MANIFEST_CHARS = 7509
+# RATCHETED DOWN with that saving (was 26000, over a 25471 measured), for the
+# reason the old comment already gave and the #5287 retirement already proved:
+# a ceiling left at the old number lets the next verb silently spend what this
+# just recovered. 8000 leaves ~490 chars of headroom, about three verbs.
+MANIFEST_CEILING = 8000
 
 
 def _tools() -> list[Any]:
@@ -71,9 +79,10 @@ class TestVerbSurface:
     def test_manifest_does_not_grow(self):
         """The manifest ships on every session's first turn, called or not.
 
-        Currently 25,471 chars across 53 verbs (~481/verb) against
-        forge-testkit's ~200/verb budget. This does not enforce the fleet
-        number — it pins the current one so growth is visible.
+        Currently 7,509 chars across 53 verbs (~142/verb), inside
+        forge-testkit's ~200/verb budget. The budget lint enforces the
+        PER-VERB ceiling; this pins the TOTAL, which is the number a session
+        actually pays and which 53 individually-legal verbs can still grow.
         """
         total = sum(len(t.description or "") for t in _tools())
         assert total <= MANIFEST_CEILING
@@ -95,8 +104,15 @@ class TestVerbSurface:
         assert "dataview_query" not in {t.name for t in _tools()}
 
     def test_every_verb_has_an_input_schema(self):
-        """A verb without a schema cannot be called correctly by any client."""
-        schemaless = [t.name for t in _tools() if t.inputSchema is None]
+        """A verb without a schema cannot be called correctly by any client.
+
+        `input_schema`, not `inputSchema`: mcp 2.x renamed every camelCase
+        field on `mcp.types.Tool` to snake_case. The old spelling did not
+        vanish quietly — pydantic raises AttributeError on the model — but the
+        rename is the kind that a `getattr(t, "inputSchema", None)` shim would
+        have turned into a silently-empty list, so it is spelled outright.
+        """
+        schemaless = [t.name for t in _tools() if t.input_schema is None]
         assert schemaless == []
 
 

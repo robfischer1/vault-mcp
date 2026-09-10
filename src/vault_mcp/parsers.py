@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Vault parsing helpers — canonical home.
 
 Ported from vault-propagation/audit.py. After Phase 5, vault-propagation

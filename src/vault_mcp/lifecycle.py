@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Lifecycle Verbs — the materialize write path.
 
 The ``materialize`` verb renders a durable note from a structured payload and

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Plan freshness — the one-directional vault → store refresh (F1).
 
 Master-plans live in two places: the vault ``.md`` on disk and a copy in

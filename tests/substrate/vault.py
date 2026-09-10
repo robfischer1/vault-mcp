@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """A PINNED `NoteIO` double, modelled on the implementation production wires.
 
 WHY THIS EXISTS, and why it is not a dict.

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.gitops — the single-writer git committer (VG initiative).
 
 Runs real ``git`` against a throwaway temp repo (no network, no live vault).

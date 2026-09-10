@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The substrate's own tests — a fake nobody checks is a fake nobody can trust.
 
 Two jobs here. The first half pins `FakeVault` to the behaviour of the real

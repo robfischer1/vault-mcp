@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for dissolve/materialize orchestration (VDV F3)."""
 
 from __future__ import annotations

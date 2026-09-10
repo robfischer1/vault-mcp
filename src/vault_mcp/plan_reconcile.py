@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The automatic re-dissolve trigger (F4).
 
 Calliope's document store versions insert-only on ``(source_path, raw_hash)``,

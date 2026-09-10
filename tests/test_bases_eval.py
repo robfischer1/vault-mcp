@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for the Bases formula evaluator.
 
 WHY THIS FILE EXISTS. The mutation gate on PR #390 reported 324 real survivors

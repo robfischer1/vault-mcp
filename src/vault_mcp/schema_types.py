@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The vault-schema type model — its exceptions and its dataclasses.
 
 Split out of schema.py under vault-mcp#5294 (617 LOC, over the 600 block).

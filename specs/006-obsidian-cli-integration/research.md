@@ -38,6 +38,7 @@ Example: `obsidian plugin:reload id="vault-mcp"`
 import subprocess
 import shutil
 
+
 def run_obsidian_cli(command, **kwargs):
     binary = shutil.which("obsidian")
     if not binary:

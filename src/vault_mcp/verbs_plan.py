@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Plan freshness — the stored-copy sweep and its helpers.
 
 Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE.
@@ -126,7 +130,9 @@ def _build_plan_payload(source_path: str, raw_text: str) -> dict[str, Any]:
     return doc
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Report drift between vault master-plans and their Calliope copies, which freeze at first write because the store is insert-only. refresh=True repairs it; never destructive."
+)
 def plan_freshness(
     refresh: bool = False,
     directory: str = "System/Pantheon/WBS",

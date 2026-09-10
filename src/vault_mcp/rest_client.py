@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP client for the Obsidian Local REST API.
 
 Wraps httpx.Client with reachability caching, backoff on repeated failures,

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Note <-> typed-payload translator (VDV F2).
 
 The translation half of the vault-DB dissolve/materialize verbs. Pure mapping,

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.provenance — the single-axis provenance spectrum.
 
 Covers Provenance System (#68): closed-enum taxonomy, context-derived

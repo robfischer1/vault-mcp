@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The Gate's WRITE collaborator — create, update, delete and move a note.
 
 Extracted from ConventionGate under vault-mcp#5294 (gate.py was 1173 LOC over a

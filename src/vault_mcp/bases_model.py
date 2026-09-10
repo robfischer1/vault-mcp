@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The Bases data model — the dataclasses and the module constants.
 
 Split out of bases.py under vault-mcp#5294 (1400 LOC, over the 600 block).

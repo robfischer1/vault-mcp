@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Materialize reverse-symmetry (C6) — un-dissolve READS from Calliope, not phdb.
 
 Proves the ``_read_dissolved_row`` repoint: with ``HADES_URL`` set, a

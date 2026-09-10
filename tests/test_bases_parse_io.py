@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for the Bases parser, model helpers and validator.
 
 Third companion to test_bases_eval.py / test_bases_exec.py, closing the
@@ -16,6 +20,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -127,10 +132,19 @@ class TestParseErrors:
     def test_a_scalar_base_is_refused(self):
         """parse_base_yaml is TYPED to take a mapping, so passing a scalar is a
         type error, not a runtime contract. What is actually asserted here is
-        the runtime guard behind it — the annotation and the check agree."""
+        the runtime guard behind it — the annotation and the check agree.
+
+        The scalar arrives through an `Any`-annotated local rather than an
+        arg-type suppression. Both get it past mypy; only one of them SAYS
+        something, which is that this call site deliberately hands the function
+        a value the type system cannot vouch for. A suppression claims the
+        checker is wrong. It is not — the whole point of the test is that the
+        call is ill-typed.
+        """
+        scalar_where_a_mapping_belongs: Any = "just a string"
         with pytest.raises((TypeError, AttributeError, ValueError)):
             parse_base_yaml(
-                "just a string",  # type: ignore[arg-type]  # VERIFY: the point
+                scalar_where_a_mapping_belongs,
                 "```base\njust a string\n```",
                 1,
             )

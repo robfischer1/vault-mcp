@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for bases_eval — the filter and formula dispatch chains.
 
 Fourth and largest of the per-module passes. bases_eval measured 77.3% honest

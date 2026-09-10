@@ -3,8 +3,14 @@
 # Full manual sweep: `pre-commit run --all-files`.  Bypass once: `git commit --no-verify`.
 exclude: '^\.(claude|specify|furnace)/|(^|/)(vendor|node_modules)/|\.melt$'
 repos:
+  # PINNED TO THE GATE'S RUFF, not to whatever autoupdate last offered.
+  # foundry-tools' python:ruff-check and python:ruff-format atoms run
+  # `uvx ruff@0.16.3`; at v0.15.16 this hook was blind to CPY001 and to
+  # markdown code-block formatting, so it passed a tree the gate failed by 94
+  # findings (measured 2026-09-10). A hook below the gate's pin is a hook that
+  # lies about what will land.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.16
+    rev: v0.16.3
     hooks:
       - id: ruff            # lint (uses [tool.ruff] in pyproject)
         stages: [pre-commit]

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.gate — the Convention Gate write API.
 
 Covers Convention Gate (#53): note creation (frontmatter generation, routing,

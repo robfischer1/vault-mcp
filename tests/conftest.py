@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared fixtures.
 
 This file did not exist before 2026-08-22, which is the whole explanation for
@@ -55,11 +59,12 @@ def gate_factory() -> GateFactory:
         fail: set[str] | None = None,
     ) -> tuple[ConventionGate, FakeVault]:
         # Named parameters rather than **kwargs: the kwargs form needed a
-        # `# type: ignore[arg-type]` to pass mypy, because `object` cannot
+        # blanket mypy arg-type waiver to typecheck, because `object` cannot
         # satisfy FakeVault's typed fields. The standard forbids an un-VERIFIED
-        # ignore, and the honest fix is to state the signature rather than
+        # waiver, and the honest fix is to state the signature rather than
         # annotate around it — None-sentinels for the mutable defaults, per the
-        # same rule.
+        # same rule. (Spelled in prose: a comment that quotes the directive
+        # verbatim reads as one to every scanner that greps for it.)
         vault = FakeVault(
             store=store if store is not None else {},
             refuse_create_over_existing=refuse_create_over_existing,

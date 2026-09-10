@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Internal client for the Obsidian CLI (obsidian-cli).
 
 Wraps subprocess.run to communicate with a running Obsidian instance via IPC.

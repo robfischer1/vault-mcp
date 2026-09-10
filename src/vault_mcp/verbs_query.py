@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """The query, graph and governance verb surface — 16 read-side verbs.
 
 Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE: server.py
@@ -40,7 +44,9 @@ from vault_mcp.index import VaultIndex
 from vault_mcp.server import mcp
 
 
-@mcp.tool()
+@mcp.tool(
+    description="[CLI-backed] Reload one Obsidian community plugin by ID - the plugin-development loop."
+)
 def obsidian_cli_reload_plugin(id: str) -> dict[str, Any]:
     """[CLI-backed] Reload an Obsidian community plugin by ID.
 
@@ -56,7 +62,9 @@ def obsidian_cli_reload_plugin(id: str) -> dict[str, Any]:
     return server._get_cli_client().run("plugin:reload", id=id)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="[CLI-backed] Run arbitrary JavaScript in Obsidian's app console. Full Obsidian API access; reach for it only when no other verb covers the job."
+)
 def obsidian_cli_eval(code: str) -> dict[str, Any]:
     """[CLI-backed] Execute arbitrary JavaScript in the Obsidian app console.
 
@@ -73,7 +81,9 @@ def obsidian_cli_eval(code: str) -> dict[str, Any]:
     return server._get_cli_client().run("eval", code=code)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="[CLI-backed] Run an allowlisted Obsidian CLI command by name, with optional key=value parameters."
+)
 def obsidian_cli_command(
     command: str,
     params: dict[str, Any] | None = None,
@@ -93,7 +103,9 @@ def obsidian_cli_command(
     return server._get_cli_client().run(command, **(params or {}))
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Find notes whose frontmatter matches every given key=value (a list field matches on membership), optionally under a path prefix. The frontmatter query surface."
+)
 def find_notes_by_frontmatter(
     filters: dict[str, str],
     scope: str | None = None,
@@ -117,7 +129,9 @@ def find_notes_by_frontmatter(
     return {"count": len(results), "results": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Find notes by a glob over filename stems, e.g. '2026-05-*-handoff*', optionally under a path prefix. Use when you know part of a name but not the path."
+)
 def find_by_filename(
     pattern: str,
     scope: str | None = None,
@@ -137,7 +151,9 @@ def find_by_filename(
     return {"count": len(results), "results": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="List notes modified since an ISO-8601 date, newest first, optionally under a path prefix. Use to pick up where the vault was last touched."
+)
 def recent_edits(
     since: str,
     scope: str | None = None,
@@ -158,7 +174,9 @@ def recent_edits(
     return {"count": len(results), "results": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Read one note's frontmatter, body and resolved outbound links, addressed by wikilink stem ('AGENTS') or vault-relative path. The default way to open a note."
+)
 def read_note(
     stem_or_path: str,
 ) -> dict[str, Any]:
@@ -179,7 +197,9 @@ def read_note(
     return server._get_index().read_note(stem_or_path)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Force a full vault index rebuild from disk. Only when results look stale - the index already refreshes on a TTL and on a file watcher."
+)
 def reindex() -> dict[str, Any]:
     """Force a full vault index rebuild.
 
@@ -200,7 +220,9 @@ def reindex() -> dict[str, Any]:
 _AUDIT_IGNORES_REL = "System/Tools/Skills/vault-propagation/audit-ignores.md"
 
 
-@mcp.tool()
+@mcp.tool(
+    description="List every note pointing at a stem, by wikilink or `up:` frontmatter. Check it before moving or dissolving a note, to see what would break."
+)
 def backlinks_to(stem: str) -> dict[str, Any]:
     """Find all notes that link to a given note (by wikilink or `up:` frontmatter).
 
@@ -215,7 +237,9 @@ def backlinks_to(stem: str) -> dict[str, Any]:
     return {"stem": stem, "count": len(results), "results": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="List the wikilinks in one note's body, each resolved to a path or flagged ambiguous/unresolved. Image embeds are excluded unless asked for."
+)
 def outbound_links(
     stem: str,
     include_image_embeds: bool = False,
@@ -236,7 +260,9 @@ def outbound_links(
     return {"stem": stem, "count": len(results), "results": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Find notes with no inbound link and no `up:` - the ones nothing reaches. Honors the audit-ignores exemptions; optionally scoped to a path prefix."
+)
 def find_orphans(scope: str | None = None) -> dict[str, Any]:
     """Find notes with no inbound links and no `up:` frontmatter.
 
@@ -256,7 +282,9 @@ def find_orphans(scope: str | None = None) -> dict[str, Any]:
     return {"count": len(results), "results": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Find wikilinks and `up:` values pointing at notes that do not exist - the stale references left behind by moves, renames and dissolutions."
+)
 def find_dangling_links(scope: str | None = None) -> dict[str, Any]:
     """Find wikilinks and ``up:`` values that point at non-existent notes.
 
@@ -284,7 +312,9 @@ def find_dangling_links(scope: str | None = None) -> dict[str, Any]:
 _TAGS_GLOSSARY_REL = "System/Tags Glossary.md"
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Find body #tags that are not in the closed Tags Glossary - the compliance check before adding tags, or when auditing a pillar."
+)
 def tag_glossary_check() -> dict[str, Any]:
     """Find body #tags not in the Tags Glossary.
 
@@ -303,7 +333,9 @@ def tag_glossary_check() -> dict[str, Any]:
     return {"files_with_violations": len(results), "results": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Every tag in the vault with counts, read from the index rather than Obsidian, so it works headless. Use vault_tags for Obsidian's live hierarchical counts instead."
+)
 def all_tags(include_body: bool = True) -> dict[str, Any]:
     """Get all tags in the vault with counts (parser-backed, no Obsidian needed).
 
@@ -323,7 +355,9 @@ def all_tags(include_body: bool = True) -> dict[str, Any]:
     return {"count": len(results), "tags": results}
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Aggregate vault statistics - counts by @type, top tags, edit volume by ISO week, last index rebuild. The orientation call for an unfamiliar vault."
+)
 def vault_stats() -> dict[str, Any]:
     """Aggregate vault statistics.
 

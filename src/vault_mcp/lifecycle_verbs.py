@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """dissolve / materialize orchestration (VDV F3).
 
 The verbs that sequence the translator (F2) and phdb's typed-write HTTP routes

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """A CLIRunner double: captures the eval code and returns a canned envelope.
 
 Lives here rather than in the test module because

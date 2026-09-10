@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Git committer for vault-mcp — the single-writer commit surface (VG initiative).
 
 vault-mcp is the sole AI writer to the vault, so it also owns vault git. Every

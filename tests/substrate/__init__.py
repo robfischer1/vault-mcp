@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Test substrate — the sanctioned home for this repo's test doubles.
 
 `[tool.forge_testkit_lint] substrate_pkg = "tests.substrate"` points the

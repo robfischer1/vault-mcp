@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for vault_mcp.lint — the standalone Convention Linter.
 
 Covers the Linter Core epic: collect-all findings (not first-raise), the

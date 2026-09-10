@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Filesystem watcher for incremental index invalidation.
 
 Uses watchdog to monitor the vault for .md file changes. On each event,

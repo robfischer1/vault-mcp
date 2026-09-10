@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the Obsidian-CLI NoteIO adapter.
 
 The eval JS builders are pure and unit-tested here; the subprocess call is

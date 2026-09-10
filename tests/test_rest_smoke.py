@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """REST-seam tests, replayed from a golden tape by default and live on demand.
 
 WHAT CHANGED AND WHY. This file used to require a running Obsidian and skip

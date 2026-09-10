@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Schema Engine — the deterministic governance foundation for vault-mcp v2.
 
 Loads a machine-readable governance schema from an external config file

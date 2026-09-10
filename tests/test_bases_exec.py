@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for Base execution — view selection, grouping, sorting.
 
 Companion to test_bases_eval.py, written for the same reason: the mutation gate

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Rob Fischer
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Behavioural coverage for Bases serialization and file writing.
 
 Round two of closing the mutation survivors (see test_bases_eval.py's header for
