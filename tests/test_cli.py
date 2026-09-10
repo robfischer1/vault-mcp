@@ -6,7 +6,13 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from vault_mcp.cli_client import ObsidianCLI
+import pytest
+
+from vault_mcp.cli_client import (
+    ObsidianCLI,
+    ParamRejectedError,
+    render_params,
+)
 
 
 def test_cli_probe_success():
@@ -129,3 +135,84 @@ def test_cli_run_timeout():
             res = cli.run("eval", code="while(true){}")
             assert res["ok"] is False
             assert res["error"] == "cli_timeout"
+
+
+class TestRenderParams:
+    """The security boundary as a pure function — no binary, no subprocess.
+
+    THE COMMAND ALLOWLIST WAS ONLY HALF THE DOOR. `obsidian_cli_command` is an
+    MCP verb whose `params` dict comes straight from the caller and went into
+    the argument vector unexamined: a `True` value appended the BARE key, so
+    `{"--config": True}` put `--config` on obsidian-cli's own command line.
+    Every test here fails against that code.
+    """
+
+    def test_a_verified_parameter_renders_as_key_equals_value(self):
+        assert render_params("plugin:reload", {"id": "my-plugin"}) == [
+            "id=my-plugin"
+        ]
+
+    def test_a_flag_shaped_name_is_refused(self):
+        """The injection itself: a name that could be read as an option."""
+        with pytest.raises(ParamRejectedError) as caught:
+            render_params("plugin:reload", {"--config": "anything"})
+        assert "--config" in str(caught.value)
+
+    def test_a_short_flag_shaped_name_is_refused(self):
+        with pytest.raises(ParamRejectedError):
+            render_params("eval", {"-e": "x"})
+
+    def test_a_name_the_command_does_not_take_is_refused(self):
+        with pytest.raises(ParamRejectedError) as caught:
+            render_params("plugin:reload", {"code": "alert(1)"})
+        assert "code" in str(caught.value)
+
+    def test_a_command_with_no_verified_surface_takes_no_parameters(self):
+        """Fail-closed: the six commands this repo does not drive take none."""
+        with pytest.raises(ParamRejectedError):
+            render_params("devtools", {"id": "x"})
+
+    def test_a_non_scalar_value_is_refused(self):
+        with pytest.raises(ParamRejectedError) as caught:
+            render_params("eval", {"code": ["alert(1)"]})
+        assert "list" in str(caught.value)
+
+    def test_a_nul_byte_is_refused(self):
+        """NUL truncates a C string, so the argument the binary sees is not the
+        argument that was validated."""
+        with pytest.raises(ParamRejectedError) as caught:
+            render_params("eval", {"code": "ok\x00rest"})
+        assert "NUL" in str(caught.value)
+
+    def test_a_newline_is_allowed_because_argv_has_no_delimiter(self):
+        """Multi-line JavaScript is the ordinary case for `eval`.
+
+        Each parameter is ONE element of the argument vector, so there is
+        nothing for a newline to break out of. Refusing control characters
+        wholesale would break the feature to buy nothing — which is why the
+        rule names NUL specifically.
+        """
+        assert render_params("eval", {"code": "let a = 1;\nlet b = 2;"}) == [
+            "code=let a = 1;\nlet b = 2;"
+        ]
+
+    def test_booleans_render_as_values_not_bare_keys(self):
+        """The bare-key branch WAS the injection; True is a value now."""
+        assert render_params("plugin:reload", {"id": True}) == ["id=true"]
+        assert render_params("plugin:reload", {"id": False}) == []
+
+
+class TestRunRefusesBeforeSpawning:
+    def test_a_rejected_parameter_never_reaches_subprocess(self):
+        """The envelope is not enough — the spawn must not happen at all."""
+        with patch(
+            "vault_mcp.cli_client.shutil.which",
+            return_value="/usr/bin/obsidian",
+        ):
+            cli = ObsidianCLI()
+            cli._available = True
+            with patch("subprocess.run") as mock_run:
+                res = cli.run("plugin:reload", **{"--config": "anything"})
+                assert res["ok"] is False
+                assert res["error"] == "cli_invalid_param"
+                assert mock_run.called is False

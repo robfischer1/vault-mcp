@@ -5,7 +5,9 @@
 """Internal client for the Obsidian CLI (obsidian-cli).
 
 Wraps subprocess.run to communicate with a running Obsidian instance via IPC.
-Provides uniform error envelopes and whitelisted command execution.
+Provides uniform error envelopes and allowlisted command execution — allowlisted
+in BOTH directions: which commands may run, and which parameters may reach the
+argument vector.
 """
 
 from __future__ import annotations
@@ -13,9 +15,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +37,110 @@ CLI_COMMAND_ALLOWLIST: frozenset[str] = frozenset(
         "bookmarks",
     }
 )
+
+#: The parameter names each allowlisted command accepts.
+#:
+#: THE COMMAND ALLOWLIST WAS ONLY HALF THE DOOR. `obsidian_cli_command` is an
+#: MCP verb whose `params` dict comes straight from the caller, and every key
+#: went into the argument vector unexamined: `{"id": True}` appended the BARE
+#: token `id`, which means `{"--config": True}` appended `--config` — a flag on
+#: obsidian-cli's own command line, chosen by whoever called the verb. The
+#: command name was checked; the thing that turns into an option was not.
+#:
+#: FAIL-CLOSED, and the empty entries are deliberate rather than lazy. Two
+#: commands have a parameter surface this repo actually drives and can therefore
+#: vouch for — `plugin:reload` takes `id`
+#: (verbs_query.obsidian_cli_reload_plugin) and `eval` takes `code`
+#: (obsidian_cli_eval, and the ObsidianNoteIO write path). For the other
+#: six, guessing a surface would either invent parameters that do not
+#: exist or bless ones nobody has read; refusing is the honest default, and the
+#: refusal envelope names the parameter and this table, so the first caller who
+#: needs one learns exactly where to add it.
+CLI_PARAM_ALLOWLIST: Mapping[str, frozenset[str]] = {
+    "plugin:reload": frozenset({"id"}),
+    "eval": frozenset({"code"}),
+    "devtools": frozenset(),
+    "dev:errors": frozenset(),
+    "dev:screenshot": frozenset(),
+    "daily": frozenset(),
+    "templates": frozenset(),
+    "bookmarks": frozenset(),
+}
+
+#: A parameter name is a lowercase word. THE LEADING CHARACTER IS THE WHOLE
+#: POINT: a name that cannot begin with `-` cannot be read as an option, which
+#: is the injection this closes independently of any allowlist. The rest of the
+#: class keeps a name from being empty, from carrying whitespace, or from being
+#: a path fragment like `..`.
+_PARAM_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
+
+
+class ParamRejectedError(Exception):
+    """A CLI parameter failed validation before reaching the argument vector."""
+
+    def __init__(self, detail: str) -> None:
+        """Carry the caller-facing detail for the error envelope."""
+        super().__init__(detail)
+        self.detail = detail
+
+
+def render_params(command: str, params: Mapping[str, object]) -> list[str]:
+    """Render `params` as validated ``key=value`` argv tokens for `command`.
+
+    A pure function on purpose — the validation is the security boundary, so it
+    is testable without a subprocess, a binary, or a running Obsidian.
+
+    Every token is ``key=value``. THE BARE-NAME FORM IS GONE: the old code
+    appended just the key when a value was `True`, on the stated theory that it
+    was a flag. It was not a flag — obsidian-cli takes `key=value` — so the
+    branch produced a stray positional argument on a good day and an injected
+    option on a bad one. `True` and `False` now render as `true` / omitted.
+
+    NUL is the only character refused inside a value, and that is a considered
+    line rather than a nervous one. Each parameter becomes ONE element of the
+    argument vector, so there is no delimiter to break out of: spaces, quotes,
+    newlines and semicolons are all just bytes to `execve`. A newline is
+    ordinary in the one value that matters here — `eval`'s JavaScript — so
+    refusing control characters wholesale would break the feature to buy
+    nothing. NUL is different: it terminates a C string, so it truncates the
+    argument silently (CPython raises deep inside `subprocess` instead, which
+    is a stack trace where an envelope belongs).
+    """
+    allowed = CLI_PARAM_ALLOWLIST.get(command, frozenset())
+    tokens: list[str] = []
+    for key, value in params.items():
+        if not _PARAM_NAME.match(key):
+            raise ParamRejectedError(
+                f"Parameter name {key!r} is not a lowercase word "
+                "([a-z][a-z0-9_-]*); a name that could be read as an option "
+                "never reaches the command line."
+            )
+        if key not in allowed:
+            raise ParamRejectedError(
+                f"Command {command!r} accepts no parameter {key!r}. "
+                f"Allowed: {sorted(allowed) or 'none'} "
+                "(vault_mcp.cli_client.CLI_PARAM_ALLOWLIST)."
+            )
+        if value is False:
+            continue
+        if value is True:
+            rendered = "true"
+        elif isinstance(value, str):
+            rendered = value
+        elif isinstance(value, (int, float)):
+            rendered = str(value)
+        else:
+            raise ParamRejectedError(
+                f"Parameter {key!r} must be a string, number or boolean, "
+                f"not {type(value).__name__}."
+            )
+        if "\x00" in rendered:
+            raise ParamRejectedError(
+                f"Parameter {key!r} contains a NUL byte, which would silently "
+                "truncate the argument."
+            )
+        tokens.append(f"{key}={rendered}")
+    return tokens
 
 
 class ObsidianCLI:
@@ -121,16 +231,14 @@ class ObsidianCLI:
                 "detail": "CLI binary not available.",
             }
 
-        args = [self._binary, command]
-        for k, v in params.items():
-            # Boolean flags are handled specially if needed, but obsidian-cli
-            # uses key=value for most things.
-            if v is True:
-                args.append(k)
-            elif v is False:
-                continue
-            else:
-                args.append(f"{k}={v}")
+        try:
+            args = [self._binary, command, *render_params(command, params)]
+        except ParamRejectedError as exc:
+            return {
+                "ok": False,
+                "error": "cli_invalid_param",
+                "detail": exc.detail,
+            }
 
         try:
             res = subprocess.run(
