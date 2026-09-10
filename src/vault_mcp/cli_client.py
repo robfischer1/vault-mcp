@@ -50,12 +50,18 @@ CLI_COMMAND_ALLOWLIST: frozenset[str] = frozenset(
 #: FAIL-CLOSED, and the empty entries are deliberate rather than lazy. Two
 #: commands have a parameter surface this repo actually drives and can therefore
 #: vouch for — `plugin:reload` takes `id`
-#: (verbs_query.obsidian_cli_reload_plugin) and `eval` takes `code`
-#: (obsidian_cli_eval, and the ObsidianNoteIO write path). For the other
-#: six, guessing a surface would either invent parameters that do not
+#: (verbs_query.obsidian_cli_reload_plugin) and `eval` takes `code`. For the
+#: other six, guessing a surface would either invent parameters that do not
 #: exist or bless ones nobody has read; refusing is the honest default, and the
 #: refusal envelope names the parameter and this table, so the first caller who
 #: needs one learns exactly where to add it.
+#:
+#: `eval` IS INTERNAL-ONLY AS OF 2026-09-10. The MCP verb that exposed it is
+#: retired; the entry stays because `ObsidianNoteIO` still drives it for the
+#: note create/modify/read path, where the JavaScript is built in this module
+#: from json.dumps-encoded arguments and never arrives from a caller. Adding a
+#: verb that forwards a caller's string to it would re-open the door this
+#: allowlist and that retirement closed together.
 CLI_PARAM_ALLOWLIST: Mapping[str, frozenset[str]] = {
     "plugin:reload": frozenset({"id"}),
     "eval": frozenset({"code"}),

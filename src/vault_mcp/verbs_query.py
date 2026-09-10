@@ -62,23 +62,30 @@ def obsidian_cli_reload_plugin(id: str) -> dict[str, Any]:
     return server._get_cli_client().run("plugin:reload", id=id)
 
 
-@mcp.tool(
-    description="[CLI-backed] Run arbitrary JavaScript in Obsidian's app console. Full Obsidian API access; reach for it only when no other verb covers the job."
-)
-def obsidian_cli_eval(code: str) -> dict[str, Any]:
-    """[CLI-backed] Execute arbitrary JavaScript in the Obsidian app console.
-
-    Extremely powerful; provides full access to the Obsidian API. Use with
-    caution.
-
-    Args:
-        code: JavaScript snippet to execute.
-
-    Returns:
-        {"ok": bool, "data": Any} on success.
-
-    """
-    return server._get_cli_client().run("eval", code=code)
+# ---------------------------------------------------------------------------
+# `obsidian_cli_eval` IS RETIRED (2026-09-10). It took a JavaScript string from
+# the caller and ran it in Obsidian's console with full app-API access — the
+# one verb on this surface for which "check for execution of untrusted input"
+# was a statement of intent rather than a false positive.
+#
+# RETIRED ON THE USAGE, not on the smell. Measured across the transcript corpus
+# under ~/.claude-the/projects: THREE invocations, ever, across two sessions. No
+# skill, rule or vault note reaches for it; the only mention outside this repo
+# is a 2026-06-03 code-review note observing it exists. It cost a manifest entry
+# on every session's first turn and an arbitrary-code path on every one of them,
+# to be used three times.
+#
+# The `eval` COMMAND itself is not gone: `ObsidianNoteIO` still uses it for the
+# note create/modify/read path, where the JavaScript is built here from
+# json.dumps-encoded arguments (build_create_js and friends) and never comes
+# from a caller. That is the difference the retirement draws — Obsidian's
+# console stays reachable by this package, and stops being reachable THROUGH
+# this package by whoever is on the other end of the MCP session.
+#
+# tests/test_server.py::test_obsidian_cli_eval_stays_retired asserts the
+# absence, so a copy-paste revival fails loudly rather than quietly re-opening
+# the door.
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool(

@@ -178,7 +178,9 @@ runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
 # config. The one real finding it hid, a missing D103 docstring, is answered
 # rather than re-silenced.
 "benchmarks/**" = ["INP001"]
-# ⚑ ONE ENTRY, ONE RULE, ONE FILE. Read this before touching it.
+# ⚑ ONE ENTRY, ONE RULE, ONE FILE — AND IT IS THE OPEN QUESTION ON THIS REPO.
+# Read this before touching it; it is a placeholder for a decision, not a
+# settled carve-out.
 #
 # WHAT LEFT, AND HOW. gitops.py's `S603, BLE001` entry is gone entirely.
 # BLE001 was DEAD (measured 2026-09-10: that module already caught
@@ -187,13 +189,33 @@ runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
 # stopped doing the thing. gitops.py drives dulwich in-process and spawns no
 # binary at all.
 #
-# WHAT REMAINS IS NOT THE SAME SHAPE. `ObsidianCLI` runs the `obsidian` binary,
-# discovered at runtime from VAULT_MCP_OBSIDIAN_BIN or PATH, and
-# `obsidian_cli_eval` exists to hand it caller-supplied JavaScript. S603 says
-# "check for execution of untrusted input"; there that is a TRUE POSITIVE and
-# the rule is right, so neither a `# noqa` nor a refactor is the answer — a
-# suppression would assert the checker is mistaken about a call that really
-# does execute untrusted input. This entry is a placeholder for a decision.
+# THE TRUE-POSITIVE HALF ALSO LEFT. `obsidian_cli_eval` handed caller-supplied
+# JavaScript to Obsidian's console, which made "check for execution of
+# untrusted input" a description of the feature. It is retired (three
+# invocations across the whole transcript corpus, two sessions, nothing
+# consuming it), and the parameter surface that reaches argv is now allowlisted
+# per command and validated — closing a real flag injection on the way
+# (`{"--config": True}` used to append `--config` to obsidian-cli's own command
+# line). Nothing caller-supplied now reaches the argument vector except an
+# allowlisted parameter's value, as one element, NUL-checked.
+#
+# WHAT IS LEFT IS THE BINARY, and it is why this entry could not go with the
+# rest. ruff exonerates a spawn only when EVERY argv element is an inline
+# string literal — a `Final` constant, `shutil.which(...)`, `str(Path(...))`,
+# `os.path.join` of literals, an f-string element, a `[literal, *args]` splat
+# and the `args=` keyword form ALL still fire (probed against 0.16.3). The
+# `obsidian` binary is discovered at runtime from VAULT_MCP_OBSIDIAN_BIN or
+# PATH, so argv[0] can never be a literal, and the escape the fleet's other
+# Python stars take (narcissus and techne inline `/usr/bin/git`) is closed:
+# production is an NSSM service on nas01, and a bare `"obsidian"` literal would
+# only trade S603 for S607.
+#
+# SO THE REMAINING FINDING IS STRUCTURAL, not a claim anyone can answer with
+# code, and a `# noqa` would still be the wrong shape — it asserts the checker
+# is mistaken about a spawn that really does run a discovered binary. Two live
+# sites: cli_client.py's `probe()` and `run()`. The decision is Rob's — accept
+# the finding knowingly, or retire the obsidian-cli bridge as a whole, which is
+# what `obsidian_cli_eval` leaving already began.
 "src/vault_mcp/cli_client.py" = ["S603"]
 
 

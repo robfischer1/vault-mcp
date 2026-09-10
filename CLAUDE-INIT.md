@@ -69,7 +69,8 @@ config-addressed call.
     `obsidian_search`, `execute_command`, `jsonlogic_search`, `vault_tags`,
     `list_directory`, `open_in_obsidian`, `document_map`
   - `obsidian-cli` bridge: `obsidian_cli_status`, `obsidian_cli_reload_plugin`,
-    `obsidian_cli_eval`, `obsidian_cli_command`
+    `obsidian_cli_command` (`obsidian_cli_eval` retired 2026-09-10 — three
+    invocations ever, and it ran caller-supplied JavaScript in Obsidian)
   - Bases: `subscribe_base` / `unsubscribe_base` (live updates), `parse_base`, `execute_base`,
     `write_base`, `validate_base_tool`
   - Governed writes (Convention Gate): `write_note`, `delete`, `move_note`, `lint`

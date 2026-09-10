@@ -61,7 +61,7 @@ Before attempting CLI operations, an agent or the server itself checks if the CL
 - **FR-001**: System MUST detect the presence of the `obsidian` executable in the system PATH.
 - **FR-002**: System MUST provide a `obsidian_cli_status` tool to report CLI availability and version.
 - **FR-003**: System MUST provide a `obsidian_cli_reload_plugin` tool that wraps `obsidian plugin:reload id=<id>`.
-- **FR-004**: System MUST provide a `obsidian_cli_eval` tool that wraps `obsidian eval code=<code>`.
+- **FR-004**: ~~System MUST provide a `obsidian_cli_eval` tool that wraps `obsidian eval code=<code>`.~~ **RETIRED 2026-09-10.** Measured three invocations across the whole transcript corpus, in two sessions, with no skill/rule/note consuming it — against a manifest entry on every session's first turn and a caller-supplied arbitrary-code path on every one of them. The `eval` command is still used INTERNALLY by `ObsidianNoteIO`, where the JavaScript is built from json.dumps-encoded arguments rather than handed in. The acceptance scenarios below that exercise this tool are retired with it.
 - **FR-005**: System MUST provide a `obsidian_cli_command` tool for a whitelist of other useful CLI commands (e.g., `devtools`, `dev:errors`).
 - **FR-006**: CLI tools MUST return a uniform error envelope consistent with the REST client (`{ "ok": False, "error": "cli_error", "detail": "..." }`).
 - **FR-007**: System MUST handle "silent" execution where possible (CLI parameters like `silent` or flags) to avoid disruptive GUI focus stealing unless intended.

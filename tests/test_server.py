@@ -37,8 +37,9 @@ SCHEMAS = Path(__file__).parent / "fixtures" / "schema"
 # Measured 2026-08-22 against the live registration. These are regression
 # anchors, not aspirations: a verb silently dropping off the surface, or the
 # manifest doubling, should fail a test rather than be noticed months later.
-EXPECTED_VERB_COUNT = 53
-# RE-MEASURED 2026-09-10, and this is the number that moved: 25,471 -> 7,509.
+EXPECTED_VERB_COUNT = 52
+# RE-MEASURED 2026-09-10, and this is the number that moved: 25,471 -> 7,366
+# (7,509 across 53 verbs, then 7,366 across 52 when obsidian_cli_eval left).
 # forge-testkit's F13 schema budget is ~200 chars/verb, derived from urania's
 # measured 196; this repo sat at ~481/verb, 2.4x over, on the strength of a
 # comment saying the budget lint was "NOT wired". It is wired now — the gate
@@ -46,11 +47,11 @@ EXPECTED_VERB_COUNT = 53
 # took an explicit `description=` wire cue while their docstrings kept the
 # engineering detail for whoever reads the source. That is F13's own stated
 # pattern, not an exemption: nothing is in schema_budget_exempt.
-MEASURED_MANIFEST_CHARS = 7509
+MEASURED_MANIFEST_CHARS = 7366
 # RATCHETED DOWN with that saving (was 26000, over a 25471 measured), for the
 # reason the old comment already gave and the #5287 retirement already proved:
 # a ceiling left at the old number lets the next verb silently spend what this
-# just recovered. 8000 leaves ~490 chars of headroom, about three verbs.
+# just recovered. 8000 leaves ~630 chars of headroom, about four verbs.
 MANIFEST_CEILING = 8000
 
 
@@ -79,7 +80,7 @@ class TestVerbSurface:
     def test_manifest_does_not_grow(self):
         """The manifest ships on every session's first turn, called or not.
 
-        Currently 7,509 chars across 53 verbs (~142/verb), inside
+        Currently 7,366 chars across 52 verbs (~142/verb), inside
         forge-testkit's ~200/verb budget. The budget lint enforces the
         PER-VERB ceiling; this pins the TOTAL, which is the number a session
         actually pays and which 53 individually-legal verbs can still grow.
@@ -102,6 +103,28 @@ class TestVerbSurface:
         This asserts the ABSENCE so a copy-paste revival fails loudly.
         """
         assert "dataview_query" not in {t.name for t in _tools()}
+
+    def test_obsidian_cli_eval_stays_retired(self):
+        """It ran caller-supplied JavaScript in Obsidian, and nobody used it.
+
+        Measured across the transcript corpus under ~/.claude-the/projects:
+        THREE invocations, ever, in two sessions. No skill, rule or vault note
+        reaches for it. Against that it cost a manifest entry on every
+        session's first turn and an arbitrary-code path into the running app on
+        every one of them — the single site on this surface where ruff's
+        "check for execution of untrusted input" was a description of the
+        feature rather than a false positive.
+
+        Asserted as an ABSENCE, the same shape as dataview_query above and for
+        the same reason: retiring a verb is one deletion, and reviving it is
+        one paste. This is the thing that fails on the paste.
+
+        The `eval` COMMAND is not gone — `ObsidianNoteIO` still drives it for
+        note create/modify/read, where cli_client builds the JavaScript from
+        json.dumps-encoded arguments. What is gone is the caller's ability to
+        supply the code.
+        """
+        assert "obsidian_cli_eval" not in {t.name for t in _tools()}
 
     def test_every_verb_has_an_input_schema(self):
         """A verb without a schema cannot be called correctly by any client.
