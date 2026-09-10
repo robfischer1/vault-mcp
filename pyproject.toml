@@ -75,7 +75,7 @@ dev = [
     # (0.15.17), the local run was blind to CPY001 and to markdown code-block
     # formatting and reported clean on a tree the gate failed — measured
     # 2026-09-10, 91 + 3 findings apart.
-    "ruff>=0.16.3",
+    "ruff>=0.16.6",
     "mypy>=2.1.0",
     "pyright==1.1.414",
     "types-PyYAML>=6.0.12.20260518",
