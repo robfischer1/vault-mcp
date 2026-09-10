@@ -2,15 +2,19 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""The query, graph and governance verb surface — 16 read-side verbs.
+"""The query, graph and governance verb surface — 13 read-side verbs.
 
 Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE: server.py
 imports it at its foot for the side effect of these `@mcp.tool()` calls.
 
 Everything here reads the vault INDEX rather than writing, which is why the
-group travels together: the CLI passthroughs, the frontmatter/filename/recency
-lookups, the link-graph walks and the tag-glossary checks all answer off
+group travels together: the frontmatter/filename/recency lookups, the
+link-graph walks and the tag-glossary checks all answer off
 `server._get_index()` and none of them touches the Convention Gate.
+
+THE THREE obsidian-cli PASSTHROUGHS LEFT WITH THE BRIDGE (2026-09-10) and were
+the only members that did not fit that description — they reached a subprocess,
+not the index. See server.py's retirement note for the measurement.
 """
 
 from __future__ import annotations
@@ -42,72 +46,6 @@ from vault_mcp.index import VaultIndex
 # decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
 # makes function untyped". 99 errors, entirely from that one indirection.
 from vault_mcp.server import mcp
-
-
-@mcp.tool(
-    description="[CLI-backed] Reload one Obsidian community plugin by ID - the plugin-development loop."
-)
-def obsidian_cli_reload_plugin(id: str) -> dict[str, Any]:
-    """[CLI-backed] Reload an Obsidian community plugin by ID.
-
-    Essential for plugin development workflows.
-
-    Args:
-        id: The plugin ID (e.g., "obsidian-local-rest-api").
-
-    Returns:
-        {"ok": bool, "data": Any} on success.
-
-    """
-    return server._get_cli_client().run("plugin:reload", id=id)
-
-
-# ---------------------------------------------------------------------------
-# `obsidian_cli_eval` IS RETIRED (2026-09-10). It took a JavaScript string from
-# the caller and ran it in Obsidian's console with full app-API access — the
-# one verb on this surface for which "check for execution of untrusted input"
-# was a statement of intent rather than a false positive.
-#
-# RETIRED ON THE USAGE, not on the smell. Measured across the transcript corpus
-# under ~/.claude-the/projects: THREE invocations, ever, across two sessions. No
-# skill, rule or vault note reaches for it; the only mention outside this repo
-# is a 2026-06-03 code-review note observing it exists. It cost a manifest entry
-# on every session's first turn and an arbitrary-code path on every one of them,
-# to be used three times.
-#
-# The `eval` COMMAND itself is not gone: `ObsidianNoteIO` still uses it for the
-# note create/modify/read path, where the JavaScript is built here from
-# json.dumps-encoded arguments (build_create_js and friends) and never comes
-# from a caller. That is the difference the retirement draws — Obsidian's
-# console stays reachable by this package, and stops being reachable THROUGH
-# this package by whoever is on the other end of the MCP session.
-#
-# tests/test_server.py::test_obsidian_cli_eval_stays_retired asserts the
-# absence, so a copy-paste revival fails loudly rather than quietly re-opening
-# the door.
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool(
-    description="[CLI-backed] Run an allowlisted Obsidian CLI command by name, with optional key=value parameters."
-)
-def obsidian_cli_command(
-    command: str,
-    params: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """[CLI-backed] Execute an Obsidian CLI command (allowlisted only).
-
-    The allowlist is enforced in ObsidianCLI.run() itself (defense in depth).
-
-    Args:
-        command: The CLI command name.
-        params: Optional dict of key=value parameters.
-
-    Returns:
-        {"ok": bool, "data": Any} on success.
-
-    """
-    return server._get_cli_client().run(command, **(params or {}))
 
 
 @mcp.tool(

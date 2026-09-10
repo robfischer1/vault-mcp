@@ -44,7 +44,6 @@ from typing import TYPE_CHECKING, Any
 from mcp.server.mcpserver import MCPServer
 
 if TYPE_CHECKING:
-    from vault_mcp.cli_client import ObsidianCLI
     from vault_mcp.compute import ComputeReceiver
     from vault_mcp.gate import ConventionGate
     from vault_mcp.gitops import GitCommitter
@@ -195,35 +194,35 @@ def _get_rest_client() -> ObsidianRESTClient:
     return _rest_client
 
 
-# CLI client (Phase 006)
-_cli_client: ObsidianCLI | None = None
-
-
-def _get_cli_client() -> ObsidianCLI:
-    global _cli_client
-    if _cli_client is None:
-        from vault_mcp.cli_client import ObsidianCLI
-
-        _cli_client = ObsidianCLI()
-        _cli_client.probe()
-    return _cli_client
+# ---------------------------------------------------------------------------
+# THE obsidian-cli BRIDGE IS RETIRED (2026-09-10) — module, verbs and doubles.
+#
+# `obsidian_cli_status`, `obsidian_cli_reload_plugin`, `obsidian_cli_command`
+# and `obsidian_cli_eval` are gone, with `vault_mcp/cli_client.py` itself.
+#
+# IT COULD NOT WORK ON THE LIVE SERVICE, and `_get_gate()` below has said so in
+# prose the whole time: obsidian-cli reaches Obsidian over SAME-SESSION IPC,
+# vault-mcp runs as a session-0 service, and the desktop Obsidian is session-1.
+# The REST API is HTTP on loopback and crosses that boundary; the CLI does not.
+#
+# NOTHING DEPENDED ON IT. `ObsidianNoteIO` — the CLI-backed write path — was
+# never constructed anywhere in src/; the Gate is built unconditionally on
+# `RestNoteIO`, and the only `ObsidianNoteIO(...)` calls in the repo were four
+# in its own test file. Of the four verbs, `obsidian_cli_eval` had three
+# invocations across the entire transcript corpus and the other three had none.
+#
+# `ObsidianIOError` MOVED rather than died: it is the `NoteIO` protocol's error
+# and `RestNoteIO` raises it, so it now lives in gate.py next to the protocol.
+#
+# tests/test_server.py::test_the_obsidian_cli_bridge_stays_retired asserts the
+# absence of all four verbs.
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
 # MCP server + tools
 # ---------------------------------------------------------------------------
 mcp: MCPServer[Any] = MCPServer("vault-mcp")
-
-
-@mcp.tool()
-def obsidian_cli_status() -> dict[str, Any]:
-    """Check Obsidian CLI availability and version.
-
-    Returns:
-        {"available": bool, "version": str|None, "error": str|None, "detail": str|None}
-
-    """
-    return _get_cli_client().probe()
 
 
 # ---------------------------------------------------------------------------
@@ -466,8 +465,7 @@ def _get_materializer() -> Materializer:
 
 def _gate_error_envelope(exc: Exception) -> dict[str, Any]:
     """Map Gate/schema/IO exceptions to a structured tool error."""
-    from vault_mcp.cli_client import ObsidianIOError
-    from vault_mcp.gate import GateError
+    from vault_mcp.gate import GateError, ObsidianIOError
     from vault_mcp.schema import RouteError, SchemaError
 
     if isinstance(exc, SchemaError) and not isinstance(exc, RouteError):

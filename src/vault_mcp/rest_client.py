@@ -42,7 +42,7 @@ from typing import Any, Self
 
 import httpx
 
-from vault_mcp.cli_client import ObsidianIOError
+from vault_mcp.gate import ObsidianIOError
 
 log = logging.getLogger(__name__)
 

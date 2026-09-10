@@ -67,6 +67,21 @@ log = logging.getLogger(__name__)
 DiffSink = Callable[[dict[str, Any]], None]
 
 
+class ObsidianIOError(Exception):
+    """A vault read or write through Obsidian failed.
+
+    THE `NoteIO` PROTOCOL'S ERROR, which is why it lives here rather than with
+    an implementation. It moved out of cli_client when the obsidian-cli bridge
+    was retired (2026-09-10) — it had been defined next to the CLI-backed
+    `ObsidianNoteIO`, so `rest_client`, `gate_writer`, `gate_auditor`, the
+    server's envelope mapper and the test substrate all reached into a module
+    none of them otherwise used, for an exception the surviving implementation
+    is the one that raises. Deliberately NOT a `GateError`: the Gate's own
+    exceptions are rejections it decided on, and this is the vault refusing
+    underneath it.
+    """
+
+
 class GateError(Exception):
     """Base class for Convention Gate rejections."""
 

@@ -20,9 +20,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from vault_mcp.cli_client import ObsidianIOError
 from vault_mcp.gate import (
     FieldError,
+    ObsidianIOError,
     ProtectionError,
     WriteResult,
     _render_note,

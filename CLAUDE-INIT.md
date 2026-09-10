@@ -7,8 +7,8 @@ Codebase orientation for AI sessions. Posture and governance live in AGENTS.md
 Two halves:
 
 - **Read side**: TTL-cached index (`index.py`) over frontmatter/filenames/link graph, plus an
-  optional Obsidian Local REST API bridge (`rest_client.py`) and `obsidian-cli` wrapper
-  (`cli_client.py`).
+  optional Obsidian Local REST API bridge (`rest_client.py`). The `obsidian-cli` wrapper
+  (`cli_client.py`) is GONE — retired 2026-09-10 — obsidian-cli reaches Obsidian over same-session IPC and vault-mcp is a session-0 service, so it could never work in production; the Gate always used RestNoteIO.
 - **Write side — the Convention Gate** (`gate.py`): the single write chokepoint. Generates
   frontmatter, validates tags against a closed glossary, routes to the schema-resolved directory,
   enforces per-directory write-protection, stamps provenance. Governance is data (an external
@@ -32,7 +32,6 @@ never calls a model.
 | `parsers.py` | Frontmatter + wikilink extraction — canonical parsing home (ported from vault-propagation) |
 | `watcher.py` | `watchdog`-based filesystem watcher; invalidates only the changed file's index entries |
 | `rest_client.py` | `httpx` client for Obsidian's Local REST API; uniform `{"ok": ..., "data"/"error": ...}` envelope, closed error-code vocabulary |
-| `cli_client.py` | Subprocess wrapper around `obsidian-cli`; whitelisted-command allowlist (defense in depth — extending CLI integration means extending this allowlist) |
 | `bases.py` | Obsidian Bases parser/evaluator/writer/validator; restricted AST formula evaluator (Tier 1 property access, Tier 2 `if`/`map`/`join`/string ops); regex timeout 100ms, nesting depth limit 10 |
 | `gate.py` | Convention Gate — see Overview. `GateError` subclasses (`TagError`, `FieldError`, `ProtectionError`, `BodyError`, `LinkError`, `WriteModeError`, `FilenameError`) map 1:1 to `lint.py` `Code` values |
 | `schema.py` | Loads/validates the external governance schema YAML (env var `VAULT_MCP_SCHEMA`); answers "is this tag valid" / "what directory does this @type route to" |
@@ -68,9 +67,6 @@ config-addressed call.
   - Obsidian REST bridge: `rest_health`, `active_note`, `periodic_note`, `unsaved_buffer`,
     `obsidian_search`, `execute_command`, `jsonlogic_search`, `vault_tags`,
     `list_directory`, `open_in_obsidian`, `document_map`
-  - `obsidian-cli` bridge: `obsidian_cli_status`, `obsidian_cli_reload_plugin`,
-    `obsidian_cli_command` (`obsidian_cli_eval` retired 2026-09-10 — three
-    invocations ever, and it ran caller-supplied JavaScript in Obsidian)
   - Bases: `subscribe_base` / `unsubscribe_base` (live updates), `parse_base`, `execute_base`,
     `write_base`, `validate_base_tool`
   - Governed writes (Convention Gate): `write_note`, `delete`, `move_note`, `lint`
@@ -125,7 +121,8 @@ exists for the GitHub mirror but doesn't run here.
   `VAULT_MCP_SCHEMA`, loaded by `schema.py`. Writing tools raise `SchemaConfigError` if the env
   var is unset.
 - **`GEMINI.md` and `CONTRIBUTING.md` are stale (v1-era).** Both describe a 5-6-module
-  architecture (`index/parsers/rest_client/watcher/bases/cli_client`) that predates the entire
+  architecture (`index/parsers/rest_client/watcher/bases/cli_client`, the last of which no
+  longer exists) that predates the entire
   Convention Gate layer (`gate.py`, `schema.py`, `lint.py`, `provenance.py`, `lifecycle*.py`,
   `translator.py`, `compute.py`, `hades_client.py`, `phdb_client.py`). `docs/architecture.md` is
   also v1-only (5 modules). Treat `server.py`'s tool list and `specs/010`/`specs/011` as current
@@ -136,8 +133,7 @@ exists for the GitHub mirror but doesn't run here.
 - **Env var surface** (all `VAULT_MCP_` prefixed, grep `src/vault_mcp/*.py` for the current set):
   `VAULT_MCP_PATH`, `VAULT_MCP_TTL_SECONDS`, `VAULT_MCP_WATCH`, `VAULT_MCP_REST_DISABLE`,
   `VAULT_MCP_REST_URL`, `VAULT_MCP_REST_KEY_PATH`, `VAULT_MCP_REST_KEY`, `VAULT_MCP_SCHEMA`,
-  `VAULT_MCP_TEMPLATES`, `VAULT_MCP_MATERIALIZE_LINT`, `VAULT_MCP_OBSIDIAN_BIN`,
-  `VAULT_MCP_HOST`, `VAULT_MCP_GIT_COMMIT`, `VAULT_MCP_GIT_PUSH`, `VAULT_MCP_GIT_SWEEP_SECONDS`,
+  `VAULT_MCP_TEMPLATES`, `VAULT_MCP_MATERIALIZE_LINT`, `VAULT_MCP_HOST`, `VAULT_MCP_GIT_COMMIT`, `VAULT_MCP_GIT_PUSH`, `VAULT_MCP_GIT_SWEEP_SECONDS`,
   `VAULT_MCP_GIT_AUTHOR_NAME`, `VAULT_MCP_GIT_AUTHOR_EMAIL`. `docs/configuration.md` documents
   only one of these (`VAULT_MCP_LOG_LEVEL`, which doesn't even appear in source) — don't trust it,
   grep source instead.

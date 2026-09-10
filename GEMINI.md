@@ -50,7 +50,6 @@ Quick fixes skip the ceremony and go straight to commit.
 ```
 src/vault_mcp/
 ├── bases.py        # Obsidian Bases parser, evaluator, writer, validator
-├── cli_client.py   # Obsidian CLI (obsidian-cli) wrapper
 ├── index.py        # TTL-cached vault index with link graph
 ├── parsers.py      # YAML frontmatter + wikilink extraction
 ├── rest_client.py  # Centralized HTTP client for Local REST API
@@ -146,10 +145,10 @@ patterns:
    `@pytest.mark.asyncio` silently skip or error without it. Add to
    `[project.optional-dependencies] dev` before writing async tests.
 
-7. **Defense-in-depth allowlist in cli_client.py.** The CLI integration
-   hardcodes an allowed-commands allowlist. Any new Obsidian CLI command must
-   be added to this allowlist or it will be rejected at runtime — even if the
-   spec says it should work.
+7. **~~Defense-in-depth allowlist in cli_client.py.~~** RETIRED 2026-09-10 —
+   the whole obsidian-cli bridge is gone (same-session IPC could not reach a
+   desktop Obsidian from a session-0 service, and the Gate always wrote through
+   `RestNoteIO`). Nothing to extend.
 
 **Cross-cutting pattern**: Test infrastructure gaps surface when features cross
 module boundaries. The first feature that needs async tests, the first that

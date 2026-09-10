@@ -19,15 +19,16 @@ and it catches `(KeyError, OSError)`. Both real implementations raise
 and every `atom_slug: true` write failed in production while the suite stayed
 green (vault-mcp#5258).
 
-WHICH REAL IMPLEMENTATION THIS MODELS. There are two, and they DIVERGE:
+WHICH REAL IMPLEMENTATION THIS MODELS. There is now exactly ONE. `RestNoteIO`
+(rest_client.py) speaks HTTP on loopback, and the single construction of
+`ConventionGate` in the source wires it with no fallback.
 
-  RestNoteIO      (rest_client.py:344) — HTTP on loopback. This is the one
-                  production uses: server.py:2026 is the ONLY construction of
-                  ConventionGate in the source and it wires RestNoteIO, with no
-                  fallback.
-  ObsidianNoteIO  (cli_client.py:253) — same-session CLI IPC. Never constructed
-                  in production; it cannot reach a desktop Obsidian across the
-                  session boundary, which is why the REST one exists.
+The other one is gone. `ObsidianNoteIO` reached Obsidian over same-session CLI
+IPC, could never cross to a desktop instance from a session-0 service — which
+is why the REST one exists at all — and was never constructed anywhere outside
+its own test file. It was retired with the whole obsidian-cli bridge on
+2026-09-10, so the divergence this block used to warn about is closed rather
+than documented.
 
 This double models **RestNoteIO**, because shipping behaviour is what a test
 should be pinned to. The divergence that matters is `create_note`: REST PUTs,
@@ -40,7 +41,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from vault_mcp.cli_client import ObsidianIOError
+from vault_mcp.gate import ObsidianIOError
 
 _TRASH = ".trash"
 

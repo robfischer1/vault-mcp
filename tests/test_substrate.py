@@ -20,7 +20,7 @@ import pytest
 from tests.substrate import FakeVault
 
 NOTE_JSON = "application/vnd.olrapi.note+json"
-from vault_mcp.cli_client import ObsidianIOError
+from vault_mcp.gate import ObsidianIOError
 
 
 class TestPinnedFailureModes:
