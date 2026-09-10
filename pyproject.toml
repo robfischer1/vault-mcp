@@ -66,8 +66,9 @@ dev = [
     # Used here for: the pinned Golden-Fake replay (an un-recorded call RAISES
     # instead of returning a canned success), the hypothesis strategies +
     # invariant library, the fail-loud pytest config, and the three
-    # forge-testkit lints the pre-commit config runs. Lives only on the Forgejo
-    # PyPI, so its source is pinned below.
+    # forge-testkit lints the pre-commit config runs. Lives only on Nexus
+    # pypi-hosted (Forgejo's PyPI retired 2026-09-10, infra#351), so its
+    # source is pinned below.
     "forge-testkit>=1.3.0",
     # FLOOR IS THE GATE'S PIN, not a guess: foundry-tools' python:ruff-check
     # and python:ruff-format atoms both run `uvx ruff@0.16.3`. Held below it
@@ -351,9 +352,10 @@ markers = [
 substrate_pkg = "tests.substrate"
 
 [[tool.uv.index]]
-name = "forgejo"
-url = "https://forgejo.notusmi.com/api/packages/rob/pypi/simple/"
+name = "nexus-hosted"
+url = "https://nexus.notusmi.com/repository/pypi-hosted/simple/"
 
 [tool.uv.sources]
-# forge-testkit is published only to the Forgejo PyPI, so pin its source.
-forge-testkit = { index = "forgejo" }
+# forge-testkit is published only to Nexus pypi-hosted (Forgejo's PyPI
+# retired 2026-09-10, infra#351), so pin its source.
+forge-testkit = { index = "nexus-hosted" }

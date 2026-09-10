@@ -334,14 +334,14 @@ wheels = [
 
 [[package]]
 name = "forge-testkit"
-version = "1.7.1"
-source = { registry = "https://forgejo.notusmi.com/api/packages/rob/pypi/simple/" }
+version = "1.7.3"
+source = { registry = "https://nexus.notusmi.com/repository/pypi-hosted/simple/" }
 dependencies = [
     { name = "hypothesis" },
 ]
-sdist = { url = "https://forgejo.notusmi.com/api/packages/rob/pypi/files/forge-testkit/1.7.1/forge_testkit-1.7.1.tar.gz", hash = "sha256:cbdbbd7f66628004e30f6f7c56c60c7ca747cbe54596c93c46ef23c8071def19" }
+sdist = { url = "https://nexus.notusmi.com/repository/pypi-hosted/packages/forge-testkit/1.7.3/forge_testkit-1.7.3.tar.gz", hash = "sha256:47e4b10aec766f88d571cb66294e21b6d4c5349dedb6d5cd9fc3c29dff4f4a3a", size = 178627, upload-time = "2026-09-10T11:38:46.644Z" }
 wheels = [
-    { url = "https://forgejo.notusmi.com/api/packages/rob/pypi/files/forge-testkit/1.7.1/forge_testkit-1.7.1-py3-none-any.whl", hash = "sha256:869389875910a1b0b9f75d71fec72209b7cb5137d29c6c7e72da8a1277937f4a" },
+    { url = "https://nexus.notusmi.com/repository/pypi-hosted/packages/forge-testkit/1.7.3/forge_testkit-1.7.3-py3-none-any.whl", hash = "sha256:fc9f4d70c7088e54627a3b36dc1a6926ee1cd5638a82a5efe31bbe106b764c7a", size = 55503, upload-time = "2026-09-10T11:38:39.281Z" },
 ]
 
 [[package]]
@@ -1238,7 +1238,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dulwich", specifier = ">=1.2.14" },
-    { name = "forge-testkit", marker = "extra == 'dev'", specifier = ">=1.3.0", index = "https://forgejo.notusmi.com/api/packages/rob/pypi/simple/" },
+    { name = "forge-testkit", marker = "extra == 'dev'", specifier = ">=1.3.0", index = "https://nexus.notusmi.com/repository/pypi-hosted/simple/" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.2,<3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=2.1.0" },
