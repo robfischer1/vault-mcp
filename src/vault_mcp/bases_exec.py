@@ -69,6 +69,15 @@ _PROMOTED_VIEW_KEYS: dict[str, tuple[str, ...]] = {
     "table": (),
 }
 
+# `float(val)` on a frontmatter value: ValueError on a non-numeric string,
+# TypeError on a non-coercible type (a list, a dict). Named rather than an
+# inline `except (ValueError, TypeError):` so the formatter has nothing to
+# renormalize between the fleet's py311 floor and this repo's py314 ceiling —
+# PEP 758 makes the parenthesized and bare spellings interchangeable on 3.14,
+# and ruff format picks one deterministically per target-version, which
+# disagreed with itself across the two configs this repo is linted under.
+_NUMERIC_COERCION_ERRORS = (ValueError, TypeError)
+
 
 def _partition_results(
     notes: list[dict[str, Any]],
@@ -282,7 +291,7 @@ def execute_base(
                     accums[name]["count_with_val"] += 1
                     accums[name]["min"] = min(accums[name]["min"], num)
                     accums[name]["max"] = max(accums[name]["max"], num)
-                except ValueError, TypeError:
+                except _NUMERIC_COERCION_ERRORS:
                     pass
 
     # Finalize summaries

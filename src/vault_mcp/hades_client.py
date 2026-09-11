@@ -74,6 +74,15 @@ _PROTOCOL_VERSION = "2024-11-05"
 _VERB_DISSOLVE_NOTE = "calliope_dissolve_note"
 _VERB_MATERIALIZE_NOTE = "calliope_materialize_note"
 
+# `json.loads` on a tool result: ValueError on malformed JSON, TypeError when
+# the decoded value isn't dict-coercible. Named rather than an inline
+# `except (ValueError, TypeError):` so ruff format has nothing to renormalize
+# between this repo's py314 ceiling and the fleet gate's py311 floor — PEP 758
+# makes the parenthesized and bare spellings interchangeable on 3.14, and the
+# formatter picks one per target-version, which disagreed with itself across
+# the two configs this repo is linted under.
+_JSON_DECODE_ERRORS = (ValueError, TypeError)
+
 
 def _default_transport(
     url: str, headers: dict[str, str], body: dict[str, Any]
@@ -117,7 +126,7 @@ def parse_tool_result(rpc: dict[str, Any]) -> dict[str, Any]:
         return dict(structured)
     try:
         return dict(json.loads(text))
-    except ValueError, TypeError:
+    except _JSON_DECODE_ERRORS:
         return {"ok": False, "error": f"unparseable tool result: {text[:200]}"}
 
 

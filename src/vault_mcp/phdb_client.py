@@ -209,6 +209,17 @@ def emit_atom(
 # module's docstring already described `server._phdb_post` as the adapter this
 # layer wires — it simply lived in the wrong file.
 # ---------------------------------------------------------------------------
+
+# `resp.json().get(...)` on an error body: ValueError on non-JSON text,
+# KeyError/AttributeError when the decoded value isn't a dict. Named rather
+# than an inline `except (A, B, C):` so ruff format has nothing to
+# renormalize between this repo's py314 ceiling and the fleet gate's py311
+# floor — PEP 758 makes the parenthesized and bare spellings interchangeable
+# on 3.14, and the formatter picks one per target-version, which disagreed
+# with itself across the two configs this repo is linted under.
+_ERROR_BODY_PARSE_ERRORS = (ValueError, KeyError, AttributeError)
+
+
 def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     """POST a typed-write/declare payload to phdb's HTTP route; structured result.
 
@@ -257,7 +268,7 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     if resp.status_code != 200:
         try:
             detail = resp.json().get("error", resp.text)
-        except ValueError, KeyError, AttributeError:
+        except _ERROR_BODY_PARSE_ERRORS:
             detail = resp.text
         return {"ok": False, "error": f"phdb HTTP {resp.status_code}: {detail}"}
     # Narrowed rather than returned raw: `resp.json()` is Any, and this was

@@ -30,6 +30,16 @@ from vault_mcp.schema import RouteError
 # when it can SEE that `log` is a logger, which an imported one hides.
 log = logging.getLogger(__name__)
 
+# A note that vanished (KeyError from a fake IO's dict), went missing on disk
+# (OSError), or fails the Gate's own read contract (ObsidianIOError) is a scan
+# skip, not an audit failure. Named rather than an inline `except (A, B, C):`
+# so ruff format has nothing to renormalize between this repo's py314 ceiling
+# and the fleet gate's py311 floor — PEP 758 makes the parenthesized and bare
+# spellings interchangeable on 3.14, and the formatter picks one per
+# target-version, which disagreed with itself across the two configs this
+# repo is linted under.
+_NOTE_READ_ERRORS = (KeyError, OSError, ObsidianIOError)
+
 if TYPE_CHECKING:
     from vault_mcp.gate import ConventionGate
 
@@ -70,7 +80,7 @@ class GateAuditor:
         for note_path in paths:
             try:
                 fm, body = _split_note(self._gate._io.read_note(note_path))
-            except KeyError, OSError, ObsidianIOError:
+            except _NOTE_READ_ERRORS:
                 continue
             note_dir = note_path.rsplit("/", 1)[0] if "/" in note_path else ""
             filename = note_path.rsplit("/", 1)[-1].removesuffix(".md")

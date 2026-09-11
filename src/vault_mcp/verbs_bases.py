@@ -8,19 +8,25 @@ Split out of server.py under vault-mcp#5294. A REGISTRATION MODULE: server.py
 imports it at its foot for the side effect of these six `@mcp.tool()` calls, not
 for a name.
 
-`Context` IS IMPORTED AT RUNTIME, DELIBERATELY. FastMCP evaluates a verb's type
-annotations when it registers it, so a TYPE_CHECKING-only import of a name used
-in a signature raises InvalidSignature at import — which is exactly what
-`subscribe_base(ctx: Context[Any, Any] | None = None)` did on the first attempt
-at this split. It fails loudly rather than silently dropping the verb, but only
-because the annotation is reachable; `from __future__ import annotations` makes
-every OTHER annotation lazy, which is why nothing else here needed the same
-treatment.
+`Context` IS IMPORTED AT RUNTIME, DELIBERATELY. FastMCP's `Tool.from_function`
+resolves every verb's signature with `inspect.signature(fn, eval_str=True)`
+(``func_metadata.py``) to build the tool's arg model — an EAGER read that
+overrides whatever laziness the interpreter or `from __future__ import
+annotations` would otherwise give the annotation, on every Python version
+this repo has targeted. A TYPE_CHECKING-only import of `Context` raises
+NameError there, re-raised as `InvalidSignature` — which is exactly what
+`subscribe_base(ctx: Context[Any, Any] | None = None)` did on the first
+attempt at this split. `isinstance(ctx, Context)` below, rather than a bare
+`if ctx:`, gives `Context` a real body-level read: not narration for a
+linter, since it is also the more precise guard (`if ctx:` merely trusts the
+framework never to hand back a falsy-but-present object) — but it is also
+what keeps ruff's flake8-type-checking rule from proposing the move in the
+first place, on any target-version, without a repo-side config carve-out.
 
-`subscribe_base` is also the one verb with live state — it registers the caller
-on the SubscriptionManager and stamps `server._active_sessions` — so it reaches back
-into server.py for both. That coupling is why the accessors stayed there rather
-than moving with the verbs.
+`subscribe_base` is also the one verb with live state — it registers the
+caller on the SubscriptionManager and stamps `server._active_sessions` — so
+it reaches back into server.py for both. That coupling is why the accessors
+stayed there rather than moving with the verbs.
 """
 
 from __future__ import annotations
@@ -120,7 +126,7 @@ async def subscribe_base(
             "available": len(pf.bases),
         }
 
-    if ctx:
+    if isinstance(ctx, Context):
         server._active_sessions.add(ctx.session)
 
     mgr = server._get_sub_manager()

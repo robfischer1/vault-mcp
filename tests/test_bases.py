@@ -906,9 +906,10 @@ class TestSummaries:
         """A numeric summary over un-coercible values skips them and survives.
 
         THE MUTATION GATE FOUND THIS GAP. The accumulator wraps `float(val)` in
-        `except ValueError, TypeError`, and cosmic-ray replaced `ValueError`
-        with a dummy exception on a diff-scoped run — no test noticed, so that
-        arm was never exercised. Both arms are distinct in practice:
+        `except _NUMERIC_COERCION_ERRORS` (ValueError, TypeError), and
+        cosmic-ray replaced `ValueError` with a dummy exception on a
+        diff-scoped run — no test noticed, so that arm was never exercised.
+        Both arms are distinct in practice:
 
             float("not a number")  -> ValueError   (a non-numeric STRING)
             float([1, 2])          -> TypeError    (a non-coercible TYPE)
