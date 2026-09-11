@@ -49,6 +49,16 @@ from vault_mcp.provenance import (
 # when it can SEE that `log` is a logger, which an imported one hides.
 log = logging.getLogger(__name__)
 
+# A note that vanished (KeyError from a fake IO's dict), went missing on disk
+# (OSError), or fails the Gate's own read contract (ObsidianIOError) means
+# "not found" for both a link-resolution probe and a filename-collision scan.
+# Named rather than an inline `except (A, B, C):` so ruff format has nothing
+# to renormalize between this repo's py314 ceiling and the fleet gate's py311
+# floor — PEP 758 makes the parenthesized and bare spellings interchangeable
+# on 3.14, and the formatter picks one per target-version, which disagreed
+# with itself across the two configs this repo is linted under.
+_NOTE_READ_ERRORS = (KeyError, OSError, ObsidianIOError)
+
 if TYPE_CHECKING:
     from vault_mcp.gate import ConventionGate
 
@@ -75,7 +85,7 @@ class GateWriter:
         """Link-resolution predicate for the linter, backed by the injected IO."""
         try:
             self._gate._io.read_note(target)
-        except KeyError, OSError, ObsidianIOError:
+        except _NOTE_READ_ERRORS:
             return False
         return True
 
@@ -97,7 +107,7 @@ class GateWriter:
             candidate = f"{base}.{seq}"
             try:
                 self._gate._io.read_note(f"{directory}/{candidate}.md")
-            except KeyError, OSError, ObsidianIOError:
+            except _NOTE_READ_ERRORS:
                 return candidate
             seq += 1
 

@@ -59,6 +59,16 @@ if TYPE_CHECKING:
 #: The vault directory holding master-plans — the sweep's default scope.
 DEFAULT_PLAN_DIRECTORY = "System/Pantheon/WBS"
 
+# `Path.stat()`: OSError on a missing/unreadable path, ValueError on a path
+# malformed enough that stat rejects it before touching the filesystem. Named
+# rather than an inline `except (OSError, ValueError):` so ruff format has
+# nothing to renormalize between this repo's py314 ceiling and the fleet
+# gate's py311 floor — PEP 758 makes the parenthesized and bare spellings
+# interchangeable on 3.14, and the formatter picks one per target-version,
+# which disagreed with itself across the two configs this repo is linted
+# under.
+_STAT_ERRORS = (OSError, ValueError)
+
 
 class PlanDriftState(StrEnum):
     """The closed set of per-plan outcomes (FR-008)."""
@@ -95,7 +105,7 @@ def file_mtime_iso(path: str | Path) -> str | None:
         return None
     try:
         ts = Path(path).stat().st_mtime
-    except OSError, ValueError:
+    except _STAT_ERRORS:
         return None
     return (
         datetime.fromtimestamp(ts, tz=UTC)
