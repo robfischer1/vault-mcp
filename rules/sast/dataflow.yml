@@ -1,0 +1,146 @@
+# Curated SAST ruleset for the Forge star fleet (#1471) - opengrep / semgrep.
+#
+# TAINT mode only, by design. Deliberately scoped to data-FLOW issues that ruff's
+# `S` (flake8-bandit) ruleset cannot express: ruff S flags the *presence* of a
+# dangerous sink (e.g. subprocess shell=True, S310 urllib); these rules fire only
+# when an untrusted SOURCE actually *reaches* that sink. Non-overlapping with
+# ruff S by construction - this is the semantic layer, ruff S is the AST layer.
+#
+# Sources are external/untrusted inputs (HTTP request data, argv, stdin), NOT
+# os.environ / config values, to avoid config-flow false positives. sys.argv is a
+# source in three of the four rules and deliberately NOT in path-traversal - see
+# the note there. Vendored + pinned (no registry / `auto`); that local, offline
+# posture is why we run opengrep. ASCII-only on purpose: opengrep reads rule
+# files under the runner's C locale, which chokes on non-ASCII punctuation.
+#
+# SEED set: the SCOPING (local, curated, taint-mode, non-overlap) is settled;
+# the rule *content* grows as real flows surface across the fleet. Runs
+# INFORMATIONAL in CI until tuned, then the workflow drops `continue-on-error`.
+rules:
+  - id: forge-taint-ssrf
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Untrusted input flows into an outbound HTTP/URL call (SSRF). An attacker
+      could coerce the request toward internal services or file:// targets.
+      Validate against an allowlist before the call.
+    metadata:
+      category: security
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    pattern-sources:
+      - pattern-either:
+          - pattern: request.query_params
+          - pattern: request.path_params
+          - pattern: request.headers
+          - pattern: (await request.json())
+          - pattern: sys.argv
+          - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: urllib.request.urlopen(...)
+              - pattern: urllib.request.Request(...)
+              - pattern: requests.$M(...)
+              - pattern: httpx.$M(...)
+
+  - id: forge-taint-sql-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Untrusted input flows into a SQL execution sink. Use bound parameters
+      (SQLAlchemy text() with :params, or the driver paramstyle); never string
+      interpolation or concatenation into SQL.
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+    pattern-sources:
+      - pattern-either:
+          - pattern: request.query_params
+          - pattern: request.path_params
+          - pattern: (await request.json())
+          - pattern: sys.argv
+          - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sqlalchemy.text(...)
+              - pattern: $X.execute(...)
+              - pattern: $CONN.exec_driver_sql(...)
+
+  - id: forge-taint-command-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >
+      Untrusted input flows into an OS command sink. Avoid shell=True; pass an
+      argv list and validate inputs against an allowlist.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+    pattern-sources:
+      - pattern-either:
+          - pattern: request.query_params
+          - pattern: request.path_params
+          - pattern: (await request.json())
+          - pattern: sys.argv
+          - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: os.system(...)
+              - pattern: os.popen(...)
+              - pattern: subprocess.run(...)
+              - pattern: subprocess.call(...)
+              - pattern: subprocess.Popen(...)
+
+  - id: forge-taint-path-traversal
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: >
+      Untrusted input flows into a filesystem path. An attacker could traverse
+      with '../' to read or write arbitrary files. Resolve the path and confine
+      it to an intended base directory.
+    metadata:
+      category: security
+      cwe: "CWE-22: Path Traversal"
+    pattern-sources:
+      # sys.argv is NOT a source HERE, deliberately. Path traversal is a
+      # CONFUSED-DEPUTY bug: it needs an authority gap, where the process reaches
+      # files the input's supplier cannot, so `../` buys the supplier something.
+      # An HTTP client -> open() has that gap. argv does not - whoever sets argv
+      # already runs the process at its own privilege, so `tool /etc/passwd` is
+      # `cat` with extra steps.
+      # Measured 2026-08-19 across every Python/Go/Rust star (1213 files):
+      # argv-as-source fired TWICE fleet-wide and was wrong both times, both in
+      # dev-only CLI tooling reading the file it was handed - THIS rule on
+      # vault-mcp benchmarks/benchmark_live.py:248 (`Path(sys.argv[1])`, a
+      # benchmark that takes a vault path on the command line), and its Rust twin
+      # on cerberus examples/bb2_replay.rs:30. Zero true positives.
+      # `input(...)` STAYS: piped stdin is not always the operator, and it has
+      # never produced a finding either way - removing it would be a change with
+      # no evidence behind it.
+      # argv also STAYS a source in the SSRF / SQLi / command-injection rules
+      # above - but NOT because it is clean there, and the difference is worth
+      # stating. Pointed at cerberus/probes/ (a Rust star, so its 29 .py are not
+      # scanned by this lane today) command-injection fires 5/5 on the identical
+      # shape: sys.argv -> subprocess.Popen in dev probe drivers, every one an
+      # operator naming the binary they are already able to run. The confused-
+      # deputy argument applies there verbatim. It is left alone HERE only
+      # because it is a separate change on a rule whose evidence comes from a
+      # tree this lane does not cover - foundry-stocks#4585, not this commit.
+      # foundry-stocks#4582.
+      - pattern-either:
+          - pattern: request.query_params
+          - pattern: request.path_params
+          - pattern: (await request.json())
+          - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open(...)
+              - pattern: pathlib.Path(...)
+              - pattern: os.open(...)
+              - pattern: os.remove(...)

@@ -16,6 +16,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+<<<<<<< before updating
     "mcp[cli]>=2.2,<3",
     "watchdog>=6.0.0",
     "httpx>=0.27",
@@ -44,6 +45,13 @@ dependencies = [
     # Python — so all three are answered by the same change rather than
     # excused. Floor is the version this was written and measured against.
     "dulwich>=1.2.14",
+=======
+    "pydantic-settings>=2.0",
+    # Pinned to a minor: mcp's transport-security defaults (DNS-rebinding) shift
+    # across minors, and an unpinned floor let stars stamped days apart resolve
+    # different versions. Renovate bumps this; server.py configures allowed_hosts.
+    "mcp[cli]~=1.28.1",
+>>>>>>> after updating
 ]
 
 [project.urls]
@@ -86,9 +94,59 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+<<<<<<< before updating
 [tool.ruff]
 target-version = "py314"
+=======
+[tool.hatch.build.targets.wheel]
+packages = ["src/vault_mcp"]
+
+# Lint / type / test baseline — the canonical Forge policy
+# (furnace code-standards block).
+#
+# `target-version` is DELIBERATELY UNSET, so ruff infers it from
+# `project.requires-python` above. It used to be the literal `py312` while
+# requires-python said `>=3.14`, .python-version said 3.14 and mypy said 3.14 —
+# a fourth writer of the same fact, and the only one that had gone stale. It
+# silently held the whole python fleet's lint at 3.12: MEASURED 2026-08-22,
+# 21 of 24 python repos resolved to 3.12, and the two that had been corrected
+# to py314 by hand (athena, themis) were walked back to py312 by an ordinary
+# `copier update` — pyproject is a 3-way merge seam, so the template's stale
+# literal overwrote the star's correct one, and the manifest guard did not see
+# it because it projects `[project]` and `dependency-groups` only, never
+# `[tool.*]`.
+#
+# VERIFIED by execution, not by reading a doc — ruff 0.16.0 `--show-settings`
+# against a fixture with requires-python `>=3.14`:
+#   target-version absent -> linter/formatter unresolved_target_version = 3.14
+#   target-version py312  -> 3.12 (the literal wins; this was the fleet's state)
+# Leaving it unset removes the second writer instead of resynchronising it, so
+# raising requires-python is now the ONE edit that moves the lint floor.
+[tool.ruff]
+>>>>>>> after updating
 line-length = 80
+
+
+# PYDANTIC EVALUATES ANNOTATIONS AT RUNTIME, and ruff cannot know that on its
+# own. Without this, TC001/TC002/TC003 see a name used only in an annotation and
+# offer to move the import under `if TYPE_CHECKING:` — on a pydantic model that
+# fix is a BUG, because the model is built from the annotation at import time.
+#
+# MEASURED 2026-08-22 by taking ruff's own fix on two stars: clio went from 190
+# passing to 18 errors ("HistoryIngestEvent is not fully defined; you should
+# define `datetime`"), and in thalassa `SessionTurnEvent.model_rebuild()` began
+# raising PydanticUndefinedAnnotation. Every star stamped here answers
+# `mcp: true` and ships pydantic models, so the exposure is the whole fleet.
+#
+# Naming the runtime-evaluated bases tells ruff WHEN the annotation is read, so
+# it stops reporting those imports at all. That is a correction to the tool's
+# model of the code, not a suppression of a finding — the rule still fires
+# everywhere the annotation really is type-only.
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+]
 
 [tool.ruff.lint]
 # Opt-out model: enable everything, disable the noise (the canonical policy —
@@ -141,7 +199,10 @@ ignore = [
 runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
 
 [tool.ruff.lint.per-file-ignores]
+<<<<<<< before updating
 # Tests assert freely, use subprocess/temp dirs, late imports, no docs/packaging
+=======
+>>>>>>> after updating
 # EXACTLY the rules foundry-stocks' stop-justifications gate ratifies for a test
 # glob: NOT_A_PACKAGE | TEST_ERGONOMICS, in ci/lib/stop_justifications.py.
 # Ratified by Rob 2026-08-21 (foundry-stocks#596, 61bab337); before that the tier
@@ -166,6 +227,7 @@ runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
 # every star this template touches loses the ability to commit. Widen the gate
 # first, with Rob's signoff — never widen this line to route around it.
 "tests/**" = ["S101", "ANN", "D", "E402", "PLW1510", "INP001"]
+<<<<<<< before updating
 # Benchmarks are throwaway scripts
 # INP001 ALONE, which is the gate's ratified idiom: an entry naming only
 # INP001 declares that a directory is not an importable package — a fact about
@@ -198,6 +260,8 @@ runtime-evaluated-decorators = ["vault_mcp.server.mcp.tool"]
 # designed away yet. Both of these had a comment explaining why they were
 # necessary. Both comments were wrong.
 
+=======
+>>>>>>> after updating
 
 # CPY001 (ruff 0.16 promoted flake8-copyright out of preview, and `select =
 # ["ALL"]` adopts a new rule the moment it lands — which is what turned 91
@@ -351,11 +415,31 @@ markers = [
 # dict, three of them missing methods the NoteIO protocol declares.
 substrate_pkg = "tests.substrate"
 
+<<<<<<< before updating
+=======
+# The stellar_core SDK lives on the fleet's own PyPI — Nexus `pypi-hosted`
+# since 2026-09-10 (infra#351); it was Forgejo's, which is being sunset. The
+# base image bakes the SDK in, so the Docker build resolves it offline; this
+# index is for local dev + lock gen.
+#
+# NOT `pypi-group`, deliberately. Nexus also carries a group merging
+# pypi-hosted with the pypi.org proxy, and a merged index would reintroduce the
+# exact failure the pin below exists to prevent — a public version of one of our
+# names outranking ours. The hosted repo is exactly the set of our own names.
+>>>>>>> after updating
 [[tool.uv.index]]
 name = "nexus-hosted"
 url = "https://nexus.notusmi.com/repository/pypi-hosted/simple/"
 
 [tool.uv.sources]
+<<<<<<< before updating
 # forge-testkit is published only to Nexus pypi-hosted (Forgejo's PyPI
 # retired 2026-09-10, infra#351), so pin its source.
+=======
+stellar-core = { index = "nexus-hosted" }
+# forge-testkit is published to the fleet's own PyPI only. Without this pin uv falls
+# through to the default index, where the name is unclaimed — the same class of
+# failure that resolved internal `pontus` to a public Flask/S3 package of the
+# same name. Index pins are per-project and are NOT inherited from a dependency.
+>>>>>>> after updating
 forge-testkit = { index = "nexus-hosted" }
