@@ -1,3 +1,4 @@
+<<<<<<< before updating
 # Pre-commit hooks: lint (ruff), secret scan (detect-secrets), basic hygiene.
 # Runs on STAGED files at commit time. Install once: `pre-commit install`.
 # Full manual sweep: `pre-commit run --all-files`.  Bypass once: `git commit --no-verify`.
@@ -11,20 +12,75 @@ repos:
   # lies about what will land.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.3
+=======
+# Pre-commit hooks — the LOCAL half of the CI gate, so local and CI cannot drift.
+# pre-commit stage: fast lint/hygiene (ruff, ruff-format, detect-secrets) + the
+# forge-testkit test-body checks. pre-PUSH stage: the heavy checks the reusable
+# python ci.yml runs (mypy, pyright, pytest, pip-audit, opengrep) — kept off
+# `pre-commit` so commits stay fast, but run before a push reaches the door/CI.
+# CI (the baked image) is the hard enforce; a dev box missing a non-project tool
+# (opengrep) gets a notice, not a block.
+#
+# Install (copier _tasks does this on scaffold): `uv run pre-commit install`.
+# default_install_hook_types wires pre-commit + post-commit in that one call
+# (pre-push is the CA gate's file; see the note above that key). The
+# .secrets.baseline is generated on first scaffold via `detect-secrets scan`.
+#
+# furnace owns .claude/ .specify/ .furnace/ (deployed by `furnace stoke`/`quench`).
+# Exclude that managed surface from every hook: hygiene fixers would mangle the
+# deployed content into drift, and detect-secrets trips on the manifest's hashes.
+# NO pre-push HERE, DELIBERATELY (Continuous Accountability F4). `.git/hooks/
+# pre-push` belongs to the CA gate now: it is written from the declared
+# foundry-tools pin by foundry-stocks' copier task, and it CHAINS this file's
+# pre-push stage itself (`pre-commit hook-impl --hook-type=pre-push`, the same
+# flags and argv and stdin pre-commit's own generated hook uses) before it dials
+# the engine — so not one check below is lost, and a red one still reds the push
+# without paying for an engine round trip. Listing pre-push here would only make
+# `pre-commit install` overwrite the gate with its own hook. The `stages:
+# [pre-push]` markers below are UNTOUCHED and still authoritative: that key
+# decides which hooks the pre-push stage runs, `default_install_hook_types`
+# decides only which hook FILES `install` writes.
+default_install_hook_types: [pre-commit, post-commit]
+exclude: '^\.(claude|specify|furnace)/|(^|/)(vendor|node_modules)/|\.melt$'
+repos:
+# HOOK REPOS COME FROM OUR MIRROR, not github. pre-commit CLONES each `repo:`,
+# and until 2026-08-22 every gate run in the fleet fetched these from github.com
+# on each cold pre-commit cache — 53 repos pinning pre-commit-hooks, 47 ruff, 41
+# detect-secrets. A cold-cache github fetch is what reddened a cerberus gate with
+# "Executable `detect-secrets-hook` not found" while the env was still building.
+#
+# NEXUS CANNOT SERVE THIS. It is the fleet's package edge and gate.yml routes pip
+# and uv through its pypi proxy, but Nexus 3.94.1 has no git format — the
+# `gitlfs` one is LFS objects, not clones, and a raw proxy 404s the
+# git-upload-pack handshake. Forgejo pull-mirrors are the only mechanism that
+# serves a clone (rob/infra#1811, `hooks` org, 24h interval, prune on).
+#
+# RENOVATE STILL BUMPS THESE. Its pre-commit manager supports the `forgejo-tags`
+# datasource and it already runs against this Forgejo as its platform. Reading
+# revs from the mirror also means it can never propose a tag the mirror has not
+# synced yet — the pin and the source cannot drift apart.
+  - repo: https://forgejo.notusmi.com/hooks/ruff-pre-commit
+    rev: v0.16.0
+>>>>>>> after updating
     hooks:
       - id: ruff            # lint (uses [tool.ruff] in pyproject)
         stages: [pre-commit]
         args: [--fix]
       - id: ruff-format     # format enforcement — the gate is a thing reality checks
         stages: [pre-commit]
-  - repo: https://github.com/Yelp/detect-secrets
+  - repo: https://forgejo.notusmi.com/hooks/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
         stages: [pre-commit]
         args: ['--baseline', '.secrets.baseline']
         exclude: ^tests/fixtures/
+<<<<<<< before updating
   - repo: https://github.com/pre-commit/pre-commit-hooks
+=======
+        stages: [pre-commit]
+  - repo: https://forgejo.notusmi.com/hooks/pre-commit-hooks
+>>>>>>> after updating
     rev: v6.0.0
     hooks:
       # trailing-whitespace REMOVED 2026-08-16, end-of-file-fixer REMOVED
@@ -53,24 +109,319 @@ repos:
   # `--extra dev` guarantees the extra is synced first so the hook works on a
   # fresh checkout. This is the same wiring athena, chaos and terpsichore use.
   #
+<<<<<<< before updating
   # schema-budget is deliberately NOT wired here. It is the third lint and it
   # applies squarely to this repo — vault-mcp registers a large MCP verb surface
   # and every verb's description ships in the tool manifest on every session's
   # first turn — but turning it on is a separate, measurable change to a live
   # cost, not a side effect of a test-suite rewrite. Left for its own landing.
+=======
+  # CI-parity gate: language: system + `uv run` so it uses the project's synced env —
+  # the same interpreter+deps CI uses (uv sync --all-extras), so a green pre-push
+  # means a green CI. Type/test tools are project dev-deps (always present via uv
+  # run); opengrep is a system binary, so it degrades to a notice when absent.
+  #
+  # EVERY `uv run` BELOW IS --frozen, and that is not decoration. A bare
+  # `uv run` performs an implicit lock-and-sync: it RESOLVES, against whatever
+  # index the invoking shell has, and REWRITES uv.lock in place. A hook that
+  # exists to check the tree must never redefine it.
+  #
+  # MEASURED on narcissus 2026-09-08, nothing else running:
+  #
+  #     UV_INDEX_URL=<nexus> uv lock          -> 817 nexus refs in uv.lock
+  #     uv run --all-extras python -c "pass"  -> 0 nexus refs, 106 upstream
+  #
+  # One `uv run` doing nothing reverted a whole lockfile to upstream PyPI,
+  # because a dev shell sets no UV_INDEX_URL. It surfaced as pip-audit
+  # REFUSING a push with "files were modified by this hook" while reporting no
+  # vulnerabilities — the file it modified was uv.lock. That makes the hooks a
+  # fourth lock-writing surface after Renovate, workstations and CI, and the
+  # only one that fires on every push (python-repo-template#7413; it blocked
+  # the Nexus migration, foundry-stocks#7311).
+  #
+  # --frozen, NOT --locked, AND THE REASON IS THE WHOLE POINT OF THIS SEAM.
+  # --locked was written here first, on the argument that these hooks claim CI
+  # parity, CI runs `uv sync --locked`, and a hook that passes where CI fails
+  # is a false green. That argument is sound and the flag is still wrong,
+  # because --locked does not mean the same thing on both sides of the index
+  # seam: it re-resolves to decide whether the lock is current, so its answer
+  # depends on the caller's index. CI has one set; a dev shell does not.
+  #
+  # MEASURED, same worktree, against a Nexus-resolved lock:
+  #
+  #     uv run --locked --all-extras python -c "pass"   rc=2, "the lockfile
+  #                                                     needs to be updated"
+  #     uv run --frozen --all-extras python -c "pass"   rc=0, lock untouched
+  #
+  # So --locked would hard-block every push on a migrated star for anyone whose
+  # shell does not export UV_INDEX_URL — trading a silent rewrite for a
+  # universal wall. --frozen uses the lock exactly as committed: it cannot
+  # rewrite and cannot block. Freshness is CI's assertion to make, where the
+  # index is known; --locked here becomes safe only once every dev environment
+  # sets the index, which is the other half of #7413.
+>>>>>>> after updating
   - repo: local
     hooks:
       - id: forge-testkit-assertion-free
         name: assertion-free test bodies (forge-testkit)
-        entry: uv run --extra dev forge-testkit-lint assertion-free
+        entry: uv run --frozen --extra dev forge-testkit-lint assertion-free
         language: system
         files: ^tests/.*\.py$
         types: [python]
         stages: [pre-commit]
       - id: forge-testkit-fake-placement
         name: FakeX placement (forge-testkit)
-        entry: uv run --extra dev forge-testkit-lint fake-placement
+        entry: uv run --frozen --extra dev forge-testkit-lint fake-placement
         language: system
         files: \.py$
         types: [python]
         stages: [pre-commit]
+<<<<<<< before updating
+=======
+      # F13 — the per-verb MCP schema budget. Every registered verb's wire
+      # description is a fleet-wide cost: it ships in the tool manifest on every
+      # session's first turn, whether or not the verb is ever called. The check
+      # has a FLOOR as well as a ceiling, because a ceiling alone rewards
+      # deleting the docstring — measured, that left the suite green while
+      # inverting the feature. Exemption (`[tool.forge_testkit_lint]
+      # schema_budget_exempt`) is permission to be long, never to be absent.
+      #
+      # Unconditional, not `{% if mcp %}`: this file is copied verbatim (copier's
+      # _templates_suffix leaves it unrendered), and on a non-MCP repo the check
+      # finds no registered verbs and passes. Nothing to gate.
+      - id: forge-testkit-schema-budget
+        name: MCP verb schema budget (forge-testkit)
+        entry: uv run --frozen --extra dev forge-testkit-lint schema-budget
+        language: system
+        files: ^src/.*\.py$
+        types: [python]
+        stages: [pre-commit]
+      # --all-extras ON ALL THREE, and it is what makes the name true. These
+      # hooks say "CI parity"; the image installs the project's extras
+      # (`uv sync --locked --no-dev --extra pg --extra kafka`) and these hooks
+      # did not, so a lazily-imported optional dependency was unresolvable to
+      # mypy and pyright locally while CI resolved it fine. Measured 2026-08-22:
+      # 19 repos, every one of them, because this file pours it — nyx failed
+      # `uv run mypy src tests` with 1 error and passed `--all-extras` with 0.
+      #
+      # `--all-extras` rather than naming them: extras are per-repo (kafka, pg,
+      # mtls, claims, classes, http, testing across the fleet) and this template
+      # cannot know which a consumer declares. For a type check, installing more
+      # than the image only ever improves resolution.
+      #
+      # The alternative — an ignore_missing_imports override — silences mypy
+      # only, leaves pyright's reportMissingImports failing, and suppresses a
+      # checker that was correctly reporting a real gap in its own environment.
+      - id: mypy
+        name: mypy (CI parity — pre-push)
+        entry: uv run --frozen --all-extras mypy src tests
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        types: [python]
+      - id: pyright
+        name: pyright (CI parity — pre-push)
+        entry: uv run --frozen --all-extras pyright
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        types: [python]
+      - id: pytest
+        name: pytest (CI parity — pre-push)
+        entry: uv run --frozen --all-extras pytest -q
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        types: [python]
+      - id: pip-audit
+        name: pip-audit dependency vuln scan (CI parity — pre-push)
+        entry: uv run --frozen --with pip-audit pip-audit
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+      - id: sast-ruleset-lanes
+        name: SAST ruleset declares every lane this repo builds (pre-push)
+        # THE COMPANION TO THE ZERO-FILE REFUSAL BELOW, and it exists because that
+        # refusal has one blind spot it structurally cannot close.
+        #
+        # The refusal fires on `Ran N rules on 0 files`. It catches a repo whose
+        # ruleset matches NOTHING. It cannot catch a repo whose ruleset matches
+        # SOMETHING and misses the rest — and that is the worse case, because a
+        # non-zero file count reads as a real scan at every layer that looks.
+        # foundry-stocks#4949 measured it: chaos scanned 28 of 2636 tracked files
+        # and themis 26 of 2221, both exit 0, both green, with 74 and 44
+        # first-party Go files that had never been examined by SAST.
+        #
+        # WHY A LANE CHECK RATHER THAN A FILE-COUNT THRESHOLD. "Ruleset languages
+        # intersect actual file types" is the obvious test and it is too weak:
+        # chaos's ruleset DID intersect its lanes (it has .py and declared python)
+        # while its compiled half went unread. Any count threshold is also
+        # arbitrary and would fire on incidental python — the hook scripts and
+        # fixture generators every Go star carries. So the predicate is
+        # STRUCTURAL instead: a go.mod means Go is a lane this repo builds, a
+        # pyproject.toml means Python is, and a lane a repo builds is a lane its
+        # security gate must name. That is a fact about the tree, not a heuristic.
+        #
+        # WHY IT HAS TO LIVE HERE. `rules/**` is `_skip_if_exists`, so a fixed
+        # template ruleset can never reach a star that already has one — that is
+        # what made #4415 undrainable and #4949 recur inside a day when chaos and
+        # themis moved onto the Go template carrying their python rulesets.
+        # `.pre-commit-config.yaml` is the mirror image: copier OWNS it, create
+        # AND update, so a hook added here reaches every existing star on its next
+        # update. It is the one surface that can close this class.
+        #
+        # Inline and dependency-free, for the same reason the opengrep hook below
+        # is: stars on the per-family gates do not provision foundry-stocks, and
+        # adding that coupling would break them.
+        #
+        # Verified before landing, across all 45 cloned repos carrying a
+        # rules/sast: 43 pass, and the only two failures are cerberus and tron —
+        # a stale python ruleset with NO opengrep hook to read it, which #4949 set
+        # aside deliberately as an inert dead file rather than a security gap.
+        # Negative control: a tree with go.mod and a python-only ruleset exits 2;
+        # correcting the ruleset to [go] exits 0.
+        entry: >-
+          bash -c 'test -d rules/sast || exit 0;
+          decl=$(cat rules/sast/*.yml 2>/dev/null | grep -vE "^[[:space:]]*#" | grep -oE "languages:[[:space:]]*\[[^]]*\]" | sed -E "s/.*\[//;s/\]//" | tr "," "\n" | sed -E "s/[^a-z]//g" | grep -vE "^$" | sort -u);
+          missing="";
+          for pair in go.mod:go Cargo.toml:rust pyproject.toml:python; do
+          f=${pair%%:*}; lang=${pair##*:};
+          test -f "$f" || continue;
+          printf "%s\n" "$decl" | grep -qx "$lang" || missing="$missing $lang($f)";
+          done;
+          if test -f package.json; then
+          printf "%s\n" "$decl" | grep -qxE "typescript|javascript" || missing="$missing typescript-or-javascript(package.json)";
+          fi;
+          test -z "$missing" && exit 0;
+          echo "sast-ruleset-lanes: rules/sast declares [$(printf "%s" "$decl" | tr "\n" " ")] but this repo also builds:$missing" >&2;
+          echo "A ruleset that never names a lane never examines it, and opengrep still exits 0 whenever some OTHER language matched - the partial-scan case the zero-file refusal cannot see (foundry-stocks#4949)." >&2;
+          exit 2'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+      - id: opengrep-sast
+        name: opengrep SAST (CI parity - pre-push; notice if absent)
+        # REFUSES A ZERO-FILE SCAN. `Ran N rules on 0 files: 0 findings` exits 0 and
+        # renders as Passed, which is indistinguishable from a clean scan. That is not
+        # hypothetical: go-repo-template and rust-repo-template shipped the PYTHON
+        # ruleset verbatim, so EVERY Go and Rust star ran a security gate that had
+        # never examined a single file, and reported success every time
+        # (foundry-stocks#4415). cerberus was worse - 29 .py and 37 .rs, so the count
+        # looked plausible while the whole Rust surface went unscanned.
+        #
+        # Fixing the two rulesets fixes the instances. This fixes the CLASS: any future
+        # languages/file-type mismatch is now loud on the first run instead of silent
+        # forever. Same principle as the CANNOT-RUN branch below - a check that cannot
+        # see anything must not answer "fine".
+        #
+        # Inline rather than a foundry-stocks script, deliberately: the opengrep hook
+        # has no FOUNDRY_STOCKS dependency today, and stars still on the per-family
+        # gates do not provision foundry-stocks on the go/rust/frontend lanes. Adding
+        # that coupling mid-migration would break them.
+        entry: >-
+          bash -c 'command -v opengrep >/dev/null 2>&1 ||
+          { echo "opengrep: CANNOT RUN - not installed (https://github.com/opengrep/opengrep). It is baked into every CI image, so this is a local gap only. Refusing to report success without scanning." >&2; exit 2; };
+          export LANG=C.UTF-8 LC_ALL=C.UTF-8;
+          out=$(opengrep scan --config rules/sast --error . 2>&1); rc=$?;
+          printf "%s\n" "$out";
+          if printf "%s" "$out" | grep -qE "Ran [0-9]+ rules on 0 files"; then
+          echo "opengrep: REFUSING a zero-file scan. The ruleset matched no file in this repo, so 0 findings means NOTHING WAS EXAMINED - not that the code is clean. Check that rules/sast/dataflow.yml declares the language(s) this repo is actually written in." >&2;
+          exit 2; fi;
+          exit $rc'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+      - id: worktree-guard
+        name: commit from a linked worktree, not the shared checkout
+        entry: >-
+          bash -c 'S="${FOUNDRY_STOCKS:-}"; C="${STOCKS_CACHE:-}";
+          P=ci/lib/verified_worktree.py;
+          if [ -n "$C" ]; then
+          git -C "$C" cat-file -e "$S:$P" 2>/dev/null || {
+          echo "worktree-guard: CANNOT RUN - STOCKS_CACHE is set, so FOUNDRY_STOCKS must be a git REF carrying $P; got ref=$S cache=$C" >&2;
+          echo "worktree-guard: refusing to fall back to a possibly-drifted checkout, and refusing to report success without checking." >&2;
+          exit 2; };
+          t=$(mktemp); git -C "$C" show "$S:$P" >"$t"; python3 "$t" .; rc=$?; rm -f "$t"; exit $rc; fi;
+          if [ -n "$S" ] && [ -f "$S/$P" ]; then python3 "$S/$P" .; exit $?; fi;
+          G=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null);
+          D="${G%/.git}/../foundry-stocks";
+          if [ -f "$D/$P" ]; then python3 "$D/$P" .; exit $?; fi;
+          echo "worktree-guard: CANNOT RUN - no canonical source (FOUNDRY_STOCKS=$S STOCKS_CACHE=$C)" >&2;
+          echo "worktree-guard: set STOCKS_CACHE plus a FOUNDRY_STOCKS git REF (canonical gate), or FOUNDRY_STOCKS as a checkout PATH. Refusing to report success without checking." >&2;
+          exit 2'
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+      # A branch cut off a stale local main is a rebase nobody asked for. The
+      # background fetch after every commit keeps origin/* fresh so the next
+      # branch starts from what the door actually holds. Backgrounded and
+      # detached: a slow network delays no commit, and a failed fetch is a
+      # no-op rather than a broken post-commit.
+      #
+      # Absent from THIS template alone until now — go, rust and frontend have
+      # carried it since their creation, python never received it. The eight
+      # python repos that have it got it from the retired furnace scaffold
+      # pour, not from here.
+      - id: fetch-origin
+        name: fetch origin (keep refs fresh)
+        entry: bash -c '(git fetch origin --prune --quiet >/dev/null 2>&1 </dev/null &)'
+        language: system
+        stages: [post-commit]
+        always_run: true
+        pass_filenames: false
+
+      # stop-justifications — a suppression is a claim that the tool is wrong.
+      # This refuses to let that claim be filed silently, in any of the four
+      # languages, for any tool the reusable gates actually run.
+      #
+      # One definition in foundry-stocks (ci/lib/stop_justifications.py) so all
+      # four templates forbid the SAME list. Copying the list into each template
+      # is the defect it exists to catch: on 2026-08-16 a sweep found 533 noqa
+      # on one rule, 368 of them EIGHT decisions replicated into 46 repos by a
+      # scaffold pour — every copy carrying the same justification comment that
+      # nobody had re-read, because it was cp'd rather than written.
+      #
+      # THE ESCAPE IS PROSE, NOT A CODE. When two tools genuinely disagree the
+      # more permissive one yields, and the line says which:
+      #     x = cast(int, y)  # <directive>  # tool-conflict: <what disagrees>
+      # A code would be copyable without thought, which is the failure this
+      # exists to stop. Bare `tool-conflict:` with no prose does not excuse.
+      #
+      # IT DOES NOT FAIL SOFT. No foundry-stocks means exit 2 — "could not run",
+      # never "passed". pre-commit hides a passing hook's output, so a hook that
+      # skipped quietly would be indistinguishable from one that scanned clean,
+      # which is the same silent-success defect the gate is here to remove. CI
+      # provides it explicitly. TWO CONTRACTS, both honoured here: the CANONICAL
+      # gate (foundry-stocks#506) sets STOCKS_CACHE to a bare clone and
+      # FOUNDRY_STOCKS to a git REF, and the script is read out of that cache at
+      # that ref — local == CI by construction. Older callers set FOUNDRY_STOCKS
+      # to a checkout PATH. With STOCKS_CACHE set, an unresolvable ref REFUSES
+      # rather than falling back to a sibling working tree, because scanning a
+      # drifted copy is the exact class of staleness this hook exists to catch.
+      - id: stop-justifications
+        name: "no silent suppression of any gate - excuse with a tool-conflict line"
+        entry: >-
+          bash -c 'S="${FOUNDRY_STOCKS:-}"; C="${STOCKS_CACHE:-}";
+          P=ci/lib/stop_justifications.py;
+          if [ -n "$C" ]; then
+          git -C "$C" cat-file -e "$S:$P" 2>/dev/null || {
+          echo "stop-justifications: CANNOT RUN - STOCKS_CACHE is set, so FOUNDRY_STOCKS must be a git REF carrying $P; got ref=$S cache=$C" >&2;
+          echo "stop-justifications: refusing to fall back to a possibly-drifted checkout, and refusing to report success without scanning." >&2;
+          exit 2; };
+          t=$(mktemp); git -C "$C" show "$S:$P" >"$t"; python3 "$t" .; rc=$?; rm -f "$t"; exit $rc; fi;
+          if [ -n "$S" ] && [ -f "$S/$P" ]; then python3 "$S/$P" .; exit $?; fi;
+          G=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null);
+          D="${G%/.git}/../foundry-stocks";
+          if [ -f "$D/$P" ]; then python3 "$D/$P" .; exit $?; fi;
+          echo "stop-justifications: CANNOT RUN - no canonical source (FOUNDRY_STOCKS=$S STOCKS_CACHE=$C)" >&2;
+          echo "stop-justifications: set STOCKS_CACHE plus a FOUNDRY_STOCKS git REF (canonical gate), or FOUNDRY_STOCKS as a checkout PATH. Refusing to report success without scanning." >&2;
+          exit 2'
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+>>>>>>> after updating
