@@ -6,9 +6,13 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -98,18 +102,51 @@ class TestFindByFilename:
         assert "no-frontmatter" in stems
 
 
+#: recent_edits reads mtimes off the filesystem, so a test that indexes the
+#: tracked fixture is asserting on the CHECKOUT's metadata rather than on the
+#: query. That is not hypothetical: the gate mounts the tree into a container
+#: where mtimes are normalised to the epoch, every file sorts before any
+#: plausible `since`, and `test_returns_results` answered 0 — green on rob02,
+#: red in CI, for a reason nothing in the diff touched. Reproduced by touching
+#: a copy to @0 and re-indexing it.
+#:
+#: So these tests bring their own clock: a tmp copy with mtimes this fixture
+#: sets, which makes the assertion about recent_edits and nothing else.
+@pytest.fixture
+def dated_vault(tmp_path: Path) -> Path:
+    vault = tmp_path / "mini-vault"
+    shutil.copytree(MINI_VAULT, vault)
+    when = 1_700_000_000.0  # 2023-11-14, comfortably after any `since` below
+    for path in sorted(vault.rglob("*")):
+        os.utime(path, (when, when))
+    return vault
+
+
+def _dated_idx(vault: Path) -> VaultIndex:
+    idx = VaultIndex(vault, ttl_seconds=9999)
+    idx.reindex()
+    return idx
+
+
 class TestRecentEdits:
-    def test_returns_results(self):
-        idx = _idx()
-        results = idx.recent_edits(since="2020-01-01")
+    def test_returns_results(self, dated_vault: Path):
+        results = _dated_idx(dated_vault).recent_edits(since="2020-01-01")
         assert len(results) > 0
         assert "path" in results[0]
         assert "modified" in results[0]
 
-    def test_limit(self):
-        idx = _idx()
-        results = idx.recent_edits(since="2020-01-01", limit=2)
-        assert len(results) <= 2
+    def test_a_since_after_every_file_returns_nothing(self, dated_vault: Path):
+        """The other half of the filter, and the one the epoch-mtime failure
+        was silently exercising: a `since` no file is newer than is an empty
+        answer, not an error."""
+        results = _dated_idx(dated_vault).recent_edits(since="2030-01-01")
+        assert results == []
+
+    def test_limit(self, dated_vault: Path):
+        results = _dated_idx(dated_vault).recent_edits(
+            since="2020-01-01", limit=2
+        )
+        assert 0 < len(results) <= 2
 
     def test_bad_date(self):
         idx = _idx()

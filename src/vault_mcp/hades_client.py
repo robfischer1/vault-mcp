@@ -351,17 +351,22 @@ def emit_session_event(
     token: str,
     transport: Transport | None = None,
 ) -> dict[str, Any]:
-    """Route one ``/emit`` payload to Terpsichore's ``fleet_emit`` (C1).
+    """Route one ``/emit`` payload to Tartarus's ``tartarus_emit`` (C1).
 
     The payload shape is the phdb HTTP contract ``phdb_client`` already emits
-    — ``{event_type, payload, ts}`` — and the Terpsichore verb takes exactly
-    those parameters, so this is a passthrough like its sibling routers.
+    — ``{event_type, payload, ts}`` — and the verb takes exactly those
+    parameters, so this is a passthrough like its sibling routers.
 
-    ``fleet_emit`` is the R9 CQRS write path: it lands the ``session_events``
-    row on the fleet plane and returns a content-derived ``born_token`` in
-    place of phdb's synchronous ``event_id`` (the async plane has no row id to
-    hand back). ``session_uuid`` is left unset, exactly as the phdb ``/emit``
-    path did — vault-mcp is a service principal, not a session.
+    THE STAR MOVED, THE CONTRACT DID NOT (terpsichore#8501). Tartarus owns the
+    session-events write path now; it produces onto the same compacted topic,
+    under the same content-hash key, and answers the same content-derived
+    ``born_token`` — minted from the same four fields and pinned against the
+    Python tape (tartarus#9722). So ``phdb_client``'s "event_id or born_token"
+    check below is satisfied by the new star exactly as it was by the old one,
+    and an atom emitted before the cutover keys identically to one after it.
+
+    ``session_uuid`` is left unset, exactly as the phdb ``/emit`` path did —
+    vault-mcp is a service principal, not a session.
     """
     args = {
         "event_type": payload.get("event_type"),
@@ -369,7 +374,7 @@ def emit_session_event(
         "ts": payload.get("ts"),
     }
     return call_verb(
-        "fleet_emit",
+        "tartarus_emit",
         args,
         url=url,
         token=token,
