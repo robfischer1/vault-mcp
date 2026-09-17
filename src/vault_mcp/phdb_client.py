@@ -12,14 +12,14 @@ write path is unreachable, exactly like the REST-backed tools degrade without
 Obsidian (Constitution II).
 
 Transport (PHDB dissolution C1, 2026-08-03): the poster the MCP layer wires
-(``server._phdb_post``) routes ``/emit`` to **Terpsichore's ``fleet_emit``**
+(``server._phdb_post``) routes ``/emit`` to **Tartarus's ``tartarus_emit``**
 over Hades when ``server.HADES_URL`` is set — the R9 CQRS write path. That was the
 last route keeping the retired monolith's :8101 surface load-bearing. With
 ``server.HADES_URL`` unset it still falls back to phdb's HTTP ``/emit`` (#720), the
 same symmetry the entity- and document-write routers use.
 
 This module keeps the per-type payload contract (``validate_atom``) that the
-raw ``fleet_emit`` verb does not enforce — a caller typo surfaces here rather
+raw ``tartarus_emit`` verb does not enforce — a caller typo surfaces here rather
 than landing silently in the event blob.
 
 Boundary discipline:
@@ -95,7 +95,7 @@ class AtomResult:
 
     Exactly one identifier is populated, depending on which write path ran:
     ``event_id`` on the legacy phdb ``/emit`` route (a synchronous row id), or
-    ``born_token`` on the Terpsichore fleet plane (a content-derived handle —
+    ``born_token`` on the fleet plane (a content-derived handle —
     the async CQRS path has no row id to return). The other stays ``None``.
     """
 
@@ -166,7 +166,7 @@ def emit_atom(
     besides. ``post`` is injected (the real adapter is the server's
     ``_phdb_post``), so the logic is unit-testable with a fake and the
     transport can be restrangled without touching this logic. Since C1 that
-    adapter routes to Terpsichore's ``fleet_emit``.
+    adapter routes to Tartarus's ``tartarus_emit``.
 
     Validation runs first, so a bad payload is rejected (``AtomError``) before any
     network call. Raises ``PhdbUnavailableError`` when the route is unreachable,
@@ -190,7 +190,7 @@ def emit_atom(
     event_id = result.get("event_id")
     born_token = result.get("born_token")
     # Either identifier proves the write landed: phdb answered with a row id,
-    # or Terpsichore answered with a content-derived token. Neither means the
+    # or the fleet plane answered with a content-derived token. Neither means the
     # write is unconfirmed, so refuse rather than report a phantom success.
     if not isinstance(event_id, int) and not isinstance(born_token, str):
         raise PhdbUnavailableError(
@@ -229,7 +229,7 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     Strangled concerns route to their sovereign star over Hades instead:
     entity writes (``/write/entity``) call ``harmonia_write_entity_typed``
     when ``server.HADES_URL`` is configured — same payload, same result contract.
-    Atom emits (``/emit``) call Terpsichore's ``fleet_emit`` (C1), the last
+    Atom emits (``/emit``) call Tartarus's ``tartarus_emit`` (C1), the last
     route that kept the retired monolith's :8101 surface load-bearing.
     """
     # DEFERRED: server.py imports this module, so a module-scope import of

@@ -35,7 +35,7 @@ from vault_mcp.hades_client import (
 _REQUIRED_BUT_UNUSED = "t"
 _REQUIRED_BUT_UNUSED_ALT = "tok"
 
-#: What the fleet_emit reply CARRIES BACK, asserted on rather than sent. Same
+#: What the tartarus_emit reply CARRIES BACK, asserted on rather than sent. Same
 #: reasoning, opposite direction: this one is a value the code under test
 #: returns, so it is not even an input. Named `_VALUE`, not `_TOKEN`: the first
 #: draft called it `_ECHOED_BORN_TOKEN` and S105 fired on the CONSTANT — the
@@ -355,7 +355,7 @@ def test_read_document_transport_fault_never_raises() -> None:
 # -- emit_session_event (the C1 atom leg) --------------------------------------
 
 
-def test_emit_session_event_calls_fleet_emit() -> None:
+def test_emit_session_event_calls_tartarus_emit() -> None:
     transport = FakeTransport(
         _ok_pair(
             {
@@ -383,7 +383,7 @@ def test_emit_session_event_calls_fleet_emit() -> None:
     assert out["ok"] is True
     assert out["born_token"] == _ECHOED_BORN_VALUE
     _, call_body = transport.calls[1]
-    assert call_body["params"]["name"] == "fleet_emit"
+    assert call_body["params"]["name"] == "tartarus_emit"
     args = call_body["params"]["arguments"]
     assert args["event_type"] == "decision"
     assert args["payload"] == {"polarity": "for"}
