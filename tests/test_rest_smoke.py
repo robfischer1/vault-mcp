@@ -100,7 +100,21 @@ def _live() -> ObsidianRESTClient:
 @pytest.fixture(
     params=[
         pytest.param("tape", id="tape"),
-        pytest.param("live", id="live", marks=pytest.mark.live),
+        # WHY THE LIVE ARM ALSO CARRIES `allow_network`. tests/conftest.py
+        # blocks every AF_INET/AF_INET6 socket for the whole suite, and it
+        # blocks by FAMILY -- 127.0.0.1:27123 is AF_INET, so the real REST API
+        # is refused along with everything else. Measured 2026-09-17 without
+        # this grant: `-m live` against a running Obsidian ERRORED at this
+        # fixture with `NetworkBlocked` (a RuntimeError, which `probe()`'s
+        # `except (httpx.HTTPError, OSError)` does not swallow), so the guard
+        # fails loud here rather than skipping. The grant rides on this
+        # PARAM, not on the module or the fixture, so it reaches exactly the
+        # live-arm items and never the tape arm, which stays guarded.
+        pytest.param(
+            "live",
+            id="live",
+            marks=[pytest.mark.live, pytest.mark.allow_network],
+        ),
     ]
 )
 def client(request: pytest.FixtureRequest):
