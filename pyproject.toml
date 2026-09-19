@@ -352,10 +352,10 @@ markers = [
 substrate_pkg = "tests.substrate"
 
 [[tool.uv.index]]
-name = "nexus-hosted"
-url = "https://nexus.notusmi.com/repository/pypi-hosted/simple/"
+name = "fleet"
+url = "https://packages.notusmi.com/pypi/fleet/prod/+simple/"
 
 [tool.uv.sources]
 # forge-testkit is published only to Nexus pypi-hosted (Forgejo's PyPI
 # retired 2026-09-10, infra#351), so pin its source.
-forge-testkit = { index = "nexus-hosted" }
+forge-testkit = { index = "fleet" }

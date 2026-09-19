@@ -334,14 +334,15 @@ wheels = [
 
 [[package]]
 name = "forge-testkit"
-version = "1.7.3"
-source = { registry = "https://nexus.notusmi.com/repository/pypi-hosted/simple/" }
+version = "2.0.1"
+source = { registry = "https://packages.notusmi.com/pypi/fleet/prod/+simple/" }
 dependencies = [
     { name = "hypothesis" },
+    { name = "pydantic-settings" },
 ]
-sdist = { url = "https://nexus.notusmi.com/repository/pypi-hosted/packages/forge-testkit/1.7.3/forge_testkit-1.7.3.tar.gz", hash = "sha256:47e4b10aec766f88d571cb66294e21b6d4c5349dedb6d5cd9fc3c29dff4f4a3a", size = 178627, upload-time = "2026-09-10T11:38:46.644Z" }
+sdist = { url = "https://packages.notusmi.com/pypi/fleet/prod/+f/efa/55b8bdc4ba552/forge_testkit-2.0.1.tar.gz", hash = "sha256:efa55b8bdc4ba552c3b00c33349991e3b99c931f92719c2d1130e21b0f6d3fb2" }
 wheels = [
-    { url = "https://nexus.notusmi.com/repository/pypi-hosted/packages/forge-testkit/1.7.3/forge_testkit-1.7.3-py3-none-any.whl", hash = "sha256:fc9f4d70c7088e54627a3b36dc1a6926ee1cd5638a82a5efe31bbe106b764c7a", size = 55503, upload-time = "2026-09-10T11:38:39.281Z" },
+    { url = "https://packages.notusmi.com/pypi/fleet/prod/+f/066/ddcf3165896cd/forge_testkit-2.0.1-py3-none-any.whl", hash = "sha256:066ddcf3165896cd051a6fa6debd49e240568e4739d932107afddecba3596683" },
 ]
 
 [[package]]
@@ -808,6 +809,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pydantic-settings"
+version = "2.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/ca/31c57507b13119d7d3cfa1576dad2911a4861e3be07b579395f4e9d393f9/pydantic_settings-2.15.0.tar.gz", hash = "sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117", size = 261253, upload-time = "2026-08-07T09:24:57.419Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl", hash = "sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42", size = 69413, upload-time = "2026-08-07T09:24:55.839Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1238,7 +1253,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dulwich", specifier = ">=1.2.14" },
-    { name = "forge-testkit", marker = "extra == 'dev'", specifier = ">=1.3.0", index = "https://nexus.notusmi.com/repository/pypi-hosted/simple/" },
+    { name = "forge-testkit", marker = "extra == 'dev'", specifier = ">=1.3.0", index = "https://packages.notusmi.com/pypi/fleet/prod/+simple/" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.2,<3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=2.1.0" },
