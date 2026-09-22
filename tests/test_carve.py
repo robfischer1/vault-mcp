@@ -70,14 +70,14 @@ def test_preflight_refuses_when_hades_url_unset() -> None:
 
 def test_preflight_passes_with_hades_url_and_smoke() -> None:
     pf = carve_preflight(
-        hades_url="http://nas01:8101", calliope_check=lambda: True
+        hades_url="http://hades.notusmi.com:8101", calliope_check=lambda: True
     )
     assert pf.ok is True
 
 
 def test_preflight_refuses_when_calliope_smoke_fails() -> None:
     pf = carve_preflight(
-        hades_url="http://nas01:8101", calliope_check=lambda: False
+        hades_url="http://hades.notusmi.com:8101", calliope_check=lambda: False
     )
     assert pf.ok is False
     assert pf.error == "calliope_unreachable"
@@ -106,7 +106,7 @@ def test_dry_run_selects_scope_policied_files_and_touches_nothing() -> None:
     report = bulk_carve(
         list_files=_lister(FIXTURE_FILES),
         dissolve_one=dissolver,
-        preflight=carve_preflight(hades_url="http://nas01:8101"),
+        preflight=carve_preflight(hades_url="http://hades.notusmi.com:8101"),
         dry_run=True,
     )
     d = report.to_dict()
@@ -138,7 +138,7 @@ def test_open_decisions_ride_on_the_report() -> None:
     report = bulk_carve(
         list_files=_lister(FIXTURE_FILES),
         dissolve_one=_RecordingDissolver(),
-        preflight=carve_preflight(hades_url="http://nas01:8101"),
+        preflight=carve_preflight(hades_url="http://hades.notusmi.com:8101"),
     )
     d = report.to_dict()
     assert any("SCOPE CUT UNCONFIRMED" in x for x in d["open_decisions"])
@@ -153,7 +153,7 @@ def test_live_sweep_dissolves_each_selected_file_once() -> None:
     report = bulk_carve(
         list_files=_lister(FIXTURE_FILES),
         dissolve_one=dissolver,
-        preflight=carve_preflight(hades_url="http://nas01:8101"),
+        preflight=carve_preflight(hades_url="http://hades.notusmi.com:8101"),
         dry_run=False,
     )
     d = report.to_dict()
@@ -176,7 +176,7 @@ def test_fail_safe_records_failure_and_keeps_going() -> None:
     report = bulk_carve(
         list_files=_lister(FIXTURE_FILES),
         dissolve_one=dissolver,
-        preflight=carve_preflight(hades_url="http://nas01:8101"),
+        preflight=carve_preflight(hades_url="http://hades.notusmi.com:8101"),
         dry_run=False,
     )
     d = report.to_dict()
@@ -194,7 +194,7 @@ def test_a_raising_dissolver_is_caught_per_file() -> None:
     report = bulk_carve(
         list_files=_lister(["Brain Soup/One.md", "Records/Two.md"]),
         dissolve_one=_boom,
-        preflight=carve_preflight(hades_url="http://nas01:8101"),
+        preflight=carve_preflight(hades_url="http://hades.notusmi.com:8101"),
         dry_run=False,
     )
     d = report.to_dict()
@@ -208,7 +208,7 @@ def test_limit_caps_acted_on_files() -> None:
     report = bulk_carve(
         list_files=_lister(FIXTURE_FILES),
         dissolve_one=dissolver,
-        preflight=carve_preflight(hades_url="http://nas01:8101"),
+        preflight=carve_preflight(hades_url="http://hades.notusmi.com:8101"),
         dry_run=False,
         limit=2,
     )

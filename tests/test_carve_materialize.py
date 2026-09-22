@@ -40,7 +40,7 @@ def test_documents_read_routes_to_calliope_when_hades_set(monkeypatch) -> None:
             ]
         }
 
-    monkeypatch.setattr(server, "HADES_URL", "http://nas01:8101")
+    monkeypatch.setattr(server, "HADES_URL", "http://hades.notusmi.com:8101")
     monkeypatch.setattr(hades_client, "read_document", fake_read_document)
 
     out = verbs_plan._read_dissolved_row("documents", 42)
@@ -52,7 +52,7 @@ def test_documents_read_routes_to_calliope_when_hades_set(monkeypatch) -> None:
 
 
 def test_calliope_miss_maps_to_row_not_found(monkeypatch) -> None:
-    monkeypatch.setattr(server, "HADES_URL", "http://nas01:8101")
+    monkeypatch.setattr(server, "HADES_URL", "http://hades.notusmi.com:8101")
     monkeypatch.setattr(
         hades_client, "read_document", lambda *_a, **_k: {"documents": []}
     )
@@ -62,7 +62,7 @@ def test_calliope_miss_maps_to_row_not_found(monkeypatch) -> None:
 
 
 def test_calliope_tool_failure_maps_to_structured_error(monkeypatch) -> None:
-    monkeypatch.setattr(server, "HADES_URL", "http://nas01:8101")
+    monkeypatch.setattr(server, "HADES_URL", "http://hades.notusmi.com:8101")
     monkeypatch.setattr(
         hades_client,
         "read_document",
