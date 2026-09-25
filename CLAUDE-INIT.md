@@ -93,7 +93,7 @@ uv run pytest -k "pattern"          # by name
 uv run ruff check src/ tests/       # lint — [tool.ruff.lint] select = ["ALL"], explicit ignore list in pyproject.toml
 uv run mypy src/ tests/             # strict; server.py has a no-any-return override (dynamic REST/phdb boundary)
 uv run pyright                      # strict peer gate; excludes src/vault_mcp/server.py (mypy-only there, phdb import)
-uv run pre-commit run --all-files   # ruff --fix, detect-secrets (.secrets.baseline), trailing-whitespace/EOF/yaml/large-file checks
+uv run pre-commit run --all-files   # ruff --fix, trailing-whitespace/EOF/yaml/large-file checks
 ```
 
 CI is Forgejo-native: `.forgejo/workflows/ci.yml` runs on the self-hosted `nas01` runner label
