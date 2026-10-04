@@ -78,7 +78,7 @@ config-addressed call.
 
 ## Build / Test / Run
 
-From `pyproject.toml`, `.pre-commit-config.yaml`, `.forgejo/workflows/ci.yml`:
+From `pyproject.toml`, `.pre-commit-config.yaml`:
 
 ```bash
 uv venv && uv pip install -e ".[dev]"
@@ -96,9 +96,8 @@ uv run pyright                      # strict peer gate; excludes src/vault_mcp/s
 uv run pre-commit run --all-files   # ruff --fix, trailing-whitespace/EOF/yaml/large-file checks
 ```
 
-CI is Forgejo-native: `.forgejo/workflows/ci.yml` runs on the self-hosted `nas01` runner label
-(container `catthehacker/ubuntu:act-22.04`), single Python version, `uv sync --all-extras` then
-the same pre-commit/mypy/pyright/pytest gate. A `.github/workflows/ci.yml` mirror (matrix 3.11-3.13)
+CI is the door's gate lane on the cluster: `uv sync --all-extras` then
+the pre-commit/mypy/pyright/pytest gate. A `.github/workflows/ci.yml` mirror (matrix 3.11-3.13)
 exists for the GitHub mirror but doesn't run here.
 
 ## Conventions and gotchas

@@ -105,7 +105,7 @@ uv run pyright                     # strict peer type check (server.py excluded;
 uv run pre-commit run --all-files  # lint + secret scan + hygiene, same gate as CI
 ```
 
-CI (`.forgejo/workflows/ci.yml`) runs on a self-hosted Forgejo runner (`nas01`) and gates on
+CI (the door's gate lane) runs on the cluster and gates on
 `pre-commit`, `mypy`, `pyright`, and `pytest`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide (note: its module list and test
