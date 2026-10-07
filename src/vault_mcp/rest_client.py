@@ -34,7 +34,9 @@ Error codes (closed vocabulary):
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import time
 import urllib.parse
 from pathlib import Path
@@ -50,26 +52,35 @@ DEFAULT_REST_URL = "http://127.0.0.1:27123"
 
 _BACKOFF_STEPS = [30, 300, 1800]
 
-# Printable ASCII punctuation + space kept literal in a PATCH ``Target`` header
-# so the ``::`` nesting delimiter and heading markup survive URL-decoding; ``%``
-# is deliberately excluded so any literal percent is itself encoded (-> ``%25``).
-_TARGET_SAFE = " !#$&'()*+,-./:;<=>?@[]^_`{|}~"
+#: The ``Markdown-Patch-Version`` this client speaks on PATCH. The Local REST API
+#: (5.x) refuses ``Target-Type``/``Target`` headers on a PATCH unless the version
+#: is explicit (``40084``: they are ambiguous between the deprecated 1.x format and
+#: raw-content mode). ``2`` is the non-deprecated one; ``1`` sunsets in 6.0.
+PATCH_VERSION = "2"
+
+#: How many ``name (n)`` candidates a trash move probes before giving up.
+_TRASH_NAME_TRIES = 100
 
 
-def _encode_target(value: str) -> str:
-    """Percent-encode a PATCH ``Target`` header value for the Obsidian REST API.
+def _encode_target(value: str, target_type: str = "heading") -> str:
+    """Encode a PATCH ``Target`` header value for ``Markdown-Patch-Version: 2``.
 
-    HTTP header values are latin-1 only, so a heading path containing an em-dash
-    (or any char > U+00FF) otherwise raises ``UnicodeEncodeError`` in httpx. The
-    Obsidian Local REST API requires the ``Target`` be URL-encoded when it
-    carries non-ASCII characters and URL-decodes it server-side, so we
-    percent-encode the UTF-8 bytes of every non-ASCII char while leaving ASCII
-    structure (the ``::`` delimiter, ``#``, spaces) intact. ASCII values with no
-    literal ``%`` are returned unchanged, preserving existing behaviour.
+    Raw-content mode (the API's ``PATCH`` documentation) types the encoding by
+    ``Target-Type``: a **heading** Target is the heading *path* as JSON, then
+    percent-encoded (``["A","B"]`` -> ``%5B%22A%22%2C%22B%22%5D``); **block** and
+    **frontmatter** Targets are the plain id/key, percent-encoded. Everything is
+    encoded (``safe=""``), so the header is latin-1 clean and a literal ``%`` or
+    em-dash survives the server's ``decodeURIComponent``.
+
+    Callers still hand over the 1.x spelling of a heading path -- ``::``-joined,
+    optionally with leading ``#`` markup -- which is split into the JSON path.
     """
-    if value.isascii() and "%" not in value:
-        return value
-    return urllib.parse.quote(value, safe=_TARGET_SAFE)
+    if target_type == "heading":
+        parts = [
+            re.sub(r"^#+\s*", "", part.strip()) for part in value.split("::")
+        ]
+        value = json.dumps(parts, ensure_ascii=False, separators=(",", ":"))
+    return urllib.parse.quote(value, safe="")
 
 
 class ObsidianRESTClient:
@@ -356,14 +367,23 @@ class ObsidianRESTClient:
     ) -> dict[str, Any]:
         """PATCH a note section. Headers select target + operation.
 
-        A non-ASCII ``Target`` (e.g. a heading path with an em-dash) is
-        percent-encoded so it survives latin-1 header encoding; the Obsidian
-        REST API URL-decodes it back server-side. See ``_encode_target``.
+        Header targeting is sent as ``Markdown-Patch-Version: 2`` with the
+        ``Target`` encoded per ``Target-Type`` (JSON heading path, plain
+        block/frontmatter key), percent-encoded so non-ASCII survives latin-1
+        header encoding. See ``_encode_target``.
         """
         if extra_headers and "Target" in extra_headers:
             extra_headers = {
                 **extra_headers,
-                "Target": _encode_target(extra_headers["Target"]),
+                "Target": _encode_target(
+                    extra_headers["Target"],
+                    extra_headers.get("Target-Type", "heading"),
+                ),
+            }
+        if extra_headers and "Target-Type" in extra_headers:
+            extra_headers = {
+                "Markdown-Patch-Version": PATCH_VERSION,
+                **extra_headers,
             }
         return self._request(
             "PATCH",
@@ -426,6 +446,36 @@ class RestNoteIO:
                 f"REST write {path}: {res.get('error')}: {res.get('detail')}"
             )
 
+    def _put_free_trash(self, path: str, content: str) -> None:
+        """PUT `content` under ``.trash/`` at the first name Obsidian will accept.
+
+        ``.trash/`` is a dot-folder Obsidian does not index, so a file left there
+        by an earlier delete of a same-named note is invisible to the vault but
+        still on disk, and ``PUT`` then fails ``File already exists``. Measured
+        2026-10-07: ``.trash/Brain Soup/2026-10-07-note.0.md`` held an unrelated
+        252-byte note, which wedged every later delete of a note with that name.
+        Fall through ``name (1).md``, ``name (2).md`` ... instead of failing.
+        """
+        stem, dot, ext = path.rpartition(".")
+        if not dot or "/" in ext:
+            stem, dot, ext = path, "", ""
+        candidates = [path] + [
+            f"{stem} ({n}){dot}{ext}" for n in range(1, _TRASH_NAME_TRIES)
+        ]
+        for name in candidates:
+            res = self._client.put(f"/vault/.trash/{name}", content=content)
+            if res.get("ok"):
+                return
+            if "already exists" not in str(res.get("detail")):
+                raise ObsidianIOError(
+                    f"REST write .trash/{name}: {res.get('error')}: "
+                    f"{res.get('detail')}"
+                )
+        raise ObsidianIOError(
+            f"REST write .trash/{path}: no free trash name in "
+            f"{_TRASH_NAME_TRIES} tries"
+        )
+
     def delete_note(self, path: str) -> None:
         """Move a note to the vault-local ``.trash/`` (read -> copy -> remove origin).
 
@@ -434,7 +484,7 @@ class RestNoteIO:
         stays recoverable from inside Obsidian.
         """
         content = self.read_note(path)  # raises ObsidianIOError if absent
-        self._put(f".trash/{path}", content)
+        self._put_free_trash(path, content)
         res = self._client.delete(f"/vault/{path}")
         if not res.get("ok"):
             raise ObsidianIOError(

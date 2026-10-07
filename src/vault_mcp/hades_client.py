@@ -172,7 +172,10 @@ def call_verb(
         status, text = post(url, headers, call)
     except Exception as e:
         log.exception("hades transport unreachable")
-        return {"ok": False, "error": f"hades unreachable: {e}"}
+        # Name the URL dialed: a stale HADES_URL (nas01:8101 outlived the
+        # gateway's move to hades.notusmi.com:8101, vault-mcp#15410) otherwise
+        # reads as "the gateway is down" with nothing to grep.
+        return {"ok": False, "error": f"hades unreachable at {url}: {e}"}
     if status != 200:
         return {"ok": False, "error": f"hades HTTP {status}: {text[:200]}"}
     try:

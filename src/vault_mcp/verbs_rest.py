@@ -192,6 +192,7 @@ if not server.REST_DISABLE:
         target: str | None = None,
         operation: str = "replace",
         create_if_missing: bool = False,
+        within: int | None = None,
     ) -> dict[str, Any]:
         """[REST-backed] Patch a section of a note without rewriting the whole file.
 
@@ -203,11 +204,18 @@ if not server.REST_DISABLE:
             path: Vault-relative file path.
             content: The markdown content to write.
             target_type: "heading", "block", or "frontmatter". Default "heading".
-            target: Target identifier — heading path ("## Section"), block ID,
-                or frontmatter field name. If None, targets the whole note.
+            target: Target identifier — the heading path from the top-level
+                heading, ``::``-joined ("Title::Section::Subsection"; leading
+                ``#`` markup is ignored), a block ID, or a frontmatter field
+                name. If None, targets the whole note.
             operation: "replace", "append", or "prepend". Default "replace".
             create_if_missing: If True, create the target heading/block if it
                 doesn't exist.
+            within: Heading targets only. Index of one of the section's body
+                blocks (0-based, -1 = last). The edit then splices literally
+                into that block, so ``append`` of a newline plus a bullet and
+                ``within=-1`` continues the section's last list instead of
+                starting a new block below it.
 
         Returns:
             {"ok": True, "patched": path} on success.
@@ -222,6 +230,8 @@ if not server.REST_DISABLE:
             headers["Target"] = target
         if create_if_missing:
             headers["Create-Target-If-Missing"] = "true"
+        if within is not None:
+            headers["Within"] = str(within)
         result = client.patch(
             f"/vault/{path}",
             content=content,
