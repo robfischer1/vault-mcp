@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import time
+import urllib.parse
 from pathlib import Path
 from typing import cast
 from unittest.mock import MagicMock
@@ -16,8 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 import httpx
+import pytest
 
-from vault_mcp.rest_client import ObsidianRESTClient
+from vault_mcp.gate import ObsidianIOError
+from vault_mcp.rest_client import ObsidianRESTClient, RestNoteIO
 
 
 def _mock_response(
@@ -237,7 +241,13 @@ class TestContentTypes:
 
 
 class TestPatchTargetEncoding:
-    """Issue #278: non-ASCII heading targets must be URL-encoded, not sent raw."""
+    """PATCH header targeting: explicit v2 version + type-dependent Target encoding.
+
+    The Local REST API (5.x) answers 40084 to ``Target-Type``/``Target`` headers
+    without ``Markdown-Patch-Version`` (issue vault-mcp#15410). Semantics under
+    ``2`` per the API's raw-content-mode docs: a heading Target is the JSON path
+    array, percent-encoded; block/frontmatter Targets are the plain key.
+    """
 
     def _client(self):
         client = ObsidianRESTClient(key_path=None)
@@ -248,9 +258,41 @@ class TestPatchTargetEncoding:
         client._client.request.return_value = _mock_response(200, {"ok": True})
         return client
 
-    def test_em_dash_target_is_percent_encoded(self):
+    def _sent(self, client):
+        return cast("MagicMock", client._client.request).call_args[1]["headers"]
+
+    def test_header_targeting_sends_explicit_patch_version(self):
         client = self._client()
-        result = client.patch(
+        client.patch(
+            "/vault/Note.md",
+            content="x",
+            extra_headers={
+                "Target-Type": "heading",
+                "Operation": "append",
+                "Target": "Plain",
+            },
+        )
+        assert self._sent(client)["Markdown-Patch-Version"] == "2"
+
+    def test_heading_target_is_percent_encoded_json_path(self):
+        client = self._client()
+        client.patch(
+            "/vault/Note.md",
+            content="x",
+            extra_headers={
+                "Target-Type": "heading",
+                "Operation": "replace",
+                "Target": "## Top::Nested Heading",
+            },
+        )
+        assert (
+            self._sent(client)["Target"]
+            == "%5B%22Top%22%2C%22Nested%20Heading%22%5D"
+        )
+
+    def test_em_dash_target_is_utf8_percent_encoded_and_latin1_safe(self):
+        client = self._client()
+        client.patch(
             "/vault/Note.md",
             content="x",
             extra_headers={
@@ -259,19 +301,14 @@ class TestPatchTargetEncoding:
                 "Target": "Checkpoint — RFC::As-built (2026-06-04)",
             },
         )
-        assert result["ok"] is True
-        sent = cast("MagicMock", client._client.request).call_args[1][
-            "headers"
-        ]["Target"]
-        # em-dash gone, encoded as its UTF-8 bytes; ASCII structure preserved
+        sent = self._sent(client)["Target"]
         assert "—" not in sent
         assert "%E2%80%94" in sent
-        assert "::" in sent
-        assert "(2026-06-04)" in sent
-        # the header is now latin-1 safe — httpx would no longer raise
         sent.encode("latin-1")
+        decoded = json.loads(urllib.parse.unquote(sent))
+        assert decoded == ["Checkpoint — RFC", "As-built (2026-06-04)"]
 
-    def test_literal_percent_is_encoded(self):
+    def test_literal_percent_round_trips(self):
         client = self._client()
         client.patch(
             "/vault/Note.md",
@@ -282,26 +319,82 @@ class TestPatchTargetEncoding:
                 "Target": "50% Done",
             },
         )
-        sent = cast("MagicMock", client._client.request).call_args[1][
-            "headers"
-        ]["Target"]
-        assert sent == "50%25 Done"
+        sent = self._sent(client)["Target"]
+        assert json.loads(urllib.parse.unquote(sent)) == ["50% Done"]
 
-    def test_ascii_target_unchanged(self):
+    def test_frontmatter_target_is_plain_key_not_json(self):
         client = self._client()
         client.patch(
             "/vault/Note.md",
-            content="x",
+            content="done",
             extra_headers={
-                "Target-Type": "heading",
+                "Target-Type": "frontmatter",
                 "Operation": "replace",
-                "Target": "## Plain::Nested Heading",
+                "Target": "status",
             },
         )
-        sent = cast("MagicMock", client._client.request).call_args[1][
-            "headers"
-        ]["Target"]
-        assert sent == "## Plain::Nested Heading"
+        assert self._sent(client)["Target"] == "status"
+
+    def test_patch_without_targeting_headers_sends_no_version(self):
+        client = self._client()
+        client.patch("/vault/Note.md", content="x", extra_headers={})
+        assert "Markdown-Patch-Version" not in self._sent(client)
+
+
+class TestTrashNameCollision:
+    """delete must pick a free ``.trash/`` name (issue vault-mcp#15410, fault 3).
+
+    ``.trash/`` is unindexed, so a leftover same-named file makes the REST PUT
+    fail ``File already exists`` even though the vault never saw it.
+    """
+
+    def _io(self, taken: set[str]):
+        client = MagicMock()
+        puts: list[str] = []
+
+        def put(path, **_):
+            if path in taken:
+                return {
+                    "ok": False,
+                    "error": "rest_invalid_request",
+                    "detail": "Error\nFile already exists.",
+                }
+            puts.append(path)
+            return {"ok": True, "data": None}
+
+        client.put.side_effect = put
+        client.get.return_value = {"ok": True, "data": "body"}
+        client.delete.return_value = {"ok": True, "data": None}
+        return RestNoteIO(client), client, puts
+
+    def test_free_name_used_as_is(self):
+        io, client, puts = self._io(set())
+        io.delete_note("Brain Soup/n.md")
+        assert puts == ["/vault/.trash/Brain Soup/n.md"]
+        client.delete.assert_called_once_with("/vault/Brain Soup/n.md")
+
+    def test_occupied_trash_name_falls_through_to_suffix(self):
+        io, client, puts = self._io(
+            {
+                "/vault/.trash/Brain Soup/n.md",
+                "/vault/.trash/Brain Soup/n (1).md",
+            }
+        )
+        io.delete_note("Brain Soup/n.md")
+        assert puts == ["/vault/.trash/Brain Soup/n (2).md"]
+        client.delete.assert_called_once_with("/vault/Brain Soup/n.md")
+
+    def test_other_put_errors_still_raise_and_keep_the_original(self):
+        io, client, _ = self._io(set())
+        client.put.side_effect = None
+        client.put.return_value = {
+            "ok": False,
+            "error": "rest_unreachable",
+            "detail": "down",
+        }
+        with pytest.raises(ObsidianIOError):
+            io.delete_note("a.md")
+        client.delete.assert_not_called()
 
 
 class TestKeyLoading:
