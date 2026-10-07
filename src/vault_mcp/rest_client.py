@@ -458,9 +458,11 @@ class RestNoteIO:
         """
         stem, dot, ext = path.rpartition(".")
         if not dot or "/" in ext:
-            stem, ext = path, ""
-        for n in range(_TRASH_NAME_TRIES):
-            name = path if n == 0 else f"{stem} ({n}){dot}{ext}"
+            stem, dot, ext = path, "", ""
+        candidates = [path] + [
+            f"{stem} ({n}){dot}{ext}" for n in range(1, _TRASH_NAME_TRIES)
+        ]
+        for name in candidates:
             res = self._client.put(f"/vault/.trash/{name}", content=content)
             if res.get("ok"):
                 return

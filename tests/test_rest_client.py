@@ -335,6 +335,33 @@ class TestPatchTargetEncoding:
         )
         assert self._sent(client)["Target"] == "status"
 
+    def test_patch_with_no_extra_headers_at_all(self):
+        client = self._client()
+        assert client.patch("/vault/Note.md", content="x")["ok"] is True
+        assert "Markdown-Patch-Version" not in self._sent(client)
+
+    @pytest.mark.parametrize(
+        ("target_type", "expected"),
+        [
+            ("block", "blk-1"),
+            ("frontmatter", "blk-1"),
+            ("zzz", "blk-1"),
+            ("heading", "%5B%22blk-1%22%5D"),
+        ],
+    )
+    def test_only_heading_targets_are_json(self, target_type, expected):
+        client = self._client()
+        client.patch(
+            "/vault/Note.md",
+            content="x",
+            extra_headers={
+                "Target-Type": target_type,
+                "Operation": "replace",
+                "Target": "blk-1",
+            },
+        )
+        assert self._sent(client)["Target"] == expected
+
     def test_patch_without_targeting_headers_sends_no_version(self):
         client = self._client()
         client.patch("/vault/Note.md", content="x", extra_headers={})
@@ -384,6 +411,32 @@ class TestTrashNameCollision:
         assert puts == ["/vault/.trash/Brain Soup/n (2).md"]
         client.delete.assert_called_once_with("/vault/Brain Soup/n.md")
 
+    def test_name_without_extension(self):
+        io, _, puts = self._io({"/vault/.trash/x"})
+        io.delete_note("x")
+        assert puts == ["/vault/.trash/x (1)"]
+
+    def test_dot_only_in_a_directory_is_not_an_extension(self):
+        io, _, puts = self._io({"/vault/.trash/dir.d/x"})
+        io.delete_note("dir.d/x")
+        assert puts == ["/vault/.trash/dir.d/x (1)"]
+
+    def test_gives_up_after_exactly_one_hundred_names(self):
+        client = MagicMock()
+        client.get.return_value = {"ok": True, "data": "body"}
+        client.put.return_value = {
+            "ok": False,
+            "error": "rest_invalid_request",
+            "detail": "File already exists.",
+        }
+        with pytest.raises(ObsidianIOError, match="no free trash name"):
+            RestNoteIO(client).delete_note("a.md")
+        assert client.put.call_count == 100
+        names = [c.args[0] for c in client.put.call_args_list]
+        assert names[0] == "/vault/.trash/a.md"
+        assert names[99] == "/vault/.trash/a (99).md"
+        client.delete.assert_not_called()
+
     def test_other_put_errors_still_raise_and_keep_the_original(self):
         io, client, _ = self._io(set())
         client.put.side_effect = None
@@ -418,3 +471,32 @@ class TestKeyLoading:
         key_file.write_text("file-key\n")
         client = ObsidianRESTClient(key_path=key_file, api_key="injected-key")
         assert client._api_key == "injected-key"
+
+
+class TestPatchNoteWithin:
+    """patch_note forwards ``within`` as the API's ``Within`` header, 0 included."""
+
+    def _call(self, monkeypatch, **extra):
+        import asyncio
+
+        from vault_mcp import server
+
+        client = MagicMock()
+        client.patch.return_value = {"ok": True, "data": None}
+        monkeypatch.setattr(server, "_get_rest_client", lambda: client)
+        asyncio.run(
+            server.mcp.call_tool(
+                "patch_note",
+                {"path": "a.md", "content": "x", "target": "T", **extra},
+            )
+        )
+        return client.patch.call_args.kwargs["extra_headers"]
+
+    def test_within_zero_is_sent(self, monkeypatch):
+        assert self._call(monkeypatch, within=0)["Within"] == "0"
+
+    def test_within_negative_is_sent(self, monkeypatch):
+        assert self._call(monkeypatch, within=-1)["Within"] == "-1"
+
+    def test_within_absent_sends_no_header(self, monkeypatch):
+        assert "Within" not in self._call(monkeypatch)
