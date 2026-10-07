@@ -143,6 +143,8 @@ def test_call_verb_transport_fault_never_raises() -> None:
     )
     assert out["ok"] is False
     assert "unreachable" in out["error"]
+    # the dialed URL is in the error, so a stale HADES_URL is diagnosable
+    assert "http://h/mcp/" in out["error"]
 
 
 def test_call_verb_non_200_maps_to_ok_false() -> None:
