@@ -267,14 +267,12 @@ def test_read_document_miss_is_an_empty_list() -> None:
         _ok_pair(
             {
                 "structuredContent": {
-                    "error": "container_not_found",
+                    "code": "not_found",
                     "detail": "nope.md",
                 },
                 # The wire's isError text carries the error prefix — this is
                 # what parse_tool_result maps into {ok: False, error}.
-                "content": [
-                    {"type": "text", "text": "container_not_found: nope.md"}
-                ],
+                "content": [{"type": "text", "text": "not_found: nope.md"}],
                 "isError": True,
             }
         )
@@ -286,6 +284,25 @@ def test_read_document_miss_is_an_empty_list() -> None:
         transport=transport,
     )
     assert out == {"documents": []}
+
+
+def test_a_refusal_that_is_not_a_miss_is_not_an_empty_list() -> None:
+    for text in (
+        "bad_args: container_id is empty",
+        "backend_unavailable: down",
+    ):
+        transport = FakeTransport(
+            _ok_pair(
+                {"content": [{"type": "text", "text": text}], "isError": True}
+            )
+        )
+        out = read_document_by_source_path(
+            "nope.md",
+            url="http://h/mcp/",
+            token=_REQUIRED_BUT_UNUSED,
+            transport=transport,
+        )
+        assert out == {"ok": False, "error": text}
 
 
 def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:

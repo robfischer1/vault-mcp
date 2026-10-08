@@ -289,6 +289,15 @@ def _note_to_document_row(res: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_not_found(res: dict[str, Any]) -> bool:
+    """Whether a failed call is calliope's ``not_found`` refusal (``{code, detail}``).
+
+    ``parse_tool_result`` maps an isError result onto the tool's text, which
+    calliope writes as ``<code>: <detail>``; a miss is the code, not a substring.
+    """
+    return str(res.get("error", "")).startswith("not_found:")
+
+
 def read_document(
     doc_id: int,
     *,
@@ -311,7 +320,7 @@ def read_document(
         transport=transport,
     )
     if res.get("ok") is False:
-        if "container_not_found" in str(res.get("error", "")):
+        if _is_not_found(res):
             return {"documents": []}
         return res
     return {"documents": [_note_to_document_row(res)]}
@@ -330,7 +339,7 @@ def read_document_by_source_path(
     ``source_path`` is the durable handle (the note's identity name). The
     answer keeps the ``{documents: [...]}`` projection the caller reads —
     the newest (and only) materialized state first; a
-    ``container_not_found`` miss is an empty list. Never raises across the
+    ``not_found`` miss is an empty list. Never raises across the
     boundary.
     """
     res = call_verb(
@@ -341,7 +350,7 @@ def read_document_by_source_path(
         transport=transport,
     )
     if res.get("ok") is False:
-        if "container_not_found" in str(res.get("error", "")):
+        if _is_not_found(res):
             return {"documents": []}
         return res
     return {"documents": [_note_to_document_row(res)]}
