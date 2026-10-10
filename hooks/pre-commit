@@ -1,0 +1,7 @@
+#!/bin/sh
+# THE COMMIT STAGE, AS THE COMMIT HOOK (CA master-plan F15): `just check`.
+#
+# The hook is one line and never changes. What a commit must pass is the `check`
+# recipe in stages.just beside the justfile — the same recipe a session runs by
+# hand — so a change to the gate arrives as a diff to a recipe, not to a hook.
+exec just check

@@ -1,0 +1,8 @@
+# Managed by Copier — the spec-kit override template (foundry-stocks, `speckit/`).
+# Do not edit by hand. To take the latest overrides:
+#   uvx --from copier==9.17.2 copier recopy --defaults --overwrite -a .copier-answers.speckit.yml
+# NEVER `copier update` here: `.specify/` is gitignored, and update replays an index-based
+# diff that deletes what it cannot see. The constitution and the rendered plan skill are
+# never overwritten (`_skip_if_exists`); everything else takes the template's bytes.
+_commit: v0.213.0
+_src_path: https://git.notusmi.com/foundry/foundry-stocks.git

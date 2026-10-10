@@ -1,0 +1,19 @@
+#!/bin/sh
+# THE PUSH HOOK RUNS NOTHING, SINCE 2026-10-02 (Rob, "Option 1": the lanes are
+# the gate). The door asks a pushed branch's lanes on the cluster — metered by
+# daedalus, in the CI record, reused by the pull that opens on the head — so
+# grading the push here too would be the second run of the same checks, and
+# the unmetered one (six at once OOMKilled an engine on 2026-09-19; a
+# push-stage mutation run killed node dev01 twice on 2026-10-02). main is
+# still guarded: nothing lands without the pull's lanes going green.
+#
+# IT SAYS WHERE THE ANSWER IS, so a push that returns at once is not read as a
+# push that was checked and passed. It never fails: a push is refused by the
+# door or not at all.
+#
+# THE FILE STAYS. The spec-kit recopy overwrites the files this template lays
+# but never deletes one, so removing it would leave every repo's old
+# `exec just gate` in place; the recopy also reads a missing hooks/pre-push as
+# a wiped surface (speckit_recopy HOOK_FILES).
+echo "push: this branch's lanes are its gate: the door runs them on the cluster for the head you pushed (metered by daedalus); git_pr open parks on them, and repo_ci_logs reads them" >&2
+exit 0
