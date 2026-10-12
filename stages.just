@@ -58,21 +58,90 @@ ca_module := env("CA_MODULE", "git.notusmi.com/rob/foundry-tools@main")
 # lane's, passed through unchanged — a findings exit must not come back as a
 # generic 1 because a guard ate it.
 
-# The commit stage, on the engine — what hooks/pre-commit runs.
+# The commit stage, on the engine — what hooks/pre-commit runs. It runs under a
+# dev lease (`_leased`, below), like every engine call this workstation makes.
 check:
     #!/bin/sh
     set -eu
     if ! command -v timeout >/dev/null 2>&1; then
-        exec dagger call -m "{{ca_module}}" --source=. check exit
+        exec "{{just_executable()}}" --justfile "{{justfile()}}" _leased dagger call -m "{{ca_module}}" --source=. check exit
     fi
     set +e
-    timeout --signal=INT --kill-after=30s 15m dagger call -m "{{ca_module}}" --source=. check exit
+    timeout --signal=INT --kill-after=30s 15m "{{just_executable()}}" --justfile "{{justfile()}}" _leased dagger call -m "{{ca_module}}" --source=. check exit
     code=$?
     set -e
     if [ "$code" -eq 124 ]; then
         echo "check: the commit stage ran 15 minutes without finishing — the engine it was talking to is gone or wedged, not slow; look at the engine, then commit again" >&2
     fi
     exit "$code"
+
+# A WORKSTATION'S ENGINE CALL TAKES A LEASE FIRST (2026-10-11). The engines are
+# the CI lanes' too, and daedalus admits lanes on each engine's running units;
+# a call made from here used to load the node without counting in them, so
+# daedalus read the load as dearer lanes and sized CI down (budget.go: carry =
+# running × target / load), and the call left no trace to price it by. Now
+# `dev-lease acquire` (foundry-toolbox, attesting as host/<host>/dev-lease)
+# asks daedalus for a lease, which counts on the engine it names; the call
+# runs with that lease's TRACEPARENT and, when daedalus knows the engine's
+# address, against that engine; the lease is renewed while the call runs and
+# given back when it ends, and one that is never given back expires.
+#
+# A LEASE NEVER BLOCKS WORK. No binary, a refusal, a timeout (3 s) or output
+# that is not the lease's: one stderr line and the call runs as before,
+# unmetered. DEV_LEASE=off skips it without the line. The command is a child,
+# not exec'd, so the EXIT trap gives the lease back; its exit code passes
+# through unchanged. The binary's lines are checked against NAME='value'
+# before they are evaluated.
+[private]
+[positional-arguments]
+_leased *CMD:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    bin="${DEV_LEASE_BIN:-/usr/local/bin/dev-lease}"
+    unmetered() { echo "dev-lease: unmetered ($1), using ${_EXPERIMENTAL_DAGGER_RUNNER_HOST:-the default engine}" >&2; }
+    if [[ "${DEV_LEASE:-}" == off ]]; then
+        :
+    elif [[ ! -x "$bin" ]]; then
+        unmetered "no $bin"
+    else
+        holder="$(hostname)/${CLAUDE_CODE_SESSION_ID:-pid$$}"
+        if ! out="$("$bin" acquire --holder "$holder")"; then
+            unmetered "the lease was refused"
+        elif ! grep -qvxE "(DEV_LEASE_[A-Z]+|TRACEPARENT)='[^']*'" <<<"$out" && grep -qE "^DEV_LEASE_ID='[^']+'\$" <<<"$out"; then
+            eval "$out"
+            export TRACEPARENT
+            export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT="${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-http://hemera.notusmi.com:4318/v1/metrics}"
+            # The leased engine only if it answers (1 s): a pod mid-restart,
+            # or a label not yet stamped on it, leaves its Service with no
+            # endpoint. The lease still counts where daedalus placed it.
+            if [[ "${DEV_LEASE_ADDRESS:-}" =~ ^tcp://([^:/]+):([0-9]+)$ ]]; then
+                if command -v timeout >/dev/null 2>&1 &&
+                    timeout 1 bash -c 'exec 3<>"/dev/tcp/$0/$1"' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" 2>/dev/null; then
+                    export _EXPERIMENTAL_DAGGER_RUNNER_HOST="$DEV_LEASE_ADDRESS"
+                else
+                    echo "dev-lease: $DEV_LEASE_ADDRESS did not answer, using ${_EXPERIMENTAL_DAGGER_RUNNER_HOST:-the default engine}" >&2
+                fi
+            fi
+            idfile="$(mktemp)"
+            echo "$DEV_LEASE_ID" >"$idfile"
+            # A renewal of a lease daedalus lost grants a new one; the file
+            # follows it, so the release gives back the one that counts. The
+            # renewer holds none of the call's output: a pipe reading `just`
+            # would otherwise wait on its sleep.
+            ( while sleep 300; do
+                  r="$("$bin" renew --id "$(cat "$idfile")" --holder "$holder" 2>/dev/null)" || continue
+                  [[ "$r" =~ DEV_LEASE_ID=\'([^\']+)\' ]] && echo "${BASH_REMATCH[1]}" >"$idfile"
+              done ) </dev/null >/dev/null 2>&1 &
+            renewer=$!
+            trap 'pkill -P "$renewer" 2>/dev/null; kill "$renewer" 2>/dev/null; "$bin" release --id "$(cat "$idfile")" >/dev/null || true; rm -f "$idfile"' EXIT
+        else
+            unmetered "the lease answered something else"
+        fi
+    fi
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    "$@"
+    exit $?
 
 # THE PUSH STAGE IS THE BRANCH'S LANES, AND THE LOCK IS GONE (2026-10-02).
 #
