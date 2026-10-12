@@ -92,7 +92,8 @@ _dev VERB *ARGS:
             exit 2
         fi
     fi
-    cmd=(dagger call -m "{{ca_module}}" dev --source=. --tree="{{justfile_directory()}}" "$verb")
+    # Under a dev lease (stages.just `_leased`): counted in its engine's budget.
+    cmd=("{{just_executable()}}" --justfile "{{justfile()}}" _leased dagger call -m "{{ca_module}}" dev --source=. --tree="{{justfile_directory()}}" "$verb")
     # --args whenever there are arguments: a lone '' is an argument, though its csv is empty.
     [[ $# -gt 0 ]] && cmd+=(--args="$csv")
     if [[ -n "${DEV_FRESH:-}" ]]; then
