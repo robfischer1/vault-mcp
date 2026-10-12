@@ -66,8 +66,18 @@ check:
     if ! command -v timeout >/dev/null 2>&1; then
         exec "{{just_executable()}}" --justfile "{{justfile()}}" _leased dagger call -m "{{ca_module}}" --source=. check exit
     fi
+    # AT A TERMINAL (ANY of fds 0-2 a tty), `--foreground` (2026-10-12). Not stdin alone: git runs
+    # pre-commit with stdin on /dev/null, yet dagger's TUI still draws on stderr/stdout. Plain timeout runs its child in a NEW process
+    # group; dagger's TUI then touches the tty from a background group, takes SIGTTOU/SIGTTIN
+    # and stops (State T) for good — a `git commit` hung 9+ minutes. --foreground keeps the
+    # child in the tty's group; the price is that on expiry timeout signals only the child, not
+    # its own children, which an interactive run can take (the user is there to ^C). Without any
+    # tty (sessions, CI) nothing changes: the group kill still reaps the whole tree.
+    fg=""
+    if [ -t 0 ] || [ -t 1 ] || [ -t 2 ]; then fg="--foreground"; fi
     set +e
-    timeout --signal=INT --kill-after=30s 15m "{{just_executable()}}" --justfile "{{justfile()}}" _leased dagger call -m "{{ca_module}}" --source=. check exit
+    # shellcheck disable=SC2086
+    timeout $fg --signal=INT --kill-after=30s 15m "{{just_executable()}}" --justfile "{{justfile()}}" _leased dagger call -m "{{ca_module}}" --source=. check exit
     code=$?
     set -e
     if [ "$code" -eq 124 ]; then

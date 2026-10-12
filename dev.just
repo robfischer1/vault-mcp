@@ -106,8 +106,15 @@ _dev VERB *ARGS:
     if ! command -v timeout >/dev/null 2>&1; then
         exec "${cmd[@]}"
     fi
+    # AT A TERMINAL (ANY of fds 0-2 a tty; a git hook's stdin is /dev/null but its stderr is the
+    # terminal), `--foreground`: plain timeout puts its child in a new process group, and
+    # dagger's TUI then stops on SIGTTOU/SIGTTIN touching the tty (see stages.just `check`).
+    # --foreground keeps the tty; on expiry timeout then signals only the child, not its
+    # children — fine interactively. Without any tty the invocation is unchanged.
+    tmo=(timeout)
+    [[ -t 0 || -t 1 || -t 2 ]] && tmo+=(--foreground)
     set +e
-    timeout --signal=INT --kill-after=30s 30m "${cmd[@]}"
+    "${tmo[@]}" --signal=INT --kill-after=30s 30m "${cmd[@]}"
     code=$?
     set -e
     if [[ "$code" -eq 124 ]]; then
