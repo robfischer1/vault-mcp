@@ -69,7 +69,7 @@ def backoff_delay(
     """
     if failures <= 0:
         return every
-    return min(every * 2**failures, max(cap, every))
+    return min(every << failures, max(cap, every))
 
 
 def reconcile_interval(env: dict[str, str] | None = None) -> int:

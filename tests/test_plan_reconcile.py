@@ -272,8 +272,14 @@ def test_is_auth_refusal_matches_the_refusal_family() -> None:
         "hades HTTP 403: nope",
     ):
         assert is_auth_refusal(msg), msg
-    for msg in ("not_found: x", "hades HTTP 500: boom", "", None):
-        assert not is_auth_refusal(msg), msg
+    benign: tuple[str | None, ...] = (
+        "not_found: x",
+        "hades HTTP 500: boom",
+        "",
+        None,
+    )
+    for other in benign:
+        assert not is_auth_refusal(other), other
 
 
 def test_sweep_aborts_on_first_auth_refusal() -> None:
@@ -340,6 +346,7 @@ def test_loop_backs_off_logs_once_and_recovers(
     """Drive the real loop with a fake clock: refuse x3, then succeed."""
     import threading
     import types
+    from unittest import mock
 
     import vault_mcp.plan_reconcile as pr
 
@@ -348,18 +355,16 @@ def test_loop_backs_off_logs_once_and_recovers(
     results = iter([True, True, True, False])
     done = threading.Event()
 
-    class FakeEvent:
-        def wait(self, t: float) -> bool:
-            waits.append(t)
-            return done.is_set()
+    def _wait(t: float) -> bool:
+        waits.append(t)
+        return done.is_set()
 
-        def set(self) -> None:
-            done.set()
-
+    stop = mock.Mock()
+    stop.wait.side_effect = _wait
     monkeypatch.setattr(
         pr,
         "threading",
-        types.SimpleNamespace(Event=FakeEvent, Thread=threading.Thread),
+        types.SimpleNamespace(Event=lambda: stop, Thread=threading.Thread),
     )
 
     def sweep() -> PlanSweepReport:
