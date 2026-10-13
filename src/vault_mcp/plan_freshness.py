@@ -69,6 +69,26 @@ DEFAULT_PLAN_DIRECTORY = "System/Pantheon/WBS"
 # under.
 _STAT_ERRORS = (OSError, ValueError)
 
+#: Substrings (lower-cased) that mark a hades refusal of the CALLER rather than
+#: of one plan: ``unmapped_subject`` / ``denied`` / HTTP 401 / HTTP 403. Every
+#: remaining plan would be refused identically, so a sweep that sees one stops.
+_AUTH_REFUSAL_MARKERS = (
+    "unmapped_subject",
+    "unmapped subject",
+    "not permitted",
+    "denied",
+    "unauthorized",
+    "forbidden",
+    "http 401",
+    "http 403",
+)
+
+
+def is_auth_refusal(error: str | None) -> bool:
+    """Whether *error* is the gateway refusing this caller (not one plan)."""
+    low = (error or "").lower()
+    return any(m in low for m in _AUTH_REFUSAL_MARKERS)
+
 
 class PlanDriftState(StrEnum):
     """The closed set of per-plan outcomes (FR-008)."""
@@ -171,6 +191,9 @@ class PlanSweepReport:
     directory: str
     records: list[PlanDriftRecord] = field(default_factory=list)
     preflight: dict[str, Any] | None = None
+    #: Set when the sweep stopped early because the gateway refused the caller;
+    #: holds the refusal text. The remaining plans were NOT examined.
+    aborted_auth: str | None = None
 
     @property
     def scanned(self) -> int:
@@ -206,6 +229,9 @@ class PlanSweepReport:
             "backfilled": self.backfilled,
             "counts": self.counts,
             **({"preflight": self.preflight} if self.preflight else {}),
+            **(
+                {"aborted_auth": self.aborted_auth} if self.aborted_auth else {}
+            ),
             "records": [r.to_dict() for r in self.records],
         }
 
@@ -392,7 +418,8 @@ def sweep_plans(
         try:
             stored = read_stored(source_path)
         except Exception as exc:
-            log.exception("store read failed for %s", source_path)
+            if not is_auth_refusal(str(exc)):
+                log.exception("store read failed for %s", source_path)
             report.records.append(
                 PlanDriftRecord(
                     source_path=source_path,
@@ -400,6 +427,9 @@ def sweep_plans(
                     error=f"store read failed: {exc}",
                 )
             )
+            if is_auth_refusal(str(exc)):
+                report.aborted_auth = str(exc)
+                break
             continue
 
         record = compare_plan(source_path, vault_text=raw, stored=stored)
@@ -423,6 +453,11 @@ def sweep_plans(
             )
 
         report.records.append(record)
+        if is_auth_refusal(record.error):
+            # The gateway refused the caller, not this plan: the rest would
+            # be refused identically (one burst was ~226 denies per tick).
+            report.aborted_auth = record.error
+            break
 
     return report
 

@@ -23,11 +23,14 @@ from vault_mcp.plan_freshness import (
     PlanDriftState,
     PlanSweepReport,
     StoredCopy,
+    is_auth_refusal,
     is_probably_stale,
     sweep_plans,
 )
 from vault_mcp.plan_reconcile import (
     DEFAULT_INTERVAL_SECONDS,
+    MAX_BACKOFF_SECONDS,
+    backoff_delay,
     reconcile_enabled,
     reconcile_interval,
     reconcile_once,
@@ -237,3 +240,148 @@ def test_enabled_loop_starts_a_daemon_thread_and_waits_first() -> None:
     assert thread is not None
     assert thread.daemon is True
     assert called == [], "no sweep may run at startup"
+
+
+# ── auth refusal: abort the sweep, back off the loop ───────────────────────
+
+_REFUSAL = "calliope_materialize_note: caller not permitted (unmapped subject)"
+
+
+def _sweep_files(
+    n: int, *, read_error: str, reads: list[str]
+) -> PlanSweepReport:
+    def read_stored(p: str) -> StoredCopy | None:
+        reads.append(p)
+        raise RuntimeError(read_error)
+
+    return sweep_plans(
+        list_files=lambda _d: [f"p{i}.md" for i in range(n)],
+        read_vault=lambda _p: "body",
+        read_stored=read_stored,
+        build_payload=lambda p, _r: {"source_path": p},
+        write_stored=lambda _p: {"ok": True},
+    )
+
+
+def test_is_auth_refusal_matches_the_refusal_family() -> None:
+    for msg in (
+        "unmapped_subject",
+        "caller not permitted (unmapped subject)",
+        "denied: no grant",
+        "hades HTTP 401: nope",
+        "hades HTTP 403: nope",
+    ):
+        assert is_auth_refusal(msg), msg
+    for msg in ("not_found: x", "hades HTTP 500: boom", "", None):
+        assert not is_auth_refusal(msg), msg
+
+
+def test_sweep_aborts_on_first_auth_refusal() -> None:
+    reads: list[str] = []
+    report = _sweep_files(226, read_error=_REFUSAL, reads=reads)
+    assert reads == ["p0.md"], "one refusal must stop the other 225 calls"
+    assert report.aborted_auth is not None
+    assert "unmapped" in report.aborted_auth
+    assert report.to_dict()["aborted_auth"] == report.aborted_auth
+
+
+def test_sweep_continues_past_an_ordinary_store_error() -> None:
+    reads: list[str] = []
+    report = _sweep_files(3, read_error="hades HTTP 500: boom", reads=reads)
+    assert len(reads) == 3
+    assert report.aborted_auth is None
+
+
+def test_sweep_aborts_on_an_auth_refusal_from_the_write_leg() -> None:
+    writes: list[str] = []
+
+    def write_stored(pl: dict[str, Any]) -> dict[str, Any]:
+        writes.append(pl["source_path"])
+        return {"ok": False, "error": "hades HTTP 403: forbidden"}
+
+    report = sweep_plans(
+        list_files=lambda _d: ["a.md", "b.md"],
+        read_vault=lambda _p: "new",
+        read_stored=lambda p: StoredCopy(p, raw_hash="old", body_bytes=3),
+        build_payload=lambda p, _r: {"source_path": p},
+        write_stored=write_stored,
+        refresh=True,
+    )
+    assert writes == ["a.md"]
+    assert report.aborted_auth is not None
+
+
+def test_reconcile_once_reports_auth_refusal_without_logging(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    reads: list[str] = []
+    out = reconcile_once(
+        lambda: _sweep_files(5, read_error=_REFUSAL, reads=reads)
+    )
+    assert out["ok"] is False
+    assert out["auth_refused"] is True
+    assert caplog.records == [], "the loop owns the once-only log line"
+
+
+def test_backoff_doubles_and_caps() -> None:
+    assert backoff_delay(900, 0) == 900
+    assert backoff_delay(900, 1) == 1800
+    assert backoff_delay(900, 2) == 3600
+    assert backoff_delay(900, 3) == 7200
+    assert backoff_delay(900, 4) == 14400
+    assert backoff_delay(900, 5) == MAX_BACKOFF_SECONDS
+    assert backoff_delay(900, 50) == MAX_BACKOFF_SECONDS
+
+
+def test_loop_backs_off_logs_once_and_recovers(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Drive the real loop with a fake clock: refuse x3, then succeed."""
+    import threading
+    import types
+
+    import vault_mcp.plan_reconcile as pr
+
+    caplog.set_level(logging.INFO)
+    waits: list[float] = []
+    results = iter([True, True, True, False])
+    done = threading.Event()
+
+    class FakeEvent:
+        def wait(self, t: float) -> bool:
+            waits.append(t)
+            return done.is_set()
+
+        def set(self) -> None:
+            done.set()
+
+    monkeypatch.setattr(
+        pr,
+        "threading",
+        types.SimpleNamespace(Event=FakeEvent, Thread=threading.Thread),
+    )
+
+    def sweep() -> PlanSweepReport:
+        try:
+            refused = next(results)
+        except StopIteration:
+            done.set()
+            return _report()
+        if refused:
+            return PlanSweepReport(
+                dry_run=False,
+                directory="d",
+                aborted_auth=_REFUSAL,
+            )
+        return _report()
+
+    thread = start_plan_reconcile(sweep, enabled=True, interval=100)
+    assert thread is not None
+    thread.join(timeout=5)
+    assert waits[:5] == [100, 200, 400, 800, 100]
+    refusal_logs = [
+        r for r in caplog.records if "refused this caller" in r.message
+    ]
+    assert len(refusal_logs) == 1, "a standing refusal logs once, not per tick"
+    assert "accepted the caller again" in caplog.text

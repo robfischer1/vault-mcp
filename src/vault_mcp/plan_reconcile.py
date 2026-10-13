@@ -55,6 +55,22 @@ log = logging.getLogger(__name__)
 #: it prevents took 22 days to be noticed, so minutes-scale latency is ample.
 DEFAULT_INTERVAL_SECONDS = 900
 
+#: Ceiling on the auth-refusal backoff, in seconds (6 hours).
+MAX_BACKOFF_SECONDS = 6 * 3600
+
+
+def backoff_delay(
+    every: int, failures: int, cap: int = MAX_BACKOFF_SECONDS
+) -> int:
+    """Seconds to wait before the next pass after *failures* auth refusals.
+
+    ``every`` doubled per consecutive refusal, capped at *cap*; zero failures
+    is the plain interval. Pure.
+    """
+    if failures <= 0:
+        return every
+    return min(every * 2**failures, max(cap, every))
+
 
 def reconcile_interval(env: dict[str, str] | None = None) -> int:
     """Resolve the reconcile interval from the environment."""
@@ -94,6 +110,18 @@ def reconcile_once(
     except Exception as exc:  # the loop must survive one bad pass
         log.exception("plan-reconcile: pass failed")
         return {"ok": False, "error": str(exc), "refreshed": 0, "at": now}
+
+    if report.aborted_auth:
+        # Not logged here: the loop logs the first refusal once, and the
+        # recovery, so a standing refusal does not repeat every tick.
+        return {
+            "ok": False,
+            "auth_refused": True,
+            "error": report.aborted_auth,
+            "at": now,
+            "scanned": report.scanned,
+            "refreshed": 0,
+        }
 
     refreshed = [r for r in report.records if r.refreshed]
     errored = [r for r in report.records if r.error]
@@ -145,8 +173,28 @@ def start_plan_reconcile(
 
     def _loop() -> None:
         # Wait first: never write during server startup.
-        while not stop.wait(every):
-            reconcile_once(sweep)
+        failures = 0
+        wait = every
+        while not stop.wait(wait):
+            out = reconcile_once(sweep)
+            if out.get("auth_refused"):
+                if failures == 0:
+                    log.warning(
+                        "plan-reconcile: gateway refused this caller (%s); "
+                        "backing off exponentially (cap %ds) until a call "
+                        "succeeds. Set VAULT_MCP_PLAN_RECONCILE=0 to stop it.",
+                        out.get("error"),
+                        MAX_BACKOFF_SECONDS,
+                    )
+                failures += 1
+            elif failures:
+                log.info(
+                    "plan-reconcile: gateway accepted the caller again "
+                    "after %d refused pass(es)",
+                    failures,
+                )
+                failures = 0
+            wait = backoff_delay(every, failures)
 
     thread = threading.Thread(target=_loop, name="plan-reconcile", daemon=True)
     thread.start()
