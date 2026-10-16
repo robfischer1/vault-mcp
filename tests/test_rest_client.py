@@ -500,3 +500,63 @@ class TestPatchNoteWithin:
 
     def test_within_absent_sends_no_header(self, monkeypatch):
         assert "Within" not in self._call(monkeypatch)
+
+
+class TestFrontmatterJsonBody:
+    """Frontmatter PATCHes send application/json (`value`); other targets stay markdown."""
+
+    def _call(self, monkeypatch, verb, args):
+        import asyncio
+
+        from vault_mcp import server
+
+        client = MagicMock()
+        client.patch.return_value = {"ok": True, "data": None}
+        monkeypatch.setattr(server, "_get_rest_client", lambda: client)
+        asyncio.run(server.mcp.call_tool(verb, args))
+        kw = client.patch.call_args.kwargs
+        return kw.get("content_type", "text/markdown"), kw["content"]
+
+    def _set(self, monkeypatch, value):
+        return self._call(
+            monkeypatch,
+            "set_field",
+            {"path": "a.md", "key": "k", "value": value},
+        )
+
+    @pytest.mark.parametrize(
+        ("value", "body"),
+        [
+            ("true", "true"),
+            ("42", "42"),
+            ("hello", '"hello"'),
+            ("[a, b]", '["a", "b"]'),
+            ("2026-10-16", '"2026-10-16"'),
+            ("", '""'),
+            ("a: [", '"a: ["'),
+            (".nan", '".nan"'),
+        ],
+    )
+    def test_set_field_body(self, monkeypatch, value, body):
+        assert self._set(monkeypatch, value) == ("application/json", body)
+
+    def test_patch_note_frontmatter_is_json(self, monkeypatch):
+        got = self._call(
+            monkeypatch,
+            "patch_note",
+            {
+                "path": "a.md",
+                "content": "true",
+                "target_type": "frontmatter",
+                "target": "k",
+            },
+        )
+        assert got == ("application/json", "true")
+
+    def test_patch_note_heading_stays_markdown(self, monkeypatch):
+        got = self._call(
+            monkeypatch,
+            "patch_note",
+            {"path": "a.md", "content": "true", "target": "T"},
+        )
+        assert got == ("text/markdown", "true")

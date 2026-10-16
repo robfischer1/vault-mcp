@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import httpx
+import yaml
 
 from vault_mcp.gate import ObsidianIOError
 
@@ -57,6 +58,30 @@ _BACKOFF_STEPS = [30, 300, 1800]
 #: is explicit (``40084``: they are ambiguous between the deprecated 1.x format and
 #: raw-content mode). ``2`` is the non-deprecated one; ``1`` sunsets in 6.0.
 PATCH_VERSION = "2"
+
+
+def frontmatter_json(raw: str) -> str:
+    """Encode a frontmatter value as the JSON body of a raw-content PATCH.
+
+    In ``Markdown-Patch-Version: 2`` raw-content mode the body's content type
+    picks the instruction field: ``text/*`` fills ``content`` (headings, blocks),
+    ``application/json`` fills ``value``, and a frontmatter target takes only
+    ``value`` (``40081`` otherwise). So a frontmatter PATCH sends this string as
+    ``application/json``.
+
+    ``raw`` is YAML-parsed first, keeping the verbs' contract that ``"true"`` is
+    a boolean and ``"42"`` a number. The empty string stays the empty string
+    (``yaml.safe_load("")`` is None, which would silently null the field), and so
+    does anything YAML cannot parse or JSON cannot carry (a date such as
+    ``2026-10-16`` loads as ``datetime.date``; NaN/inf are not JSON): it is sent
+    as the original text, a JSON string.
+    """
+    try:
+        parsed = yaml.safe_load(raw) if raw.strip() else raw
+        return json.dumps(parsed, allow_nan=False)
+    except yaml.YAMLError, TypeError, ValueError:
+        return json.dumps(raw)
+
 
 #: How many ``name (n)`` candidates a trash move probes before giving up.
 _TRASH_NAME_TRIES = 100
