@@ -6,9 +6,9 @@
 
 The Hades gateway seam is ``call(verb, arguments) -> result``. A test double
 that implements *that* shape with canned, arg-ignoring responses is the
-permissive ``chaos.client.FakeTransport`` anti-pattern the fleet-wide Wave-4
+permissive canned-transport anti-pattern the fleet-wide Wave-4
 sweep retired: it lets a test go green against a verb contract it never actually
-exercised. The sanctioned replacement lives in ``chaos.client.testing``
+exercised. The sanctioned replacement lives in ``forge_testkit.replay``
 (``ReplayTransport`` — keyed by ``(verb, args)``, raise-on-untaped).
 
 vault-mcp does **not** consume the ``call(verb, args)`` gateway seam: it reaches
@@ -36,8 +36,8 @@ _TESTS_DIR = Path(__file__).parent
 
 #: The one sanctioned home for a ``call(verb, args)`` double, per the fleet
 #: contract. No such path exists in this repo today; kept for fidelity so a
-#: vendored ``chaos.client.testing`` tree would never be flagged.
-_SANCTIONED_PATH = "chaos/client/testing"
+#: vendored ``forge_testkit.replay`` tree would never be flagged.
+_SANCTIONED_PATH = "forge_testkit/replay"
 
 
 def _defines_gateway_call(node: ast.ClassDef) -> bool:
@@ -77,7 +77,7 @@ def test_no_permissive_gateway_double_in_tests() -> None:
         )
     assert not offenders, (
         "Permissive Hades-gateway double(s) found: a call(verb, args) canned "
-        "transport must live in chaos.client.testing (ReplayTransport, keyed by "
+        "transport must live in forge_testkit.replay (ReplayTransport, keyed by "
         "(verb, args), raise-on-untaped), never hand-rolled in this repo's "
         f"tests. Offenders: {offenders}"
     )
