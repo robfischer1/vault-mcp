@@ -40,6 +40,7 @@ from vault_mcp import server
 # cannot resolve an attribute on a module that is still mid-import, so every
 # decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
 # makes function untyped". 99 errors, entirely from that one indirection.
+from vault_mcp.rest_client import frontmatter_json
 from vault_mcp.server import mcp
 
 
@@ -202,7 +203,9 @@ if not server.REST_DISABLE:
 
         Args:
             path: Vault-relative file path.
-            content: The markdown content to write.
+            content: The markdown content to write. For a frontmatter target
+                it is YAML-parsed and sent as a JSON value ("true" -> boolean,
+                "[a, b]" -> list), as ``set_field`` does.
             target_type: "heading", "block", or "frontmatter". Default "heading".
             target: Target identifier — the heading path from the top-level
                 heading, ``::``-joined ("Title::Section::Subsection"; leading
@@ -232,11 +235,21 @@ if not server.REST_DISABLE:
             headers["Create-Target-If-Missing"] = "true"
         if within is not None:
             headers["Within"] = str(within)
-        result = client.patch(
-            f"/vault/{path}",
-            content=content,
-            extra_headers=headers,
-        )
+        if target_type == "frontmatter":
+            # Frontmatter rides in the API's `value` field, picked by an
+            # application/json body; text/markdown would fill `content` (40081).
+            result = client.patch(
+                f"/vault/{path}",
+                content=frontmatter_json(content),
+                content_type="application/json",
+                extra_headers=headers,
+            )
+        else:
+            result = client.patch(
+                f"/vault/{path}",
+                content=content,
+                extra_headers=headers,
+            )
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "patched": path}
@@ -269,19 +282,22 @@ if not server.REST_DISABLE:
         return {"ok": True, "appended": path}
 
     @mcp.tool(
-        description="[REST-backed] Set one frontmatter field on a note, creating it when absent. Obsidian YAML-parses the value, so 'true' lands as a boolean."
+        description="[REST-backed] Set one frontmatter field on a note, creating it when absent. The value is YAML-parsed, so 'true' lands as a boolean."
     )
     def set_field(path: str, key: str, value: str) -> dict[str, Any]:
         """[REST-backed] Set a single frontmatter field on a note.
 
-        Convenience wrapper around PATCH with Target-Type: frontmatter.
+        Convenience wrapper around PATCH with Target-Type: frontmatter
+        (an application/json body; the value rides in the API's ``value``).
         Replaces the field value; creates the field if it doesn't exist.
 
         Args:
             path: Vault-relative file path.
             key: Frontmatter field name (e.g. "status", "created").
-            value: New value as a string. YAML scalars are auto-parsed by
-                Obsidian (e.g. "true" -> boolean, "42" -> number).
+            value: New value as a string, YAML-parsed here and sent as a
+                JSON value (e.g. "true" -> boolean, "42" -> number,
+                "[a, b]" -> list). Dates, the empty string and unparseable
+                text stay strings.
 
         Returns:
             {"ok": True, "field": key, "path": path} on success.
@@ -296,7 +312,8 @@ if not server.REST_DISABLE:
         }
         result = client.patch(
             f"/vault/{path}",
-            content=value,
+            content=frontmatter_json(value),
+            content_type="application/json",
             extra_headers=headers,
         )
         if not result["ok"]:
