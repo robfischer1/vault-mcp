@@ -11,6 +11,8 @@ over an injected sweep, which is the whole reason it is shaped that way.
 from __future__ import annotations
 
 import logging
+import os
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -25,6 +27,7 @@ from vault_mcp.plan_freshness import (
     StoredCopy,
     is_auth_refusal,
     is_probably_stale,
+    parse_instant,
     sweep_plans,
 )
 from vault_mcp.plan_reconcile import (
@@ -59,6 +62,68 @@ def test_gate_says_fresh_when_stored_clock_is_newer(tmp_path: Path) -> None:
     assert not is_probably_stale(
         "p.md", vault_root=str(tmp_path), stored_mtime="2999-01-01T00:00:00Z"
     )
+
+
+def _set_mtime(path: Path, iso: str) -> None:
+    ts = datetime.fromisoformat(iso).timestamp()
+    os.utime(path, (ts, ts))
+
+
+def test_gate_compares_instants_across_offsets(tmp_path: Path) -> None:
+    """Disk is 2026-10-17T22:11:45Z; the same second spelled in Eastern is not newer."""
+    f = tmp_path / "p.md"
+    f.write_text("x", encoding="utf-8")
+    _set_mtime(f, "2026-10-17T22:11:45+00:00")
+    root = str(tmp_path)
+    # Lexically "2026-10-17T18..." < "2026-10-17T22..." would call these stale.
+    for same in (
+        "2026-10-17T18:11:45.000000-04:00",
+        "2026-10-17T22:11:45+00:00",
+        "2026-10-17T22:11:45Z",
+        "2026-10-17T22:11:46Z",
+    ):
+        assert not is_probably_stale("p.md", vault_root=root, stored_mtime=same)
+    # One second behind on disk's clock, in an offset that sorts after it.
+    assert is_probably_stale(
+        "p.md", vault_root=root, stored_mtime="2026-10-17T18:11:44-04:00"
+    )
+    # Eastern text that sorts lexically AFTER the Z text but is an hour older.
+    assert is_probably_stale(
+        "p.md", vault_root=root, stored_mtime="2026-10-17T21:11:45.5+00:00"
+    )
+
+
+def test_gate_reads_a_naive_stored_clock_as_utc(tmp_path: Path) -> None:
+    f = tmp_path / "p.md"
+    f.write_text("x", encoding="utf-8")
+    _set_mtime(f, "2026-10-17T22:11:45+00:00")
+    root = str(tmp_path)
+    assert not is_probably_stale(
+        "p.md", vault_root=root, stored_mtime="2026-10-17T22:11:45"
+    )
+    assert is_probably_stale(
+        "p.md", vault_root=root, stored_mtime="2026-10-17T22:11:44"
+    )
+
+
+def test_gate_is_conservative_when_the_clock_is_unparseable(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "p.md").write_text("x", encoding="utf-8")
+    assert is_probably_stale(
+        "p.md", vault_root=str(tmp_path), stored_mtime="not a time"
+    )
+
+
+def test_parse_instant() -> None:
+    want = datetime(2026, 10, 17, 22, 11, 45, 188000, tzinfo=UTC)
+    assert parse_instant("2026-10-17T22:11:45.188Z") == want
+    assert parse_instant("2026-10-17T22:11:45.188000+00:00") == want
+    assert parse_instant("2026-10-17T18:11:45.188000-04:00") == want
+    assert parse_instant("2026-10-17T22:11:45.188") == want  # naive -> UTC
+    assert parse_instant("") is None
+    assert parse_instant(None) is None
+    assert parse_instant("soon") is None
 
 
 def test_gate_is_conservative_when_the_clock_is_unknown(tmp_path: Path) -> None:

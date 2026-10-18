@@ -116,8 +116,10 @@ def file_mtime_iso(path: str | Path) -> str | None:
     Never raises: a missing, unreadable or unstattable path answers ``None`` so
     a stat failure can never fail a dissolve (FR-007).
 
-    Second precision, ``Z``-suffixed, so values are timezone-explicit and
-    lexicographically ordered — staleness is then a string comparison.
+    Second precision, ``Z``-suffixed, so the value is timezone-explicit. It is
+    compared against the store's clock only after both sides are parsed to
+    aware datetimes (:func:`parse_instant`) — never as strings, because the
+    store's ``mtime`` may be spelled with any offset.
     """
     if not path:
         # Path("") resolves to the CWD, which stats fine — that would silently
@@ -236,6 +238,24 @@ class PlanSweepReport:
         }
 
 
+def parse_instant(text: str | None) -> datetime | None:
+    """Parse an ISO-8601 / RFC3339 time to an aware datetime, or ``None``.
+
+    Accepts ``Z``, ``+00:00`` and any other offset (the store's ``mtime`` is
+    moving to America/New_York RFC3339, e.g. ``2026-10-17T18:11:45.188000-04:00``).
+    **Naive text is read as UTC**: the old writer stamped UTC without always
+    saying so, so UTC preserves today's meaning for every value already stored.
+    Unparseable or empty input answers ``None``; callers choose the fallback.
+    """
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.strip())
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
 def is_probably_stale(
     source_path: str,
     *,
@@ -245,21 +265,27 @@ def is_probably_stale(
     """Decide cheaply whether a plan may be stale (F4) — one comparison.
 
     F2 made this possible: the stored ``mtime`` is the source file's clock at
-    capture, ISO-8601 UTC at fixed precision, so ``>`` on the strings is a
-    correct ordering.
+    capture. Both clocks are parsed to aware datetimes and compared as instants
+    (:func:`parse_instant`), so the store may spell its clock in any offset; a
+    naive stored value is read as UTC.
 
     Deliberately **conservative in one direction**: an unknown stored clock or
     an unstattable file answers ``True``, so the expensive hash check runs and
     decides. This gate may say "stale" about an unchanged file — that costs one
     wasted comparison. It must never say "current" about a changed one, because
-    only the hash suppresses a write.
+    only the hash suppresses a write. An unparseable stored clock is an unknown
+    clock, so it also answers ``True``.
     """
     if stored_mtime is None:
         return True
     disk = file_mtime_iso(f"{vault_root}/{source_path}")
     if disk is None:
         return True
-    return disk > stored_mtime
+    disk_at = parse_instant(disk)
+    stored_at = parse_instant(stored_mtime)
+    if disk_at is None or stored_at is None:
+        return True
+    return disk_at > stored_at
 
 
 def compare_plan(
