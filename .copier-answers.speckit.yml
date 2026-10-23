@@ -4,5 +4,9 @@
 # NEVER `copier update` here: `.specify/` is gitignored, and update replays an index-based
 # diff that deletes what it cannot see. The constitution and the rendered plan skill are
 # never overwritten (`_skip_if_exists`); everything else takes the template's bytes.
-_commit: v0.231.0
+_commit: v0.238.0
 _src_path: https://git.notusmi.com/foundry/foundry-stocks.git
+# `_rendered` is written by copier ONLY, never by Renovate's regex manager (it rewrites `_commit`
+# alone). A pointer that moved without its render leaves the two apart, and the gate refuses it
+# (fleet:speckit-render-current).
+_rendered: v0.238.0
