@@ -101,9 +101,7 @@ def dissolve(
             )
         finally:
             committer.end_write()
-        res["dirs_pruned"] = server._prune_empty_parents(
-            abs_path, server.VAULT_PATH
-        )
+        res["dirs_pruned"] = server._prune_empty_parents(abs_path, server.VAULT_PATH)
     return res
 
 

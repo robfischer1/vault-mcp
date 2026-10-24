@@ -139,12 +139,7 @@ class TestFormulaTierClassification:
         assert _classify_formula_tier("file.name") == 1
 
     def test_links_filter_tier1(self):
-        assert (
-            _classify_formula_tier(
-                'file.links.filter(value.asFile().ext == "md").length'
-            )
-            == 1
-        )
+        assert _classify_formula_tier('file.links.filter(value.asFile().ext == "md").length') == 1
 
     def test_bare_property_tier1(self):
         assert _classify_formula_tier("categories") == 1
@@ -418,8 +413,7 @@ class TestFormulaEvaluation:
         elapsed = time.monotonic() - start
 
         assert elapsed < 0.15, (
-            f"regex ran {elapsed:.2f}s against a 0.05s timeout — "
-            f"the timeout bounded nothing"
+            f"regex ran {elapsed:.2f}s against a 0.05s timeout — the timeout bounded nothing"
         )
 
     def test_the_timeout_fires_on_a_pattern_the_engine_cannot_optimize(self):
@@ -442,9 +436,7 @@ class TestFormulaEvaluation:
         # Bounded BELOW too: a fix that simply refused the pattern outright
         # would raise instantly and pass an upper-bound-only assertion, without
         # the timeout ever being consulted.
-        assert 0.04 < elapsed < 0.20, (
-            f"expected the 0.05s timeout to end it; took {elapsed:.3f}s"
-        )
+        assert 0.04 < elapsed < 0.20, f"expected the 0.05s timeout to end it; took {elapsed:.3f}s"
 
     def test_the_configured_timeout_is_the_ceiling(self):
         """A LONGER timeout must cost proportionally more.
@@ -478,9 +470,7 @@ class TestLinkCountFormula:
         )
         outbound = set(idx._outbound.get("Beta", []))
         inbound = set(idx._inbound.get("Beta", []))
-        val, warning = evaluate_formula(
-            f, beta_path, {}, "Projects/Beta.md", outbound, inbound
-        )
+        val, warning = evaluate_formula(f, beta_path, {}, "Projects/Beta.md", outbound, inbound)
         assert warning is None
         assert val == len(outbound)
         assert val >= 2
@@ -495,9 +485,7 @@ class TestLinkCountFormula:
         )
         outbound = set(idx._outbound.get("Alpha", []))
         inbound = set(idx._inbound.get("Alpha", []))
-        val, warning = evaluate_formula(
-            f, alpha_path, {}, "Projects/Alpha.md", outbound, inbound
-        )
+        val, warning = evaluate_formula(f, alpha_path, {}, "Projects/Alpha.md", outbound, inbound)
         assert warning is None
         assert val >= 1
 
@@ -538,9 +526,7 @@ class TestViewSelection:
     def test_empty_result_set(self):
         idx = _vault_idx()
         base = Base(
-            filters=FilterNode(
-                op="eq", field="file.folder", value="Nonexistent"
-            ),
+            filters=FilterNode(op="eq", field="file.folder", value="Nonexistent"),
             formulas={},
             views=[],
             raw_yaml="",
@@ -569,9 +555,7 @@ class TestViewSelection:
         base = pf.bases[0]
         result = execute_base(base, idx, view_name="Global Map")
         assert result.notes == []
-        assert any(
-            "Maps community plugin" in w["reason"] for w in result.warnings
-        )
+        assert any("Maps community plugin" in w["reason"] for w in result.warnings)
 
     def test_no_views_execution(self):
         idx = _vault_idx()
@@ -627,9 +611,7 @@ class TestSerializeBase:
     def test_parse_empty_file(self):
         import tempfile
 
-        with tempfile.NamedTemporaryFile(
-            suffix=".md", delete=False, mode="w"
-        ) as f:
+        with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w") as f:
             f.write("# No base here\n\nJust some text.\n")
             f.flush()
             pf = parse_file(Path(f.name))
@@ -716,9 +698,7 @@ class TestWriter:
         target = tmp_path / "roundtrip.md"
         target.write_text("# Test\n", encoding="utf-8")
         base_dict = {
-            "filters": {
-                "and": ['file.folder == "Test"', 'file.name != "Test"']
-            },
+            "filters": {"and": ['file.folder == "Test"', 'file.name != "Test"']},
             "formulas": {"Status": 'note["status"]'},
             "views": [{"type": "table", "name": "Table"}],
         }
@@ -772,9 +752,7 @@ class TestValidator:
         base_dict = {
             "filters": {"and": ['file.folder == "Test"']},
             "formulas": {"Status": 'note["status"]'},
-            "views": [
-                {"type": "table", "name": "Table", "order": ["formula.Missing"]}
-            ],
+            "views": [{"type": "table", "name": "Table", "order": ["formula.Missing"]}],
         }
         result = validate_base(base_dict)
         assert result.valid is False
@@ -787,9 +765,7 @@ class TestValidator:
             "views": [],
         }
         result = validate_base(base_dict)
-        assert any(
-            w["type"] == "unquoted_special_char" for w in result.warnings
-        )
+        assert any(w["type"] == "unquoted_special_char" for w in result.warnings)
 
     def test_undefined_sort_ref_warning(self):
         base_dict = {
@@ -799,9 +775,7 @@ class TestValidator:
                 {
                     "type": "table",
                     "name": "Table",
-                    "sort": [
-                        {"property": "formula.Missing", "direction": "ASC"}
-                    ],
+                    "sort": [{"property": "formula.Missing", "direction": "ASC"}],
                 }
             ],
         }
@@ -841,9 +815,7 @@ class TestPerformance:
         for _ in range(50):
             parse_file(path)
         elapsed_per_call = (time.perf_counter() - start) / 50
-        assert elapsed_per_call < 0.2, (
-            f"parse_file took {elapsed_per_call * 1000:.1f}ms"
-        )
+        assert elapsed_per_call < 0.2, f"parse_file took {elapsed_per_call * 1000:.1f}ms"
 
     def test_execute_under_200ms(self):
         import time
@@ -857,9 +829,7 @@ class TestPerformance:
         for _ in range(50):
             execute_base(base, idx)
         elapsed_per_call = (time.perf_counter() - start) / 50
-        assert elapsed_per_call < 0.2, (
-            f"execute_base took {elapsed_per_call * 1000:.1f}ms"
-        )
+        assert elapsed_per_call < 0.2, f"execute_base took {elapsed_per_call * 1000:.1f}ms"
 
 
 # ===================================================================
@@ -946,15 +916,11 @@ class TestSummaries:
         assert result.summaries["Zero"] == 0
 
         # Numeric summary on empty set
-        base.summaries = [
-            Summary(name="NullSum", function="sum", property="amount")
-        ]
+        base.summaries = [Summary(name="NullSum", function="sum", property="amount")]
         result = execute_base(base, idx)
         assert result.summaries["NullSum"] == 0
 
-        base.summaries = [
-            Summary(name="NullAvg", function="average", property="amount")
-        ]
+        base.summaries = [Summary(name="NullAvg", function="average", property="amount")]
         result = execute_base(base, idx)
         assert result.summaries["NullAvg"] is None
 

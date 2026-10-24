@@ -132,9 +132,7 @@ class FakeVault:
         self.store[f"{_TRASH}/{path}"] = self.store[path]
         del self.store[path]
 
-    def list_notes(
-        self, directory: str = "", *, recursive: bool = True
-    ) -> list[str]:
+    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
         """List `.md` paths under `directory`.
 
         Mirrors RestNoteIO: `.md` only, `.trash/` skipped, and an unreachable
@@ -172,11 +170,7 @@ class FakeVault:
     @property
     def calls(self) -> list[tuple[str, str]]:
         """(path, content) per note CREATED — writes only, never reads."""
-        return [
-            (c.path, c.content or "")
-            for c in self.log
-            if c.verb == "create_note"
-        ]
+        return [(c.path, c.content or "") for c in self.log if c.verb == "create_note"]
 
     @property
     def deleted(self) -> list[str]:

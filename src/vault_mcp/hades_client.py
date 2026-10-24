@@ -84,9 +84,7 @@ _VERB_MATERIALIZE_NOTE = "calliope_materialize_note"
 _JSON_DECODE_ERRORS = (ValueError, TypeError)
 
 
-def _default_transport(
-    url: str, headers: dict[str, str], body: dict[str, Any]
-) -> tuple[int, str]:
+def _default_transport(url: str, headers: dict[str, str], body: dict[str, Any]) -> tuple[int, str]:
     """POST one JSON-RPC message; return (status, text). Edge — not unit-tested."""
     import httpx
 
@@ -277,9 +275,7 @@ def _note_to_document_row(res: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": res.get("container_id"),
         "source_path": provenance.get("source_path"),
-        "body_text": "\n\n".join(
-            str(b.get("text") or "") for b in blocks if isinstance(b, dict)
-        ),
+        "body_text": "\n\n".join(str(b.get("text") or "") for b in blocks if isinstance(b, dict)),
         "raw_hash": provenance.get("raw_hash"),
         "mtime": provenance.get("mtime"),
         "ctime": provenance.get("ctime"),

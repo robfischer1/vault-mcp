@@ -47,10 +47,7 @@ class TestAuthorType:
         assert author_type_for(Provenance.HUMAN_EDITED) is AuthorType.AI
 
     def test_declared_external_wins(self):
-        assert (
-            author_type_for(Provenance.HUMAN, AuthorType.EXTERNAL)
-            is AuthorType.EXTERNAL
-        )
+        assert author_type_for(Provenance.HUMAN, AuthorType.EXTERNAL) is AuthorType.EXTERNAL
 
     def test_parse_author_type(self):
         assert parse_author_type("external") is AuthorType.EXTERNAL
@@ -60,27 +57,16 @@ class TestAuthorType:
             parse_author_type("robot")
 
     def test_no_downgrade_agent_promotes_human(self):
-        assert (
-            transition_author_type(AuthorType.HUMAN, Actor.AGENT)
-            is AuthorType.AI
-        )
+        assert transition_author_type(AuthorType.HUMAN, Actor.AGENT) is AuthorType.AI
 
     def test_no_downgrade_ai_stays_ai(self):
-        assert (
-            transition_author_type(AuthorType.AI, Actor.HUMAN) is AuthorType.AI
-        )
+        assert transition_author_type(AuthorType.AI, Actor.HUMAN) is AuthorType.AI
 
     def test_external_is_sticky(self):
-        assert (
-            transition_author_type(AuthorType.EXTERNAL, Actor.AGENT)
-            is AuthorType.EXTERNAL
-        )
+        assert transition_author_type(AuthorType.EXTERNAL, Actor.AGENT) is AuthorType.EXTERNAL
 
     def test_human_human_stays_human(self):
-        assert (
-            transition_author_type(AuthorType.HUMAN, Actor.HUMAN)
-            is AuthorType.HUMAN
-        )
+        assert transition_author_type(AuthorType.HUMAN, Actor.HUMAN) is AuthorType.HUMAN
 
 
 class TestTaxonomy:
@@ -114,19 +100,14 @@ class TestStamp:
 
 class TestTransition:
     def test_human_edit_of_ai_assisted_becomes_human_edited(self):
-        assert (
-            transition(Provenance.AI_ASSISTED, Actor.HUMAN)
-            is Provenance.HUMAN_EDITED
-        )
+        assert transition(Provenance.AI_ASSISTED, Actor.HUMAN) is Provenance.HUMAN_EDITED
 
     def test_agent_edit_never_downgrades_ai_computed_to_human(self):
         result = transition(Provenance.AI_COMPUTED, Actor.AGENT)
         assert result is Provenance.AI_COMPUTED
 
     def test_agent_edit_of_human_content_becomes_ai_assisted(self):
-        assert (
-            transition(Provenance.HUMAN, Actor.AGENT) is Provenance.AI_ASSISTED
-        )
+        assert transition(Provenance.HUMAN, Actor.AGENT) is Provenance.AI_ASSISTED
 
     def test_human_edit_of_human_content_stays_human(self):
         assert transition(Provenance.HUMAN, Actor.HUMAN) is Provenance.HUMAN
@@ -137,9 +118,7 @@ class TestSchemaLink:
         # The schema fixture declares the same 7 levels as the canonical spectrum.
         from vault_mcp.schema import load_schema
 
-        schema = load_schema(
-            ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml"
-        )
+        schema = load_schema(ROOT / "tests" / "fixtures" / "schema" / "valid.schema.yml")
         # forge-testkit: assert-exempt: validate_schema_levels is -> None and
         # raises on a mismatch, so "did not raise" is the result being checked.
         validate_schema_levels(schema.provenance_levels)

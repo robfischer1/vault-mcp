@@ -56,9 +56,7 @@ log = logging.getLogger(__name__)
 
 
 _HASLINK_RE = re.compile(r'^file\.hasLink\(\s*"([^"]+)"\s*\)$')
-_COMPARISON_RE = re.compile(
-    r'^((?:file\.\w+|note\["[^"]+"\]|[a-zA-Z_]\w*))\s*(==|!=)\s*"([^"]*)"$'
-)
+_COMPARISON_RE = re.compile(r'^((?:file\.\w+|note\["[^"]+"\]|[a-zA-Z_]\w*))\s*(==|!=)\s*"([^"]*)"$')
 
 
 # The two operators _COMPARISON_RE can capture, mapped rather than compared.
@@ -134,9 +132,7 @@ def _build_filter_tree(raw: object) -> FilterNode | None:
                     if child is not None:
                         child_nodes.append(child)
                 if child_nodes:
-                    remaining_children.append(
-                        FilterNode(op=k, children=child_nodes)
-                    )
+                    remaining_children.append(FilterNode(op=k, children=child_nodes))
             else:
                 child = _build_filter_tree(v)
                 if child is not None:
@@ -159,9 +155,7 @@ def _build_filter_tree(raw: object) -> FilterNode | None:
 # ---------------------------------------------------------------------------
 
 
-def parse_base_yaml(
-    raw: dict[str, Any], yaml_text: str, line_number: int
-) -> Base:
+def parse_base_yaml(raw: dict[str, Any], yaml_text: str, line_number: int) -> Base:
     """Parse one base's YAML dict into a Base (filters, formulas, views)."""
     filters = _build_filter_tree(raw.get("filters"))
 

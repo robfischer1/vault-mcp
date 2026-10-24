@@ -120,9 +120,7 @@ class TestRendering:
 
     def test_default_stub_is_passthrough_body(self):
         mat, _, vault = _materializer()
-        mat.materialize(
-            _payload(body="Verbatim body line."), created="2026-05-30"
-        )
+        mat.materialize(_payload(body="Verbatim body line."), created="2026-05-30")
         content = vault.store["Knowledge/Dossiers/Acme Dossier.md"]
         assert "Verbatim body line." in content
 

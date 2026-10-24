@@ -79,9 +79,7 @@ class ScopePolicy:
             return CarveDecision(norm, pillar, False, "protected-pillar")
         if pillar in self.dissolve_pillars:
             return CarveDecision(norm, pillar, True, "dissolvable-pillar")
-        return CarveDecision(
-            norm, pillar, False, "unlisted-pillar-default-stay"
-        )
+        return CarveDecision(norm, pillar, False, "unlisted-pillar-default-stay")
 
     def with_overrides(
         self,
@@ -94,19 +92,11 @@ class ScopePolicy:
         return replace(
             self,
             dissolve_pillars=(
-                self.dissolve_pillars
-                if dissolve_pillars is None
-                else dissolve_pillars
+                self.dissolve_pillars if dissolve_pillars is None else dissolve_pillars
             ),
-            protect_pillars=(
-                self.protect_pillars
-                if protect_pillars is None
-                else protect_pillars
-            ),
+            protect_pillars=(self.protect_pillars if protect_pillars is None else protect_pillars),
             obsidian_disposition=(
-                self.obsidian_disposition
-                if obsidian_disposition is None
-                else obsidian_disposition
+                self.obsidian_disposition if obsidian_disposition is None else obsidian_disposition
             ),
         )
 
@@ -114,8 +104,6 @@ class ScopePolicy:
 # The FLAGGED default — the master-plan's named cut. Governance stays; the named
 # prose/records/entities pillars dissolve. Everything unlisted defaults to STAY.
 DEFAULT_SCOPE_POLICY = ScopePolicy(
-    dissolve_pillars=frozenset(
-        {"Journal", "Brain Soup", "Records", "Resources", "Entities"}
-    ),
+    dissolve_pillars=frozenset({"Journal", "Brain Soup", "Records", "Resources", "Entities"}),
     protect_pillars=frozenset({"System"}),
 )

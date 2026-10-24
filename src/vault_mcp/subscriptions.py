@@ -130,8 +130,7 @@ class SubscriptionManager:
 
         hash_data = {
             "notes": [
-                {"path": n["path"], "formulas": n["formulas"]}
-                for n in data.get("notes", [])
+                {"path": n["path"], "formulas": n["formulas"]} for n in data.get("notes", [])
             ],
             "summaries": data.get("summaries", {}),
             "total": data.get("total", 0),
@@ -177,9 +176,7 @@ class SubscriptionManager:
             except Exception:
                 self.log.exception("Error updating subscription %s", sub.handle)
 
-    async def _push_notification(
-        self, sub: Subscription, result: QueryResult
-    ) -> None:
+    async def _push_notification(self, sub: Subscription, result: QueryResult) -> None:
         payload = {
             "handle": sub.handle,
             "path": sub.path,
@@ -200,9 +197,7 @@ class SubscriptionManager:
             try:
                 await session.send_notification(cast("Any", notification))
             except Exception:
-                self.log.exception(
-                    "send_notification failed; treating session as gone"
-                )
+                self.log.exception("send_notification failed; treating session as gone")
                 disconnected.append(session)
 
         for session in disconnected:

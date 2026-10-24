@@ -86,10 +86,7 @@ class TestViewSelection:
                 ViewConfig(name="B", type="cards"),
             ]
         )
-        assert (
-            execute_base(base, idx, view_name="A").view_properties["type"]
-            == "table"
-        )
+        assert execute_base(base, idx, view_name="A").view_properties["type"] == "table"
 
     def test_an_unknown_view_name_yields_an_empty_result(self, idx):
         base = _base(views=[ViewConfig(name="A", type="table")])
@@ -106,23 +103,15 @@ class TestCardsViewProperties:
     """`if selected_view.type == "cards"` — the card-only extras."""
 
     def test_cards_view_carries_its_extras(self, idx):
-        view = ViewConfig(
-            name="C", type="cards", extra={"cardSize": 200, "image": "cover"}
-        )
-        props = execute_base(
-            _base(views=[view]), idx, view_name="C"
-        ).view_properties
+        view = ViewConfig(name="C", type="cards", extra={"cardSize": 200, "image": "cover"})
+        props = execute_base(_base(views=[view]), idx, view_name="C").view_properties
         assert props["cardSize"] == 200
         assert props["image"] == "cover"
 
     def test_a_table_view_does_not_carry_card_extras(self, idx):
         """The `== "cards"` mutant would copy these onto a table view."""
-        view = ViewConfig(
-            name="T", type="table", extra={"cardSize": 200, "image": "cover"}
-        )
-        props = execute_base(
-            _base(views=[view]), idx, view_name="T"
-        ).view_properties
+        view = ViewConfig(name="T", type="table", extra={"cardSize": 200, "image": "cover"})
+        props = execute_base(_base(views=[view]), idx, view_name="T").view_properties
         assert "cardSize" not in props
         assert "image" not in props
 
@@ -181,9 +170,7 @@ class TestFormulaPropertyDispatch:
                 ViewConfig(
                     name="G",
                     type="table",
-                    group_by=GroupByConfig(
-                        property="formula.tag", direction="ASC"
-                    ),
+                    group_by=GroupByConfig(property="formula.tag", direction="ASC"),
                 )
             ],
         )
@@ -225,9 +212,7 @@ class TestSortDirection:
         assert names == sorted(names)
 
     def test_descending_is_the_reverse_of_ascending(self, idx):
-        assert self._sorted_names(idx, "DESC") == list(
-            reversed(self._sorted_names(idx, "ASC"))
-        )
+        assert self._sorted_names(idx, "DESC") == list(reversed(self._sorted_names(idx, "ASC")))
 
 
 class TestFormulaTierGate:

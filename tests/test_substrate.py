@@ -67,9 +67,7 @@ class TestRestSemantics:
         assert vault.store["a.md"] == "new"
 
     def test_cli_flavour_refuses_create_over_existing(self):
-        vault = FakeVault(
-            store={"a.md": "old"}, refuse_create_over_existing=True
-        )
+        vault = FakeVault(store={"a.md": "old"}, refuse_create_over_existing=True)
         with pytest.raises(ObsidianIOError):
             vault.create_note("a.md", "new")
         assert vault.store["a.md"] == "old"
@@ -110,9 +108,7 @@ class TestRestSemantics:
 class TestAtomFilenameRegression:
     """vault-mcp#5258 — the bug the permissive fakes could not see."""
 
-    def test_atom_write_survives_a_production_shaped_not_found(
-        self, gate_factory
-    ):
+    def test_atom_write_survives_a_production_shaped_not_found(self, gate_factory):
         """Drive the REAL Gate through a NoteIO that fails like production.
 
         `_atom_filename` probes candidate slugs and treats "not found" as "this
@@ -133,12 +129,8 @@ class TestAtomFilenameRegression:
     def test_the_probe_skips_slugs_already_taken(self, gate_factory):
         """A taken candidate must advance the sequence, not collide."""
         gate, vault = gate_factory(schema="atom")
-        first = gate.create_note(
-            title="one", note_type="idea", pillar="Journal", body="x"
-        )
-        second = gate.create_note(
-            title="two", note_type="idea", pillar="Journal", body="y"
-        )
+        first = gate.create_note(title="one", note_type="idea", pillar="Journal", body="x")
+        second = gate.create_note(title="two", note_type="idea", pillar="Journal", body="y")
         assert first.path != second.path
         assert first.path in vault.store
         assert second.path in vault.store

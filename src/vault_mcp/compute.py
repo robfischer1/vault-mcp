@@ -47,23 +47,17 @@ def parse_payload(raw: object) -> ComputePayload:
 
     missing = [k for k in _REQUIRED_KEYS if not raw.get(k)]
     if missing:
-        raise ComputePayloadError(
-            f"compute payload missing required field(s): {missing}"
-        )
+        raise ComputePayloadError(f"compute payload missing required field(s): {missing}")
     for key in _REQUIRED_KEYS:
         if not isinstance(raw[key], str):
-            raise ComputePayloadError(
-                f"compute payload field {key!r} must be a string"
-            )
+            raise ComputePayloadError(f"compute payload field {key!r} must be a string")
 
     data = raw.get("data") or {}
     frontmatter = raw.get("frontmatter") or {}
     if not isinstance(data, dict):
         raise ComputePayloadError("compute payload 'data' must be a mapping")
     if not isinstance(frontmatter, dict):
-        raise ComputePayloadError(
-            "compute payload 'frontmatter' must be a mapping"
-        )
+        raise ComputePayloadError("compute payload 'frontmatter' must be a mapping")
 
     return ComputePayload(
         template=raw["template"],
@@ -76,9 +70,7 @@ def parse_payload(raw: object) -> ComputePayload:
 
 def _render_body(template_src: str, data: dict[str, Any]) -> str:
     """Render a template deterministically from payload data (no LLM)."""
-    return Template(template_src).safe_substitute(
-        {k: str(v) for k, v in data.items()}
-    )
+    return Template(template_src).safe_substitute({k: str(v) for k, v in data.items()})
 
 
 class ComputeReceiver:
@@ -89,9 +81,7 @@ class ComputeReceiver:
         self._gate = gate
         self._templates = dict(templates)
 
-    def receive(
-        self, raw_payload: object, created: str | None = None
-    ) -> WriteResult:
+    def receive(self, raw_payload: object, created: str | None = None) -> WriteResult:
         """Validate, render, and write a compute payload as an ai-computed note."""
         payload = parse_payload(raw_payload)
         if payload.template not in self._templates:

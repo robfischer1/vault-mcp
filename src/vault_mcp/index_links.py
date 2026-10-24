@@ -46,16 +46,12 @@ class IndexLinkGraph:
                 results.append(
                     {
                         "stem": src_stem,
-                        "path": str(p.relative_to(self._index.vault)).replace(
-                            "\\", "/"
-                        ),
+                        "path": str(p.relative_to(self._index.vault)).replace("\\", "/"),
                     }
                 )
         return results
 
-    def outbound_links(
-        self, stem: str, include_image_embeds: bool = False
-    ) -> list[dict[str, Any]]:
+    def outbound_links(self, stem: str, include_image_embeds: bool = False) -> list[dict[str, Any]]:
         """Wikilinks from `stem`'s body (excluding image embeds by default)."""
         self._index._ensure_fresh()
         targets = self._index._outbound.get(stem, [])
@@ -67,9 +63,7 @@ class IndexLinkGraph:
                 try:
                     text = p.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError) as exc:
-                    log.debug(
-                        "image-embed scan: skip unreadable %s: %s", p, exc
-                    )
+                    log.debug("image-embed scan: skip unreadable %s: %s", p, exc)
                     continue
                 body = strip_frontmatter(text)
                 for m in IMAGE_EMBED_RE.finditer(body):
@@ -83,9 +77,7 @@ class IndexLinkGraph:
                 results.append(
                     {
                         "stem": target,
-                        "path": str(
-                            matches[0].relative_to(self._index.vault)
-                        ).replace("\\", "/"),
+                        "path": str(matches[0].relative_to(self._index.vault)).replace("\\", "/"),
                     }
                 )
             elif len(matches) > 1:
@@ -94,9 +86,7 @@ class IndexLinkGraph:
                         "stem": target,
                         "resolution": "ambiguous",
                         "candidates": [
-                            str(p.relative_to(self._index.vault)).replace(
-                                "\\", "/"
-                            )
+                            str(p.relative_to(self._index.vault)).replace("\\", "/")
                             for p in matches
                         ],
                     }
@@ -161,9 +151,7 @@ class IndexLinkGraph:
             if scope:
                 paths = self._index._by_name.get(stem, [])
                 if paths and not any(
-                    str(p.relative_to(self._index.vault))
-                    .replace("\\", "/")
-                    .startswith(scope)
+                    str(p.relative_to(self._index.vault)).replace("\\", "/").startswith(scope)
                     for p in paths
                 ):
                     continue
@@ -174,9 +162,7 @@ class IndexLinkGraph:
                         seen.add(key)
                         src_paths = self._index._by_name.get(stem, [])
                         src_path = (
-                            str(
-                                src_paths[0].relative_to(self._index.vault)
-                            ).replace("\\", "/")
+                            str(src_paths[0].relative_to(self._index.vault)).replace("\\", "/")
                             if src_paths
                             else stem
                         )

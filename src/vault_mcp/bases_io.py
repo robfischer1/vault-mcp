@@ -68,12 +68,9 @@ def _serialize_filter_node(node: FilterNode) -> dict[str, Any]:
 def _serialize_base(base: Base) -> dict[str, Any]:
     result: dict[str, Any] = {
         "line_number": base.line_number,
-        "filters": _serialize_filter_node(base.filters)
-        if base.filters
-        else None,
+        "filters": _serialize_filter_node(base.filters) if base.filters else None,
         "formulas": {
-            name: {"expression": f.expression, "tier": f.tier}
-            for name, f in base.formulas.items()
+            name: {"expression": f.expression, "tier": f.tier} for name, f in base.formulas.items()
         },
         "summaries": {
             s.name: f"{s.function}({s.property})" if s.property else s.function
@@ -83,14 +80,9 @@ def _serialize_base(base: Base) -> dict[str, Any]:
             {
                 "name": v.name,
                 "type": v.type,
-                "filters": _serialize_filter_node(v.filters)
-                if v.filters
-                else None,
+                "filters": _serialize_filter_node(v.filters) if v.filters else None,
                 "order": v.order,
-                "sort": [
-                    {"property": s.property, "direction": s.direction}
-                    for s in v.sort
-                ],
+                "sort": [{"property": s.property, "direction": s.direction} for s in v.sort],
                 "groupBy": {
                     "property": v.group_by.property,
                     "direction": v.group_by.direction,
@@ -98,9 +90,7 @@ def _serialize_base(base: Base) -> dict[str, Any]:
                 if v.group_by
                 else None,
                 "summaries": {
-                    s.name: f"{s.function}({s.property})"
-                    if s.property
-                    else s.function
+                    s.name: f"{s.function}({s.property})" if s.property else s.function
                     for s in v.summaries
                 },
                 **({"markers": v.markers} if v.markers else {}),

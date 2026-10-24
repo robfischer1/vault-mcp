@@ -225,9 +225,7 @@ class TestCommitPaths:
         (repo / "doomed.md").write_text("bye\n", encoding="utf-8")
         gc.commit_paths(["doomed.md"], "vault: create doomed.md")
         (repo / "doomed.md").unlink()
-        sha = gc.commit_paths(
-            ["doomed.md"], "vault: dissolve doomed.md", wait_for_create=False
-        )
+        sha = gc.commit_paths(["doomed.md"], "vault: dissolve doomed.md", wait_for_create=False)
         assert sha is not None
         assert "doomed.md" not in _tracked(repo)
 
@@ -254,9 +252,7 @@ class TestBotIdentity:
         an, ae, cn, ce = _head_identity(repo).split("|")
         assert an == DEFAULT_BOT_NAME
         assert ae == DEFAULT_BOT_EMAIL
-        assert (
-            cn == DEFAULT_BOT_NAME
-        )  # committer is the bot too, not the base identity
+        assert cn == DEFAULT_BOT_NAME  # committer is the bot too, not the base identity
         assert ce == DEFAULT_BOT_EMAIL
 
     def test_custom_identity(self, repo: Path) -> None:
@@ -299,9 +295,7 @@ class TestSweep:
     def test_sweep_commits_whole_tree(self, repo: Path) -> None:
         gc = _committer(repo)
         (repo / "a.md").write_text("a\n", encoding="utf-8")
-        (repo / "b.md").write_text(
-            "b\n", encoding="utf-8"
-        )  # two untracked files
+        (repo / "b.md").write_text("b\n", encoding="utf-8")  # two untracked files
         result = gc.sweep_commit("vault: periodic sweep")
         assert result["committed"] is True
         assert result["sha"] is not None

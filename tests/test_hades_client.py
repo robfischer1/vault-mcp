@@ -66,9 +66,7 @@ def test_parse_prefers_structured_content() -> None:
 
 def test_parse_falls_back_to_text_json() -> None:
     body = {"ok": True, "id": 3}
-    out = parse_tool_result(
-        _rpc_result({"content": [{"type": "text", "text": json.dumps(body)}]})
-    )
+    out = parse_tool_result(_rpc_result({"content": [{"type": "text", "text": json.dumps(body)}]}))
     assert out == body
 
 
@@ -76,9 +74,7 @@ def test_parse_is_error_maps_to_ok_false() -> None:
     out = parse_tool_result(
         _rpc_result(
             {
-                "content": [
-                    {"type": "text", "text": "no star serves verb 'x'"}
-                ],
+                "content": [{"type": "text", "text": "no star serves verb 'x'"}],
                 "isError": True,
             }
         )
@@ -96,9 +92,7 @@ def test_parse_rpc_error_maps_to_ok_false() -> None:
 
 
 def test_parse_unparseable_text_maps_to_ok_false() -> None:
-    out = parse_tool_result(
-        _rpc_result({"content": [{"type": "text", "text": "not json"}]})
-    )
+    out = parse_tool_result(_rpc_result({"content": [{"type": "text", "text": "not json"}]}))
     assert out["ok"] is False
 
 
@@ -113,9 +107,7 @@ def _ok_pair(result: dict[str, Any]) -> list[tuple[int, str]]:
 
 
 def test_call_verb_initializes_then_calls() -> None:
-    transport = FakeTransport(
-        _ok_pair({"structuredContent": {"ok": True}, "content": []})
-    )
+    transport = FakeTransport(_ok_pair({"structuredContent": {"ok": True}, "content": []}))
     out = call_verb(
         "harmonia_ping",
         {},
@@ -133,14 +125,10 @@ def test_call_verb_initializes_then_calls() -> None:
 def test_call_verb_transport_fault_never_raises() -> None:
     # `post(url, headers, init)` — hades_client calls the transport
     # POSITIONALLY, so the names are free. This double answers by raising.
-    def boom(
-        _url: str, _headers: dict[str, str], _body: dict[str, Any]
-    ) -> tuple[int, str]:
+    def boom(_url: str, _headers: dict[str, str], _body: dict[str, Any]) -> tuple[int, str]:
         raise OSError("connection refused")
 
-    out = call_verb(
-        "x", {}, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=boom
-    )
+    out = call_verb("x", {}, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=boom)
     assert out["ok"] is False
     assert "unreachable" in out["error"]
     # the dialed URL is in the error, so a stale HADES_URL is diagnosable
@@ -195,9 +183,7 @@ def test_write_entity_typed_maps_the_phdb_payload() -> None:
     _, call_body = transport.calls[1]
     assert call_body["params"]["name"] == "harmonia_write_entity_typed"
     assert call_body["params"]["arguments"]["schema_type"] == "Book"
-    assert (
-        call_body["params"]["arguments"]["fields"]["author"] == "Frank Herbert"
-    )
+    assert call_body["params"]["arguments"]["fields"]["author"] == "Frank Herbert"
 
 
 # -- read_document (the materialize leg — F10: the _note container surface) ----
@@ -209,9 +195,7 @@ def test_read_document_materializes_by_container_id() -> None:
             {
                 "structuredContent": {
                     "container_id": "42",
-                    "blocks": [
-                        {"id": "s1", "text": "the prose", "orderKey": "a0"}
-                    ],
+                    "blocks": [{"id": "s1", "text": "the prose", "orderKey": "a0"}],
                     "tags": [],
                     "provenance": {
                         "source_path": "Ideas/Idea.md",
@@ -225,9 +209,7 @@ def test_read_document_materializes_by_container_id() -> None:
             }
         )
     )
-    out = read_document(
-        42, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=transport
-    )
+    out = read_document(42, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=transport)
     doc = out["documents"][0]
     assert doc["id"] == "42"
     assert doc["body_text"] == "the prose"
@@ -256,9 +238,7 @@ def test_read_document_joins_blocks_on_the_markdown_separator() -> None:
             }
         )
     )
-    out = read_document(
-        7, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=transport
-    )
+    out = read_document(7, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=transport)
     assert out["documents"][0]["body_text"] == "one\n\ntwo"
 
 
@@ -292,9 +272,7 @@ def test_a_refusal_that_is_not_a_miss_is_not_an_empty_list() -> None:
         "backend_unavailable: down",
     ):
         transport = FakeTransport(
-            _ok_pair(
-                {"content": [{"type": "text", "text": text}], "isError": True}
-            )
+            _ok_pair({"content": [{"type": "text", "text": text}], "isError": True})
         )
         out = read_document_by_source_path(
             "nope.md",
@@ -334,9 +312,7 @@ def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
     seen["write_document"] = t_write.calls[1][1]["params"]["name"]
 
     t_by_id = record()
-    read_document(
-        1, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=t_by_id
-    )
+    read_document(1, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=t_by_id)
     seen["read_document"] = t_by_id.calls[1][1]["params"]["name"]
 
     t_by_path = record()
@@ -346,9 +322,7 @@ def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
         token=_REQUIRED_BUT_UNUSED,
         transport=t_by_path,
     )
-    seen["read_document_by_source_path"] = t_by_path.calls[1][1]["params"][
-        "name"
-    ]
+    seen["read_document_by_source_path"] = t_by_path.calls[1][1]["params"]["name"]
 
     assert seen == {
         "write_document": "calliope_dissolve_note",
@@ -360,14 +334,10 @@ def test_every_calliope_call_site_uses_the_star_prefixed_verb() -> None:
 def test_read_document_transport_fault_never_raises() -> None:
     # `post(url, headers, init)` — hades_client calls the transport
     # POSITIONALLY, so the names are free. This double answers by raising.
-    def boom(
-        _url: str, _headers: dict[str, str], _body: dict[str, Any]
-    ) -> tuple[int, str]:
+    def boom(_url: str, _headers: dict[str, str], _body: dict[str, Any]) -> tuple[int, str]:
         raise OSError("connection refused")
 
-    out = read_document(
-        1, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=boom
-    )
+    out = read_document(1, url="http://h/mcp/", token=_REQUIRED_BUT_UNUSED, transport=boom)
     assert out["ok"] is False
 
 
@@ -411,9 +381,7 @@ def test_emit_session_event_calls_tartarus_emit() -> None:
 
 def test_emit_session_event_defaults_missing_payload_to_empty() -> None:
     """A payload-less emit must send {}, never None, to the verb."""
-    transport = FakeTransport(
-        _ok_pair({"structuredContent": {"ok": True}, "content": []})
-    )
+    transport = FakeTransport(_ok_pair({"structuredContent": {"ok": True}, "content": []}))
     emit_session_event(
         {"event_type": "probe"},
         url="http://h/mcp/",
@@ -428,9 +396,7 @@ def test_emit_session_event_defaults_missing_payload_to_empty() -> None:
 def test_emit_session_event_transport_fault_never_raises() -> None:
     # `post(url, headers, init)` — hades_client calls the transport
     # POSITIONALLY, so the names are free. This double answers by raising.
-    def boom(
-        _url: str, _headers: dict[str, str], _body: dict[str, Any]
-    ) -> tuple[int, str]:
+    def boom(_url: str, _headers: dict[str, str], _body: dict[str, Any]) -> tuple[int, str]:
         raise OSError("connection refused")
 
     out = emit_session_event(

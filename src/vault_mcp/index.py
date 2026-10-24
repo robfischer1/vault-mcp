@@ -117,9 +117,7 @@ class VaultIndex:
                 continue
 
             body = strip_frontmatter(text)
-            body_links = [
-                m.group(1).strip() for m in WIKILINK_RE.finditer(body)
-            ]
+            body_links = [m.group(1).strip() for m in WIKILINK_RE.finditer(body)]
 
             up_val = fm.get("up", "")
             up_links = extract_wikilink_targets(up_val)
@@ -138,9 +136,7 @@ class VaultIndex:
         """Force full rebuild. Returns stats."""
         t0 = time.time()
         with self._lock:
-            self._content, self._by_name, self._mtime = build_content_index(
-                self.vault
-            )
+            self._content, self._by_name, self._mtime = build_content_index(self.vault)
             self._build_link_graph()
             self._built_at = time.time()
             self.last_indexed_at = (
@@ -185,9 +181,7 @@ class VaultIndex:
         stem = path.stem
 
         with self._lock:
-            self._content = [
-                (p, fm, r) for p, fm, r in self._content if p.resolve() != path
-            ]
+            self._content = [(p, fm, r) for p, fm, r in self._content if p.resolve() != path]
             for s, paths in list(self._by_name.items()):
                 self._by_name[s] = [p for p in paths if p.resolve() != path]
                 if not self._by_name[s]:
@@ -196,9 +190,7 @@ class VaultIndex:
             old_outbound = self._outbound.pop(stem, [])
             for target in old_outbound:
                 if target in self._inbound:
-                    self._inbound[target] = [
-                        s for s in self._inbound[target] if s != stem
-                    ]
+                    self._inbound[target] = [s for s in self._inbound[target] if s != stem]
                     if not self._inbound[target]:
                         del self._inbound[target]
 
@@ -235,9 +227,7 @@ class VaultIndex:
             self._content.append((path, fm, rel_str))
 
             body = strip_frontmatter(text)
-            body_links = [
-                m.group(1).strip() for m in WIKILINK_RE.finditer(body)
-            ]
+            body_links = [m.group(1).strip() for m in WIKILINK_RE.finditer(body)]
             up_val = fm.get("up", "")
             up_links = extract_wikilink_targets(up_val)
 
@@ -287,15 +277,11 @@ class VaultIndex:
     # every test still says `idx.read_note(...)`. The collaborators are
     # reachable directly (`idx._queries`) when a caller wants to be explicit.
 
-    def find_notes_by_frontmatter(
-        self, *args: Any, **kwargs: Any
-    ) -> list[dict[str, Any]]:
+    def find_notes_by_frontmatter(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """Delegate to the queries collaborator."""
         return self._queries.find_notes_by_frontmatter(*args, **kwargs)
 
-    def find_by_filename(
-        self, *args: Any, **kwargs: Any
-    ) -> list[dict[str, Any]]:
+    def find_by_filename(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """Delegate to the queries collaborator."""
         return self._queries.find_by_filename(*args, **kwargs)
 
@@ -319,9 +305,7 @@ class VaultIndex:
         """Delegate to the links collaborator."""
         return self._links.find_orphans(*args, **kwargs)
 
-    def find_dangling_links(
-        self, *args: Any, **kwargs: Any
-    ) -> list[dict[str, Any]]:
+    def find_dangling_links(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """Delegate to the links collaborator."""
         return self._links.find_dangling_links(*args, **kwargs)
 
@@ -349,9 +333,7 @@ class VaultIndex:
 
         return IndexGovernance.parse_tags_glossary(*args, **kwargs)
 
-    def tag_glossary_check(
-        self, *args: Any, **kwargs: Any
-    ) -> list[dict[str, Any]]:
+    def tag_glossary_check(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         """Delegate to the governance collaborator."""
         return self._governance.tag_glossary_check(*args, **kwargs)
 

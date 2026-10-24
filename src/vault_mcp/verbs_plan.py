@@ -109,9 +109,7 @@ def _build_plan_payload(source_path: str, raw_text: str) -> dict[str, Any]:
     # exposed it. The isinstance is a real guard — a translator that returned a
     # non-mapping payload would otherwise surface as a confusing error much
     # further downstream.
-    doc: object = next(
-        (p["payload"] for p in payloads if p["endpoint"] == DOC_ENDPOINT), None
-    )
+    doc: object = next((p["payload"] for p in payloads if p["endpoint"] == DOC_ENDPOINT), None)
     if doc is None:
         # UNCHANGED semantics: "this note has no document payload" was a
         # ValueError before the split and stays one.
@@ -122,10 +120,7 @@ def _build_plan_payload(source_path: str, raw_text: str) -> dict[str, Any]:
         # a payload of the wrong shape. Merging the two into one isinstance
         # check was what made ruff ask for TypeError — it was right that the
         # conditions are not the same thing.
-        msg = (
-            f"{source_path}: expected a mapping document payload, got "
-            f"{type(doc).__name__}"
-        )
+        msg = f"{source_path}: expected a mapping document payload, got {type(doc).__name__}"
         raise TypeError(msg)
     return doc
 
@@ -218,9 +213,7 @@ def _plan_sweep(
         return (server.VAULT_PATH.resolve() / p).read_text(encoding="utf-8")
 
     def _write(payload: dict[str, Any]) -> dict[str, Any]:
-        return write_document(
-            payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
-        )
+        return write_document(payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN)
 
     root = str(server.VAULT_PATH.resolve())
 
@@ -229,9 +222,7 @@ def _plan_sweep(
         # then caches its clock for later ticks.
         if p not in _PLAN_CLOCKS:
             return True
-        return is_probably_stale(
-            p, vault_root=root, stored_mtime=_PLAN_CLOCKS[p]
-        )
+        return is_probably_stale(p, vault_root=root, stored_mtime=_PLAN_CLOCKS[p])
 
     gate: Callable[[str], bool] | None = _gate if cheap_gate else None
 
@@ -278,9 +269,7 @@ def _read_dissolved_row(table: str, row_id: int) -> dict[str, Any]:
         from vault_mcp.hades_client import read_document
         from vault_mcp.translator import calliope_document_to_row
 
-        res = read_document(
-            row_id, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
-        )
+        res = read_document(row_id, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN)
         if res.get("ok") is False:
             return {
                 "ok": False,

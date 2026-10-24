@@ -163,9 +163,7 @@ class ValidationResult:
 _BASE_BLOCK_RE = re.compile(r"(?sm)^```base\s*\n(.*?)^```")
 
 _NOTE_KEY_RE = re.compile(r'^note\["([^"]+)"\]$')
-_LINKS_FILTER_RE = re.compile(
-    r"^file\.(links|backlinks)\.filter\(.*\)\.length$"
-)
+_LINKS_FILTER_RE = re.compile(r"^file\.(links|backlinks)\.filter\(.*\)\.length$")
 
 _CARD_PROPS = {"cardSize", "image", "imageAspectRatio", "indentProperties"}
 _MAP_PROPS = {

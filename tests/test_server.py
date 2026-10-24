@@ -69,9 +69,7 @@ class TestVerbSurface:
 
     def test_every_verb_has_a_description(self):
         """An undescribed verb is unusable and still costs manifest bytes."""
-        missing = [
-            t.name for t in _tools() if not (t.description or "").strip()
-        ]
+        missing = [t.name for t in _tools() if not (t.description or "").strip()]
         assert missing == []
 
     def test_every_verb_has_a_unique_name(self):

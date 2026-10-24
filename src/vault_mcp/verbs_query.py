@@ -68,9 +68,7 @@ def find_notes_by_frontmatter(
         {"count": int, "results": [{path, frontmatter}]}
 
     """
-    results = server._get_index().find_notes_by_frontmatter(
-        filters, scope=scope
-    )
+    results = server._get_index().find_notes_by_frontmatter(filters, scope=scope)
     return {"count": len(results), "results": results}
 
 
@@ -199,9 +197,7 @@ def outbound_links(
         {"stem": str, "count": int, "results": [{stem, path|resolution}]}
 
     """
-    results = server._get_index().outbound_links(
-        stem, include_image_embeds=include_image_embeds
-    )
+    results = server._get_index().outbound_links(stem, include_image_embeds=include_image_embeds)
     return {"stem": stem, "count": len(results), "results": results}
 
 

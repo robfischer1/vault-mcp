@@ -106,12 +106,8 @@ def committer_from_env(repo_root: Path | str) -> GitCommitter:
     """
     return GitCommitter(
         repo_root,
-        author_name=os.environ.get(
-            "VAULT_MCP_GIT_AUTHOR_NAME", DEFAULT_BOT_NAME
-        ),
-        author_email=os.environ.get(
-            "VAULT_MCP_GIT_AUTHOR_EMAIL", DEFAULT_BOT_EMAIL
-        ),
+        author_name=os.environ.get("VAULT_MCP_GIT_AUTHOR_NAME", DEFAULT_BOT_NAME),
+        author_email=os.environ.get("VAULT_MCP_GIT_AUTHOR_EMAIL", DEFAULT_BOT_EMAIL),
         enabled=os.environ.get("VAULT_MCP_GIT_COMMIT", "0") == "1",
         push_enabled=os.environ.get("VAULT_MCP_GIT_PUSH", "0") == "1",
     )
@@ -271,10 +267,7 @@ class GitCommitter:
         try:
             with self._git_lock, self._open() as repo:
                 status = porcelain.status(repo, untracked_files="all")
-                changed = [
-                    path.decode("utf-8")
-                    for path in [*status.unstaged, *status.untracked]
-                ]
+                changed = [path.decode("utf-8") for path in [*status.unstaged, *status.untracked]]
                 worktree = repo.get_worktree()
                 if changed:
                     worktree.stage(changed)

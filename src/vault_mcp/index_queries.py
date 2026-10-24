@@ -66,9 +66,7 @@ class IndexQueries:
                 results.append({"path": rel, "frontmatter": fm})
         return results
 
-    def find_by_filename(
-        self, pattern: str, scope: str | None = None
-    ) -> list[dict[str, Any]]:
+    def find_by_filename(self, pattern: str, scope: str | None = None) -> list[dict[str, Any]]:
         """Fnmatch over the by_name index keys."""
         results = []
         for stem, paths in self._index.by_name.items():
@@ -137,8 +135,7 @@ class IndexQueries:
                     "error": "ambiguous",
                     "stem": stem,
                     "candidates": [
-                        str(p.relative_to(self._index.vault)).replace("\\", "/")
-                        for p in matches
+                        str(p.relative_to(self._index.vault)).replace("\\", "/") for p in matches
                     ],
                 }
             else:
@@ -165,9 +162,9 @@ class IndexQueries:
                 resolved_links.append(
                     {
                         "stem": stem,
-                        "path": str(
-                            link_matches[0].relative_to(self._index.vault)
-                        ).replace("\\", "/"),
+                        "path": str(link_matches[0].relative_to(self._index.vault)).replace(
+                            "\\", "/"
+                        ),
                     }
                 )
             elif len(link_matches) > 1:
@@ -176,17 +173,13 @@ class IndexQueries:
                         "stem": stem,
                         "resolution": "ambiguous",
                         "candidates": [
-                            str(p.relative_to(self._index.vault)).replace(
-                                "\\", "/"
-                            )
+                            str(p.relative_to(self._index.vault)).replace("\\", "/")
                             for p in link_matches
                         ],
                     }
                 )
             else:
-                resolved_links.append(
-                    {"stem": stem, "resolution": "unresolved"}
-                )
+                resolved_links.append({"stem": stem, "resolution": "unresolved"})
 
         # Resolve base embeds (T008, T009, T010, T014, T015)
         resolved_embeds: list[dict[str, Any]] = []
@@ -229,9 +222,9 @@ class IndexQueries:
                 resolved_embeds.append(
                     {
                         "token": token,
-                        "path": str(
-                            embed_target_path.relative_to(self._index.vault)
-                        ).replace("\\", "/"),
+                        "path": str(embed_target_path.relative_to(self._index.vault)).replace(
+                            "\\", "/"
+                        ),
                         "error": {
                             "type": "parse_error",
                             "message": pf.errors[0]["message"],
@@ -251,9 +244,9 @@ class IndexQueries:
                     resolved_embeds.append(
                         {
                             "token": token,
-                            "path": str(
-                                embed_target_path.relative_to(self._index.vault)
-                            ).replace("\\", "/"),
+                            "path": str(embed_target_path.relative_to(self._index.vault)).replace(
+                                "\\", "/"
+                            ),
                             "error": {
                                 "type": "view_not_found",
                                 "message": f"View '{view_name}' not found",
@@ -267,9 +260,9 @@ class IndexQueries:
             resolved_embeds.append(
                 {
                     "token": token,
-                    "path": str(
-                        embed_target_path.relative_to(self._index.vault)
-                    ).replace("\\", "/"),
+                    "path": str(embed_target_path.relative_to(self._index.vault)).replace(
+                        "\\", "/"
+                    ),
                     "results": dataclasses.asdict(res),
                 }
             )

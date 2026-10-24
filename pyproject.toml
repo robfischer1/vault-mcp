@@ -88,7 +88,7 @@ where = ["src"]
 
 [tool.ruff]
 target-version = "py314"
-line-length = 80
+line-length = 100
 
 [tool.ruff.lint]
 # Opt-out model: enable everything, disable the noise (the canonical policy —

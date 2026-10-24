@@ -105,9 +105,7 @@ def write_note(
 @mcp.tool(
     description="Move a vault note to Obsidian's .trash/ through the Gate (reversible). Write-protection applies: an agent cannot trash a voice-only or immutable note."
 )
-def delete(
-    path: str, actor: str = "agent", commit_message: str | None = None
-) -> dict[str, Any]:
+def delete(path: str, actor: str = "agent", commit_message: str | None = None) -> dict[str, Any]:
     """Move a vault note to Obsidian's .trash/ (reversible) through the Gate.
 
     Enforces the same write-protection as a write — an agent cannot trash a
@@ -122,17 +120,11 @@ def delete(
 
     try:
         gate = server._get_gate()
-        result = gate.delete(
-            path, actor=Actor.HUMAN if actor == "human" else Actor.AGENT
-        )
-        committed = server._commit_write(
-            result, "delete", commit_message, is_delete=True
-        )
+        result = gate.delete(path, actor=Actor.HUMAN if actor == "human" else Actor.AGENT)
+        committed = server._commit_write(result, "delete", commit_message, is_delete=True)
         if committed.get("ok"):
             abs_path = (server.VAULT_PATH / path).resolve()
-            committed["dirs_pruned"] = server._prune_empty_parents(
-                abs_path, server.VAULT_PATH
-            )
+            committed["dirs_pruned"] = server._prune_empty_parents(abs_path, server.VAULT_PATH)
         return committed
     except Exception as exc:
         log.exception("delete failed")
@@ -177,9 +169,7 @@ def move_note(
         committed = server._commit_write(result, "move", commit_message)
         if committed.get("ok"):
             abs_src = (server.VAULT_PATH / src).resolve()
-            committed["dirs_pruned"] = server._prune_empty_parents(
-                abs_src, server.VAULT_PATH
-            )
+            committed["dirs_pruned"] = server._prune_empty_parents(abs_src, server.VAULT_PATH)
         return committed
     except Exception as exc:
         log.exception("move_note failed")
@@ -307,9 +297,7 @@ def query(note_type: str) -> dict[str, Any]:
                 "error": "unknown_type",
                 "detail": f"no @type {note_type!r} in the schema",
             }
-        templates = (
-            server._load_templates()
-        )  # the one vault-read: locate a matching template
+        templates = server._load_templates()  # the one vault-read: locate a matching template
         spec["body_template"] = note_type if note_type in templates else None
         return {"ok": True, **spec}
     except Exception as exc:
@@ -320,9 +308,7 @@ def query(note_type: str) -> dict[str, Any]:
 @mcp.tool(
     description="Scan a vault directory for schema drift; resolve=True heals what is deterministically fixable and reports the rest. Reports only by default."
 )
-def audit(
-    directory: str = "", resolve: bool = False, all_dirs: bool = False
-) -> dict[str, Any]:
+def audit(directory: str = "", resolve: bool = False, all_dirs: bool = False) -> dict[str, Any]:
     """Scan a vault directory for schema drift; optionally auto-correct it.
 
     resolve=False reports every drifted note (missing required fields, unknown
@@ -344,9 +330,7 @@ def audit(
 
     """
     try:
-        return server._get_gate().audit(
-            directory, resolve=resolve, all_dirs=all_dirs
-        )
+        return server._get_gate().audit(directory, resolve=resolve, all_dirs=all_dirs)
     except Exception as exc:
         log.exception("audit failed")
         return server._gate_error_envelope(exc)

@@ -79,8 +79,7 @@ def _resolve_vault_path() -> Path:
             return cursor
         cursor = cursor.parent
     raise FileNotFoundError(
-        "Could not locate an Obsidian vault. "
-        "Set VAULT_MCP_PATH or OBSIDIAN_VAULT_PATH env var."
+        "Could not locate an Obsidian vault. Set VAULT_MCP_PATH or OBSIDIAN_VAULT_PATH env var."
     )
 
 
@@ -265,9 +264,7 @@ mcp: MCPServer[Any] = MCPServer("vault-mcp")
 # transport decision: writes go over HTTP, not the legacy direct-DB seam). Only
 # /write/plan still falls through to it, and only when HADES_URL is unset; the
 # monolith is gone, so that path fails fast rather than half-writing.
-PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip(
-    "/"
-)
+PHDB_HTTP_URL = os.environ.get("PHDB_HTTP_URL", "http://localhost:8101").rstrip("/")
 # The Hades gateway — strangled phdb concerns route here instead (entity
 # writes -> harmonia_write_entity_typed). Unset HADES_URL = legacy phdb
 # routing for everything (safe: post-deregister phdb answers 404 and the

@@ -70,19 +70,13 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
     row = read["row"]
     paired_body: str | None = read.get("paired_body")
 
-    note_type = (
-        "Plan"
-        if table == "plans"
-        else (row.get("schema_type") or "DigitalDocument")
-    )
+    note_type = "Plan" if table == "plans" else (row.get("schema_type") or "DigitalDocument")
 
     try:
         # 2. Resolve the target directory from the note_type's schema route.
         directory = server._get_gate()._schema.resolve_directory(note_type)
         # 3. Build the Materializer payload and write via mode=COMPUTE.
-        payload = row_to_payload(
-            row, table, directory=directory, paired_body=paired_body
-        )
+        payload = row_to_payload(row, table, directory=directory, paired_body=paired_body)
         result = server._get_materializer().materialize(payload)
         return server._commit_write(result.to_dict(), "materialize")
     except Exception as exc:
@@ -93,9 +87,7 @@ def materialize(table: str, row_id: int) -> dict[str, Any]:
 @mcp.tool(
     description="Render a periodic compute job's payload through a named template (substitution only, no LLM) and write it as an ai-computed note by the Gate's compute-only path."
 )
-def compute_receive(
-    payload: dict[str, Any], created: str | None = None
-) -> dict[str, Any]:
+def compute_receive(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
     """Render a structured compute payload into an ai-computed vault note.
 
     Accepts a payload (template, title, directory, data, frontmatter) from a
@@ -109,9 +101,7 @@ def compute_receive(
     from vault_mcp.compute import ComputePayloadError
 
     try:
-        result = server._get_compute_receiver().receive(
-            payload, created=created
-        )
+        result = server._get_compute_receiver().receive(payload, created=created)
         return server._commit_write(result.to_dict(), "compute")
     except ComputePayloadError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}
@@ -123,9 +113,7 @@ def compute_receive(
 @mcp.tool(
     description="Write a compute result as a durable note through the Gate with mode=COMPUTE - the path for materialize-only @types that agent-create refuses. Same payload, same bytes."
 )
-def compute_receiver(
-    payload: dict[str, Any], created: str | None = None
-) -> dict[str, Any]:
+def compute_receiver(payload: dict[str, Any], created: str | None = None) -> dict[str, Any]:
     """Receive a compute result and write it as a durable note (Compute Receiver).
 
     Accepts a structured payload (title, note_type, directory, body, frontmatter,
@@ -144,9 +132,7 @@ def compute_receiver(
     from vault_mcp.lifecycle import MaterializePayloadError
 
     try:
-        result = server._get_materializer().materialize(
-            payload, created=created
-        )
+        result = server._get_materializer().materialize(payload, created=created)
         return server._commit_write(result.to_dict(), "compute")
     except MaterializePayloadError as exc:
         return {"ok": False, "error": "bad_payload", "detail": str(exc)}

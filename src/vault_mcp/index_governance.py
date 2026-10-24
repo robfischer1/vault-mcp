@@ -136,11 +136,7 @@ class IndexGovernance:
 
             mtime = self._index._mtime.get(path)
             if mtime is not None:
-                week = (
-                    datetime.fromtimestamp(mtime, tz=UTC)
-                    .astimezone()
-                    .strftime("%Y-W%W")
-                )
+                week = datetime.fromtimestamp(mtime, tz=UTC).astimezone().strftime("%Y-W%W")
                 week_counts[week] = week_counts.get(week, 0) + 1
 
         top_types = sorted(type_counts.items(), key=lambda x: -x[1])
@@ -152,9 +148,7 @@ class IndexGovernance:
             "total_names": len(self._index._by_name),
             "types": [{"type": t, "count": c} for t, c in top_types],
             "top_tags": [{"tag": t, "count": c} for t, c in top_tags],
-            "edit_volume_by_week": [
-                {"week": w, "count": c} for w, c in recent_weeks
-            ],
+            "edit_volume_by_week": [{"week": w, "count": c} for w, c in recent_weeks],
         }
 
     def all_tags(self, include_body: bool = True) -> list[dict[str, Any]]:
@@ -204,7 +198,5 @@ class IndexGovernance:
                     "sources": sources,
                 }
             )
-        results.sort(
-            key=lambda x: -(x["count"] if isinstance(x["count"], int) else 0)
-        )
+        results.sort(key=lambda x: -(x["count"] if isinstance(x["count"], int) else 0))
         return results

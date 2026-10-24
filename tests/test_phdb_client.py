@@ -73,17 +73,13 @@ class _FakePoster:
         self.result = result
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    def __call__(
-        self, endpoint: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
+    def __call__(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append((endpoint, payload))
         return self.result
 
 
 class TestValidation:
-    @pytest.mark.parametrize(
-        "atom_type", ["decision", "reversal", "tension", "pushback"]
-    )
+    @pytest.mark.parametrize("atom_type", ["decision", "reversal", "tension", "pushback"])
     def test_valid_payload_passes(self, atom_type):
         out = validate_atom(atom_type, _valid_payload(atom_type))
         assert out == _valid_payload(atom_type)
@@ -99,9 +95,7 @@ class TestValidation:
 
     def test_missing_required_field_rejected(self):
         with pytest.raises(AtomError) as exc:
-            validate_atom(
-                "tension", {"position_a": "speed"}
-            )  # missing position_b
+            validate_atom("tension", {"position_a": "speed"})  # missing position_b
         assert "position_b" in str(exc.value)
 
     def test_unknown_field_rejected(self):

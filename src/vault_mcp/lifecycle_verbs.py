@@ -40,9 +40,7 @@ if TYPE_CHECKING:
 class Poster(Protocol):
     """A callable that POSTs a payload to a phdb endpoint and returns the response."""
 
-    def __call__(
-        self, endpoint: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
+    def __call__(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         """POST `payload` to `endpoint` and return the response."""
         ...
 

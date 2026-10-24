@@ -57,9 +57,7 @@ class TestScan:
 
     def test_deprecated_key_and_dead_key_reported(self):
         gate, vault = _gate()
-        vault.store["Knowledge/Notes/d.md"] = _note(
-            [*_BASE, "id: legacy-1", "sub_type: junk"]
-        )
+        vault.store["Knowledge/Notes/d.md"] = _note([*_BASE, "id: legacy-1", "sub_type: junk"])
         report = gate.audit("Knowledge", resolve=False)
         assert report["drifted"] == 1
         cats = {d["category"] for d in report["notes"][0]["drift"]}
@@ -67,9 +65,7 @@ class TestScan:
 
     def test_unknown_tag_and_bad_status_reported(self):
         gate, vault = _gate()
-        vault.store["Knowledge/Notes/u.md"] = _note(
-            [*_BASE, "status: bogus", "tags: [topic/nope]"]
-        )
+        vault.store["Knowledge/Notes/u.md"] = _note([*_BASE, "status: bogus", "tags: [topic/nope]"])
         report = gate.audit("Knowledge", resolve=False)
         cats = {d["category"] for d in report["notes"][0]["drift"]}
         assert "tag" in cats
@@ -87,39 +83,29 @@ class TestHeal:
         assert entry["corrected"] is True
         stored = vault.store["Knowledge/Notes/h.md"]
         front = stored.split("---")[1]
-        assert (
-            "identifier: legacy-7" in front
-        )  # id -> identifier (value preserved)
+        assert "identifier: legacy-7" in front  # id -> identifier (value preserved)
         assert "\nid:" not in front  # old key gone
         assert "status: Completed" in front  # done -> Completed
         assert "sub_type" not in front  # dead key dropped
 
     def test_unknown_tag_blocks_write_and_is_reported(self):
         gate, vault = _gate()
-        vault.store["Knowledge/Notes/x.md"] = _note(
-            [*_BASE, "status: done", "tags: [topic/nope]"]
-        )
+        vault.store["Knowledge/Notes/x.md"] = _note([*_BASE, "status: done", "tags: [topic/nope]"])
         report = gate.audit("Knowledge", resolve=True)
         entry = report["notes"][0]
         assert entry["corrected"] is False  # not fully clean -> not written
         assert any("topic/nope" in r for r in entry["remaining"])
-        assert (
-            "status: done" in vault.store["Knowledge/Notes/x.md"]
-        )  # left untouched
+        assert "status: done" in vault.store["Knowledge/Notes/x.md"]  # left untouched
 
     def test_routing_relocation_moves_misfiled_note(self):
         gate, vault = _gate()
         # a 'note' (note_type+pillar route to Knowledge/Notes) sitting in Projects
-        vault.store["Projects/m.md"] = _note(
-            [*_BASE, "note_type: note", "pillar: Knowledge"]
-        )
+        vault.store["Projects/m.md"] = _note([*_BASE, "note_type: note", "pillar: Knowledge"])
         report = gate.audit("Projects", resolve=True)
         entry = report["notes"][0]
         assert entry["corrected"] is True
         assert "Projects/m.md" not in vault.store  # moved out of the wrong dir
-        assert (
-            "Knowledge/Notes/m.md" in vault.store
-        )  # into the schema-resolved dir
+        assert "Knowledge/Notes/m.md" in vault.store  # into the schema-resolved dir
         assert any("moved" in c for c in entry["corrections"])
 
     def test_all_dirs_scope(self):

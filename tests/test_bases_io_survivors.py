@@ -91,16 +91,12 @@ class TestViewPropPromotion:
         return _serialize_base(_base([view]))["views"][0]
 
     def test_a_cards_view_promotes_its_own_props(self):
-        d = self._view_dict(
-            ViewConfig(name="V", type="cards", extra={"cardSize": 200})
-        )
+        d = self._view_dict(ViewConfig(name="V", type="cards", extra={"cardSize": 200}))
         assert d["cardSize"] == 200
         assert "cardSize" not in d.get("extra", {})
 
     def test_a_map_view_promotes_its_own_props(self):
-        d = self._view_dict(
-            ViewConfig(name="V", type="map", extra={"latProperty": "lat"})
-        )
+        d = self._view_dict(ViewConfig(name="V", type="map", extra={"latProperty": "lat"}))
         assert d["latProperty"] == "lat"
 
     @pytest.mark.parametrize("vtype", ["table", "board"])
@@ -122,9 +118,7 @@ class TestViewPropPromotion:
     def test_a_cards_view_does_not_promote_map_props(self):
         """The `and` binds each type to its OWN allowlist; mutated to `or`, a
         cards view would promote map keys."""
-        d = self._view_dict(
-            ViewConfig(name="V", type="cards", extra={"latProperty": "lat"})
-        )
+        d = self._view_dict(ViewConfig(name="V", type="cards", extra={"latProperty": "lat"}))
         assert "latProperty" not in d
         assert d["extra"]["latProperty"] == "lat"
 
@@ -141,18 +135,14 @@ class TestSummarySerialization:
     """`f"{s.function}({s.property})" if s.property else s.function`."""
 
     def test_a_summary_with_a_property_renders_the_call_form(self):
-        out = _serialize_base(
-            _base(summaries=[Summary(name="agg", function="sum", property="n")])
-        )
+        out = _serialize_base(_base(summaries=[Summary(name="agg", function="sum", property="n")]))
         assert out["summaries"]["agg"] == "sum(n)"
 
     def test_a_summary_without_a_property_renders_the_bare_function(self):
         """Mutated to `if not s.property`, the two forms swap: a bare count
         becomes "count(None)" and a real property loses its parentheses."""
         out = _serialize_base(
-            _base(
-                summaries=[Summary(name="agg", function="count", property=None)]
-            )
+            _base(summaries=[Summary(name="agg", function="count", property=None)])
         )
         assert out["summaries"]["agg"] == "count"
 
@@ -184,9 +174,7 @@ class TestAppendSeparator:
         write_base_to_file(target, {"filters": None})
         assert "text\n\n```base" in target.read_text(encoding="utf-8")
 
-    def test_appending_after_one_newline_adds_exactly_one_blank_line(
-        self, tmp_path
-    ):
+    def test_appending_after_one_newline_adds_exactly_one_blank_line(self, tmp_path):
         """Mutated to `and`, an empty file takes the `\\n` branch instead — and
         a file already ending in a blank line gains a second one."""
         target = tmp_path / "p.md"
@@ -207,9 +195,7 @@ class TestAppendSeparator:
         target.write_text("text\n", encoding="utf-8")
         assert write_base_to_file(target, {"filters": None})["base_index"] == 0
 
-    def test_the_reported_index_addresses_the_block_just_written(
-        self, tmp_path
-    ):
+    def test_the_reported_index_addresses_the_block_just_written(self, tmp_path):
         """The invariant behind the literal: the index it returns must be usable
         to rewrite that same block."""
         target = tmp_path / "p.md"
@@ -232,9 +218,7 @@ class TestAmbiguousTarget:
         """`<= 1` cannot differ here — a zero-block file returned earlier — so
         what separates it is the TWO-block case staying refused."""
         target = tmp_path / "two.md"
-        target.write_text(
-            "```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8"
-        )
+        target.write_text("```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8")
         result = write_base_to_file(target, {"filters": None})
         assert result["written"] is False
         assert result["error"] == "ambiguous_target"
@@ -271,9 +255,7 @@ class TestValidationFormulaRefs:
         r = validate_base(
             {
                 "formulas": {},
-                "views": [
-                    {"name": "V", "sort": [{"property": "formula.nope"}]}
-                ],
+                "views": [{"name": "V", "sort": [{"property": "formula.nope"}]}],
             }
         )
         assert r.warnings

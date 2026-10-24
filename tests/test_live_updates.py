@@ -69,13 +69,9 @@ async def test_notification_triggered(sub_mgr, tmp_path):
 
         pf = parse_file(base_file)
         result = execute_base(pf.bases[0], idx)
-        sub_mgr.subscriptions[handle].last_result_hash = sub_mgr._hash_result(
-            result
-        )
+        sub_mgr.subscriptions[handle].last_result_hash = sub_mgr._hash_result(result)
 
-        project_file.write_text(
-            "---\nstatus: Completed\n---\n", encoding="utf-8"
-        )
+        project_file.write_text("---\nstatus: Completed\n---\n", encoding="utf-8")
         idx.invalidate_file(project_file)
 
         await sub_mgr.notify_all(project_file)
@@ -130,13 +126,9 @@ async def test_no_notification_if_result_unchanged(sub_mgr, tmp_path):
 
         pf = parse_file(base_file)
         result = execute_base(pf.bases[0], idx)
-        sub_mgr.subscriptions[handle].last_result_hash = sub_mgr._hash_result(
-            result
-        )
+        sub_mgr.subscriptions[handle].last_result_hash = sub_mgr._hash_result(result)
 
-        project_file.write_text(
-            "---\nstatus: Active\nunrelated: value\n---\n", encoding="utf-8"
-        )
+        project_file.write_text("---\nstatus: Active\nunrelated: value\n---\n", encoding="utf-8")
         idx.invalidate_file(project_file)
 
         await sub_mgr.notify_all(project_file)

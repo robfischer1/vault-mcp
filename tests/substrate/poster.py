@@ -24,9 +24,7 @@ class FakePoster:
         self.fail_endpoint = fail_endpoint
         self._next_id = 100
 
-    def __call__(
-        self, endpoint: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
+    def __call__(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(endpoint)
         if endpoint == self.fail_endpoint:
             return {"ok": False, "error": f"boom at {endpoint}"}

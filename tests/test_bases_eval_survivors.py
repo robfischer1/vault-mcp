@@ -49,9 +49,7 @@ FM = {"status": "active", "count": 3, "tags": ["t"]}
 
 
 def _filter(node: FilterNode, rel: str = "Sub/Alpha.md", fm=None, links=None):
-    return evaluate_filter(
-        node, Path(rel), FM if fm is None else fm, rel, links or set()
-    )
+    return evaluate_filter(node, Path(rel), FM if fm is None else fm, rel, links or set())
 
 
 def _leaf(op: str, field: str, value: str) -> FilterNode:
@@ -115,10 +113,7 @@ class TestRootFolderSentinel:
         are ordinary in Obsidian vaults."""
         node = _leaf("eq", "file.folder", "!Special")
         assert _filter(node, rel="!Special/Note.md") is True
-        assert (
-            _filter(_leaf("eq", "file.folder", ""), rel="!Special/Note.md")
-            is False
-        )
+        assert _filter(_leaf("eq", "file.folder", ""), rel="!Special/Note.md") is False
 
 
 class TestFilterOpChain:
@@ -128,26 +123,15 @@ class TestFilterOpChain:
         return [_leaf("eq", "status", v) for v in values]
 
     def test_and_requires_every_child(self):
-        assert (
-            _filter(FilterNode(op="and", children=self._kids("active"))) is True
-        )
-        assert (
-            _filter(FilterNode(op="and", children=self._kids("active", "no")))
-            is False
-        )
+        assert _filter(FilterNode(op="and", children=self._kids("active"))) is True
+        assert _filter(FilterNode(op="and", children=self._kids("active", "no"))) is False
 
     def test_or_requires_any_child(self):
-        assert (
-            _filter(FilterNode(op="or", children=self._kids("no", "active")))
-            is True
-        )
+        assert _filter(FilterNode(op="or", children=self._kids("no", "active"))) is True
         assert _filter(FilterNode(op="or", children=self._kids("no"))) is False
 
     def test_not_inverts(self):
-        assert (
-            _filter(FilterNode(op="not", children=self._kids("active")))
-            is False
-        )
+        assert _filter(FilterNode(op="not", children=self._kids("active"))) is False
         assert _filter(FilterNode(op="not", children=self._kids("no"))) is True
 
     def test_an_empty_and_is_true_but_an_empty_or_is_false(self):
@@ -186,9 +170,7 @@ class TestFilterOpChain:
 class TestFormulaTierAndFileExprs:
     """evaluate_formula's tier gate and its literal-expression chain."""
 
-    def _formula(
-        self, expr: str, tier: int = 1, rel: str = "Sub/Alpha.md", **kw
-    ):
+    def _formula(self, expr: str, tier: int = 1, rel: str = "Sub/Alpha.md", **kw):
         return evaluate_formula(
             Formula(name="f", expression=expr, tier=tier),
             Path(rel),
@@ -220,8 +202,7 @@ class TestFormulaTierAndFileExprs:
         """`expr >= "file.name"` captures "file.path" and "file.ext"; the arms
         are only separable because each returns a different string."""
         got = {
-            e: self._formula(e)[0]
-            for e in ("file.name", "file.folder", "file.path", "file.ext")
+            e: self._formula(e)[0] for e in ("file.name", "file.folder", "file.path", "file.ext")
         }
         assert len(set(got.values())) == 4
 
@@ -235,9 +216,7 @@ class TestFormulaTierAndFileExprs:
         assert self._formula("file.folder", rel="Root.md")[0] == ""
 
     def test_a_folder_below_dot_is_not_blanked(self):
-        assert (
-            self._formula("file.folder", rel="!Special/N.md")[0] == "!Special"
-        )
+        assert self._formula("file.folder", rel="!Special/N.md")[0] == "!Special"
 
     def test_link_counts_use_the_right_direction(self):
         """outbound has 2, inbound has 1 — distinct, so a swapped direction
@@ -401,10 +380,7 @@ class TestMethodDispatch:
     def test_replace_requires_two_arguments(self):
         """`len(args) < 2` mutated to `!= 2` also rejects THREE arguments,
         which the original accepts."""
-        assert (
-            _ev({"s": "a-b"}).evaluate('s.replace("-", "+", "ignored")')
-            == "a+b"
-        )
+        assert _ev({"s": "a-b"}).evaluate('s.replace("-", "+", "ignored")') == "a+b"
         with pytest.raises(FormulaError):
             _ev({"s": "ab"}).evaluate('s.replace("a")')
 
@@ -606,17 +582,13 @@ class TestDepthCounterUnwind:
     def test_headroom_is_not_gained_by_a_previous_call(self):
         ev = FormulaEvaluator({"a": 1}, 2, 0.1)
         assert ev.evaluate('_if_(a == 1, "y", "n")') == "y"
-        three_deep = (
-            '_if_(a == 1, _if_(a == 1, _if_(a == 1, "y", "n"), "n"), "n")'
-        )
+        three_deep = '_if_(a == 1, _if_(a == 1, _if_(a == 1, "y", "n"), "n"), "n")'
         with pytest.raises(FormulaError):
             ev.evaluate(three_deep)
 
     def test_the_limit_is_the_same_on_the_first_and_later_calls(self):
         first = FormulaEvaluator({"a": 1}, 2, 0.1)
-        three_deep = (
-            '_if_(a == 1, _if_(a == 1, _if_(a == 1, "y", "n"), "n"), "n")'
-        )
+        three_deep = '_if_(a == 1, _if_(a == 1, _if_(a == 1, "y", "n"), "n"), "n")'
         with pytest.raises(FormulaError):
             first.evaluate(three_deep)
 

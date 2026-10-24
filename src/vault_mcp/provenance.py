@@ -73,9 +73,7 @@ class AuthorType(StrEnum):
     EXTERNAL = "external"
 
 
-def author_type_for(
-    level: Provenance, declared: AuthorType | None = None
-) -> AuthorType:
+def author_type_for(level: Provenance, declared: AuthorType | None = None) -> AuthorType:
     """Derive the author_type category from an author_level.
 
     A caller-declared ``external`` always wins (3rd-party origin can't be
@@ -95,8 +93,7 @@ def parse_author_type(value: str) -> AuthorType:
         return AuthorType(value)
     except ValueError as exc:
         raise ProvenanceError(
-            f"{value!r} is not a valid author_type; "
-            f"expected one of {[a.value for a in AuthorType]}"
+            f"{value!r} is not a valid author_type; expected one of {[a.value for a in AuthorType]}"
         ) from exc
 
 

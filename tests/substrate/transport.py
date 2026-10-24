@@ -23,9 +23,7 @@ class FakeTransport:
         self.responses = list(responses)
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    def __call__(
-        self, url: str, headers: dict[str, str], body: dict[str, Any]
-    ) -> tuple[int, str]:
+    def __call__(self, url: str, headers: dict[str, str], body: dict[str, Any]) -> tuple[int, str]:
         self.calls.append((url, body))
         assert headers["Authorization"].startswith("Bearer ")
         return self.responses.pop(0)
