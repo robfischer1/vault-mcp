@@ -43,7 +43,7 @@ dependencies = [
     # configuration fallback, has no ownership guard to defuse, and is pure
     # Python — so all three are answered by the same change rather than
     # excused. Floor is the version this was written and measured against.
-    "dulwich>=1.2.14",
+    "dulwich>=1.2.15",
 ]
 
 [project.urls]
