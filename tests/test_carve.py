@@ -69,16 +69,12 @@ def test_preflight_refuses_when_hades_url_unset() -> None:
 
 
 def test_preflight_passes_with_hades_url_and_smoke() -> None:
-    pf = carve_preflight(
-        hades_url="http://hades.notusmi.com:8101", calliope_check=lambda: True
-    )
+    pf = carve_preflight(hades_url="http://hades.notusmi.com:8101", calliope_check=lambda: True)
     assert pf.ok is True
 
 
 def test_preflight_refuses_when_calliope_smoke_fails() -> None:
-    pf = carve_preflight(
-        hades_url="http://hades.notusmi.com:8101", calliope_check=lambda: False
-    )
+    pf = carve_preflight(hades_url="http://hades.notusmi.com:8101", calliope_check=lambda: False)
     assert pf.ok is False
     assert pf.error == "calliope_unreachable"
 
@@ -126,9 +122,7 @@ def test_dry_run_selects_scope_policied_files_and_touches_nothing() -> None:
         "Entities/Books/Book.md",
     }
     # Governance / unlisted / non-md are all skipped.
-    reasons = {
-        f["path"]: f["reason"] for f in d["files"] if f["action"] == "skipped"
-    }
+    reasons = {f["path"]: f["reason"] for f in d["files"] if f["action"] == "skipped"}
     assert reasons["System/Pantheon/WBS/Plan.md"] == "protected-pillar"
     assert reasons["Garden/Canon/Voice.md"] == "unlisted-pillar-default-stay"
     assert reasons["attachments/pic.png"] == "not-markdown"

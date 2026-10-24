@@ -89,9 +89,7 @@ class GateWriter:
             return False
         return True
 
-    def _atom_filename(
-        self, created: str, note_type: str, directory: str
-    ) -> str:
+    def _atom_filename(self, created: str, note_type: str, directory: str) -> str:
         """Dated atom slug YYYY-MM-DD-{type}.{seq}; seq probes for the next free name.
 
         ObsidianIOError is load-bearing in the except, not defensive breadth:
@@ -145,9 +143,7 @@ class GateWriter:
             )
 
         author_level = stamp(actor, mode)
-        declared = (
-            parse_author_type(author_type) if author_type is not None else None
-        )
+        declared = parse_author_type(author_type) if author_type is not None else None
         resolved_author_type = author_type_for(author_level, declared)
         model = ai_model if actor is Actor.AGENT else None
         frontmatter = self._gate._frontmatter._build_frontmatter(
@@ -163,11 +159,7 @@ class GateWriter:
         )
         body = self._gate._frontmatter._maybe_escape_body(directory, body)
 
-        tc = (
-            self._gate._schema.type_config(note_type)
-            if note_type is not None
-            else None
-        )
+        tc = self._gate._schema.type_config(note_type) if note_type is not None else None
         if tc is not None and tc.atom_slug and note_type is not None:
             filename = self._atom_filename(
                 created if created is not None else _today(),
@@ -191,13 +183,8 @@ class GateWriter:
             touches_body=True,
             touched_fields=None,  # create: every fault is an error
         )
-        if (
-            candidate.mode is WriteMode.COMPUTE
-            and not self._gate._lint_on_compute
-        ):
-            lint_result = (
-                LintResult()
-            )  # trusted DB source: lint disabled by flag
+        if candidate.mode is WriteMode.COMPUTE and not self._gate._lint_on_compute:
+            lint_result = LintResult()  # trusted DB source: lint disabled by flag
         else:
             lint_result = self._gate._linter.lint(candidate)
             self._gate._frontmatter._raise_first_error(lint_result)
@@ -211,14 +198,10 @@ class GateWriter:
             author_type=resolved_author_type,
             ai_model=model,
             warnings=self._gate._frontmatter._tag_warnings(tags, actor)
-            + self._gate._frontmatter._link_warnings(
-                directory, title, frontmatter
-            )
+            + self._gate._frontmatter._link_warnings(directory, title, frontmatter)
             + [f.message for f in lint_result.warnings],
         )
-        self._gate._frontmatter._emit_diff(
-            path, "create", sorted(frontmatter.keys()), author_level
-        )
+        self._gate._frontmatter._emit_diff(path, "create", sorted(frontmatter.keys()), author_level)
         return result
 
     def update_note(
@@ -240,9 +223,7 @@ class GateWriter:
         touches_body = body is not None
         mode = WriteMode.CREATE if touches_body else WriteMode.METADATA
         directory = path.rsplit("/", 1)[0] if "/" in path else ""
-        self._gate.check_protection(
-            directory, actor, mode, touches_body=touches_body
-        )
+        self._gate.check_protection(directory, actor, mode, touches_body=touches_body)
 
         current_fm, current_body = _split_note(self._gate._io.read_note(path))
 
@@ -255,9 +236,7 @@ class GateWriter:
             new_fm["tags"] = tags
             changed.append("tags")
 
-        self._gate._frontmatter._migrate_keys(
-            new_fm
-        )  # clean deprecated/dead keys on every write
+        self._gate._frontmatter._migrate_keys(new_fm)  # clean deprecated/dead keys on every write
 
         # Read current author_level, falling back to the legacy single-axis
         # `provenance:` key so notes that predate the 3-property model keep working.
@@ -265,9 +244,7 @@ class GateWriter:
         if not (isinstance(raw_level, str) and raw_level):
             raw_level = current_fm.get("provenance")
         current_level = (
-            parse(raw_level)
-            if isinstance(raw_level, str) and raw_level
-            else Provenance.HUMAN
+            parse(raw_level) if isinstance(raw_level, str) and raw_level else Provenance.HUMAN
         )
         # Resolve the current author_type, self-healing a stale value rather
         # than hard-blocking the update (obsidian-vault#1021). A pre-tightening
@@ -304,8 +281,7 @@ class GateWriter:
             )
         ):
             is_outputs_article = directory.startswith("Outputs") and (
-                current_fm.get("@type") == "Article"
-                or current_fm.get("note_type") == "Article"
+                current_fm.get("@type") == "Article" or current_fm.get("note_type") == "Article"
             )
             if not is_outputs_article:
                 raise ProtectionError(
@@ -337,15 +313,11 @@ class GateWriter:
                 changed.append(self._gate._schema.updated_field)
 
         if "status" in new_fm:
-            new_fm["status"] = self._gate._schema.normalize_status(
-                new_fm["status"]
-            )
+            new_fm["status"] = self._gate._schema.normalize_status(new_fm["status"])
 
         new_body = body if body is not None else current_body
         if touches_body:
-            new_body = self._gate._frontmatter._maybe_escape_body(
-                directory, new_body
-            )
+            new_body = self._gate._frontmatter._maybe_escape_body(directory, new_body)
             changed.append("body")
 
         title = path.rsplit("/", 1)[-1].removesuffix(".md")
@@ -387,9 +359,7 @@ class GateWriter:
             ai_model=new_fm.get("ai_model"),
             created=False,
             warnings=provenance_warnings
-            + self._gate._frontmatter._tag_warnings(
-                tags if tags is not None else [], actor
-            )
+            + self._gate._frontmatter._tag_warnings(tags if tags is not None else [], actor)
             + self._gate._frontmatter._link_warnings(directory, title, new_fm)
             + [f.message for f in lint_result.warnings],
         )
@@ -426,21 +396,13 @@ class GateWriter:
         ignored on update (re-routing an existing note is not a write).
         """
         if mode not in ("upsert", "create", "update"):
-            raise FieldError(
-                f"mode must be 'upsert', 'create', or 'update', not {mode!r}"
-            )
+            raise FieldError(f"mode must be 'upsert', 'create', or 'update', not {mode!r}")
 
-        tc = (
-            self._gate._schema.type_config(note_type)
-            if note_type is not None
-            else None
-        )
+        tc = self._gate._schema.type_config(note_type) if note_type is not None else None
         if tc is not None and tc.atom_slug:
             # Dated atom slugs are append-only — always a fresh create.
             if mode == "update":
-                raise FieldError(
-                    "atom-slug types are create-only; mode='update' is invalid"
-                )
+                raise FieldError("atom-slug types are create-only; mode='update' is invalid")
             return self.create_note(
                 title=title,
                 note_type=note_type,
@@ -464,13 +426,9 @@ class GateWriter:
         exists = self._note_exists(path)
 
         if exists and mode == "create":
-            raise FieldError(
-                f"{path} already exists (mode='create' forbids overwrite)"
-            )
+            raise FieldError(f"{path} already exists (mode='create' forbids overwrite)")
         if not exists and mode == "update":
-            raise FieldError(
-                f"{path} does not exist (mode='update' requires it)"
-            )
+            raise FieldError(f"{path} does not exist (mode='update' requires it)")
 
         if exists:
             return self.update_note(
@@ -495,9 +453,7 @@ class GateWriter:
             ai_model=ai_model,
         )
 
-    def delete(
-        self, path: str, *, actor: Actor = Actor.AGENT
-    ) -> dict[str, Any]:
+    def delete(self, path: str, *, actor: Actor = Actor.AGENT) -> dict[str, Any]:
         """Move a note to Obsidian's ``.trash/`` (reversible), if permitted.
 
         Runs the same write-protection rules as a write — an agent cannot trash a
@@ -507,13 +463,9 @@ class GateWriter:
         if not self._note_exists(path):
             raise FieldError(f"{path} does not exist")
         directory = path.rsplit("/", 1)[0] if "/" in path else ""
-        self._gate.check_protection(
-            directory, actor, WriteMode.CREATE, touches_body=True
-        )
+        self._gate.check_protection(directory, actor, WriteMode.CREATE, touches_body=True)
         self._gate._io.delete_note(path)
-        self._gate._frontmatter._emit_diff(
-            path, "delete", [], stamp(actor, WriteMode.METADATA)
-        )
+        self._gate._frontmatter._emit_diff(path, "delete", [], stamp(actor, WriteMode.METADATA))
         return {"ok": True, "path": path, "deleted": True}
 
     def move_note(
@@ -536,21 +488,13 @@ class GateWriter:
 
         src_dir = src.rsplit("/", 1)[0] if "/" in src else ""
         dst_dir = dst.rsplit("/", 1)[0] if "/" in dst else ""
-        self._gate.check_protection(
-            src_dir, actor, WriteMode.CREATE, touches_body=True
-        )
-        self._gate.check_protection(
-            dst_dir, actor, WriteMode.CREATE, touches_body=False
-        )
+        self._gate.check_protection(src_dir, actor, WriteMode.CREATE, touches_body=True)
+        self._gate.check_protection(dst_dir, actor, WriteMode.CREATE, touches_body=False)
 
         content = self._gate._io.read_note(src)
         self._write(dst, content, created=True)
         self._gate._io.delete_note(src)
-        self._gate._frontmatter._emit_diff(
-            src, "delete", [], stamp(actor, WriteMode.METADATA)
-        )
-        self._gate._frontmatter._emit_diff(
-            dst, "create", [], stamp(actor, WriteMode.METADATA)
-        )
+        self._gate._frontmatter._emit_diff(src, "delete", [], stamp(actor, WriteMode.METADATA))
+        self._gate._frontmatter._emit_diff(dst, "create", [], stamp(actor, WriteMode.METADATA))
 
         return {"ok": True, "src": src, "dst": dst, "moved": True}

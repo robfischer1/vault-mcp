@@ -53,9 +53,7 @@ def test_documents_read_routes_to_calliope_when_hades_set(monkeypatch) -> None:
 
 def test_calliope_miss_maps_to_row_not_found(monkeypatch) -> None:
     monkeypatch.setattr(server, "HADES_URL", "http://hades.notusmi.com:8101")
-    monkeypatch.setattr(
-        hades_client, "read_document", lambda *_a, **_k: {"documents": []}
-    )
+    monkeypatch.setattr(hades_client, "read_document", lambda *_a, **_k: {"documents": []})
     out = verbs_plan._read_dissolved_row("documents", 7)
     assert out["ok"] is False
     assert out["error"] == "row_not_found"
@@ -76,9 +74,7 @@ def test_calliope_tool_failure_maps_to_structured_error(monkeypatch) -> None:
 def test_hades_unset_falls_back_to_phdb_not_calliope(monkeypatch) -> None:
     # With HADES_URL unset, documents must NOT route to Calliope.
     def boom(*_a: Any, **_k: Any) -> dict[str, Any]:
-        raise AssertionError(
-            "read_document must not be called when HADES_URL unset"
-        )
+        raise AssertionError("read_document must not be called when HADES_URL unset")
 
     monkeypatch.setattr(server, "HADES_URL", "")
     monkeypatch.setattr(hades_client, "read_document", boom)

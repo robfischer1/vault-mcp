@@ -169,9 +169,7 @@ class TestValidationResultFlag:
         result = validate_base(
             {
                 "formulas": {},
-                "views": [
-                    {"name": "V", "type": "table", "order": ["formula.missing"]}
-                ],
+                "views": [{"name": "V", "type": "table", "order": ["formula.missing"]}],
             }
         )
         assert result.errors
@@ -183,9 +181,7 @@ class TestValidationResultFlag:
             {"filters": None, "views": []},
             {
                 "formulas": {},
-                "views": [
-                    {"name": "V", "type": "table", "order": ["formula.nope"]}
-                ],
+                "views": [{"name": "V", "type": "table", "order": ["formula.nope"]}],
             },
         ]
         for spec in specs:

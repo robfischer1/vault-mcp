@@ -137,15 +137,11 @@ async def subscribe_base(
 
     with mgr.lock:
         if handle in mgr.subscriptions:
-            mgr.subscriptions[handle].last_result_hash = mgr._hash_result(
-                result
-            )
+            mgr.subscriptions[handle].last_result_hash = mgr._hash_result(result)
 
     return {
         "handle": handle,
-        "initial_results": asdict(result)
-        if hasattr(result, "__dataclass_fields__")
-        else result,
+        "initial_results": asdict(result) if hasattr(result, "__dataclass_fields__") else result,
     }
 
 

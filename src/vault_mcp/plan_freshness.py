@@ -129,11 +129,7 @@ def file_mtime_iso(path: str | Path) -> str | None:
         ts = Path(path).stat().st_mtime
     except _STAT_ERRORS:
         return None
-    return (
-        datetime.fromtimestamp(ts, tz=UTC)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -231,9 +227,7 @@ class PlanSweepReport:
             "backfilled": self.backfilled,
             "counts": self.counts,
             **({"preflight": self.preflight} if self.preflight else {}),
-            **(
-                {"aborted_auth": self.aborted_auth} if self.aborted_auth else {}
-            ),
+            **({"aborted_auth": self.aborted_auth} if self.aborted_auth else {}),
             "records": [r.to_dict() for r in self.records],
         }
 
@@ -337,11 +331,7 @@ def compare_plan(
         delta = 0
     else:
         state = PlanDriftState.DRIFTED
-        delta = (
-            vault_bytes - stored.body_bytes
-            if stored.body_bytes is not None
-            else 0
-        )
+        delta = vault_bytes - stored.body_bytes if stored.body_bytes is not None else 0
 
     return PlanDriftRecord(
         source_path=source_path,
@@ -548,9 +538,7 @@ def _backfill_one(
         result = write_stored(build_payload(record.source_path, raw))
     except Exception as exc:
         log.exception("backfill raised for %s", record.source_path)
-        return replace(
-            record, state=PlanDriftState.ERROR, error=f"backfill raised: {exc}"
-        )
+        return replace(record, state=PlanDriftState.ERROR, error=f"backfill raised: {exc}")
 
     if not result.get("ok"):
         return replace(

@@ -79,22 +79,16 @@ class FrontmatterBuilder:
             return []
         return [f"reserved tag(s) {hits} are normally set by Rob, not agents"]
 
-    def _link_warnings(
-        self, directory: str, title: str, fm: dict[str, Any]
-    ) -> list[str]:
+    def _link_warnings(self, directory: str, title: str, fm: dict[str, Any]) -> list[str]:
         """Advisory (non-blocking) warnings for missing recommended links (FR-36)."""
         warns: list[str] = []
         derived = directory.startswith(("Artifacts", "Records"))
         if derived and "isBasedOn" not in fm:
-            warns.append(
-                "isBasedOn missing for an Artifacts/Records-derived note"
-            )
+            warns.append("isBasedOn missing for an Artifacts/Records-derived note")
         last = directory.rsplit("/", 1)[-1] if directory else ""
         is_folder_note = title == last  # folder-note / pillar-root exception
         if "up" not in fm and not is_folder_note:
-            warns.append(
-                "up: missing — consider linking this note to its parent"
-            )
+            warns.append("up: missing — consider linking this note to its parent")
         return warns
 
     def lint_payload(
@@ -185,9 +179,7 @@ class FrontmatterBuilder:
             schema.updated_field,
         }
         if note_type is not None:
-            fm["note_type"] = _title_case_note_type(
-                note_type
-            )  # FR: Title-Case note_type
+            fm["note_type"] = _title_case_note_type(note_type)  # FR: Title-Case note_type
         if pillar is not None:
             fm["pillar"] = pillar
         if tags:
@@ -198,9 +190,7 @@ class FrontmatterBuilder:
                     continue  # governance fields are Gate-stamped, never caller-set
                 fm[key] = value
 
-        self._migrate_keys(
-            fm
-        )  # rename deprecated keys + drop dead keys (before defaults)
+        self._migrate_keys(fm)  # rename deprecated keys + drop dead keys (before defaults)
 
         # identifier defaults to a kebab slug of the label; caller override wins.
         if fm.get("identifier") in (None, ""):

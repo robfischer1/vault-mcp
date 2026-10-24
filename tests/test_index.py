@@ -64,9 +64,7 @@ class TestFindNotesByFrontmatter:
 
     def test_find_with_scope(self):
         idx = _idx()
-        results = idx.find_notes_by_frontmatter(
-            {"note_type": "daily"}, scope="Timelines/Journal/"
-        )
+        results = idx.find_notes_by_frontmatter({"note_type": "daily"}, scope="Timelines/Journal/")
         assert len(results) == 2
 
     def test_find_no_match(self):
@@ -143,9 +141,7 @@ class TestRecentEdits:
         assert results == []
 
     def test_limit(self, dated_vault: Path):
-        results = _dated_idx(dated_vault).recent_edits(
-            since="2020-01-01", limit=2
-        )
+        results = _dated_idx(dated_vault).recent_edits(since="2020-01-01", limit=2)
         assert 0 < len(results) <= 2
 
     def test_bad_date(self):
@@ -405,23 +401,17 @@ class TestInvalidateFile:
     def test_invalidate_removes_from_content(self):
         idx = _idx()
         p = MINI_VAULT / "Garden" / "Stoicism.md"
-        before = len(
-            [1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()]
-        )
+        before = len([1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()])
         assert before == 1
         idx.invalidate_file(p)
-        after = len(
-            [1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()]
-        )
+        after = len([1 for pp, _, _ in idx._content if pp.resolve() == p.resolve()])
         # Re-parsed, so still 1
         assert after == 1
 
     def test_invalidate_deleted_file(self, tmp_path):
         idx = _idx()
         test_file = MINI_VAULT / "Garden" / "_temp_test.md"
-        test_file.write_text(
-            "---\nname: temp\n---\nBody [[AGENTS]].", encoding="utf-8"
-        )
+        test_file.write_text("---\nname: temp\n---\nBody [[AGENTS]].", encoding="utf-8")
         idx.invalidate_file(test_file)
         assert "AGENTS" in idx._outbound.get("_temp_test", [])
         test_file.unlink()

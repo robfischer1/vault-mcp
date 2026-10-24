@@ -94,9 +94,7 @@ class GateAuditor:
                 "drift": drift,
             }
             if resolve:
-                healed = self._heal(
-                    note_path, fm, body, note_dir, filename, note_type
-                )
+                healed = self._heal(note_path, fm, body, note_dir, filename, note_type)
                 entry["corrected"] = healed["corrected"]
                 entry["corrections"] = healed["corrections"]
                 entry["remaining"] = healed["remaining"]
@@ -202,9 +200,7 @@ class GateAuditor:
         if "status" in new_fm:
             repaired = self._gate._schema.normalize_status(new_fm["status"])
             if repaired != new_fm["status"]:
-                corrections.append(
-                    f"status {new_fm['status']!r} -> {repaired!r}"
-                )
+                corrections.append(f"status {new_fm['status']!r} -> {repaired!r}")
                 new_fm["status"] = repaired
 
         try:

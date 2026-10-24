@@ -151,9 +151,7 @@ class TestFileAttributes:
     def test_a_non_file_name_is_not_treated_as_a_file_attribute(self):
         """`== "file"` mutated to `!=` would send this down the file branch and
         look up "file.attr" instead of resolving `other`."""
-        assert (
-            _ev({"other": None, "file.attr": "wrong"}).evaluate("other") is None
-        )
+        assert _ev({"other": None, "file.attr": "wrong"}).evaluate("other") is None
 
 
 class TestDepthLimit:

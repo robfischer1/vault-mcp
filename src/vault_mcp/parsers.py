@@ -92,9 +92,7 @@ def parse_frontmatter(text: str) -> dict[str, Any]:
         if val.startswith("[") and val.endswith("]"):
             inner = val[1:-1].strip()
             fm[key] = (
-                []
-                if not inner
-                else [x.strip().strip('"').strip("'") for x in inner.split(",")]
+                [] if not inner else [x.strip().strip('"').strip("'") for x in inner.split(",")]
             )
             i += 1
             continue
@@ -151,27 +149,19 @@ def build_content_index(
 
     """
     _skip_dirs = skip_dirs if skip_dirs is not None else SKIP_DIRS
-    _skip_content = (
-        skip_content if skip_content is not None else SKIP_CONTENT_CHECKS
-    )
-    _skip_system = (
-        skip_system if skip_system is not None else SKIP_SYSTEM_SUBDIRS
-    )
+    _skip_content = skip_content if skip_content is not None else SKIP_CONTENT_CHECKS
+    _skip_system = skip_system if skip_system is not None else SKIP_SYSTEM_SUBDIRS
 
     content: list[tuple[Path, dict[str, Any], str]] = []
     by_name: dict[str, list[Path]] = {}
     mtime_map: dict[Path, float] = {}
     vault_str = str(vault)
 
-    for dirpath, dirnames, filenames in os.walk(
-        vault_str, topdown=True, followlinks=False
-    ):
+    for dirpath, dirnames, filenames in os.walk(vault_str, topdown=True, followlinks=False):
         rel_dir = Path(dirpath).relative_to(vault)
         parts = rel_dir.parts
 
-        dirnames[:] = [
-            d for d in dirnames if not d.startswith(".") and d not in _skip_dirs
-        ]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in _skip_dirs]
 
         if parts == ("System",):
             dirnames[:] = [d for d in dirnames if d not in _skip_system]

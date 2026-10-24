@@ -99,9 +99,7 @@ def test_drift_report_flags_stale_plan() -> None:
     )
     (rec,) = report.records
     assert rec.state is PlanDriftState.DRIFTED
-    assert rec.delta_bytes == len(_stripped(RAW).encode()) - len(
-        stale_body.encode()
-    )
+    assert rec.delta_bytes == len(_stripped(RAW).encode()) - len(stale_body.encode())
     assert rec.delta_bytes > 0
 
 
@@ -194,9 +192,7 @@ def test_refresh_does_not_populate_missing_plans_by_default() -> None:
 
 def test_include_missing_populates_explicitly() -> None:
     """Populating is available, but only as a deliberate opt-in."""
-    report, writer = _sweep(
-        {"p.md": RAW}, {}, refresh=True, include_missing=True
-    )
+    report, writer = _sweep({"p.md": RAW}, {}, refresh=True, include_missing=True)
     assert len(writer.calls) == 1
     assert report.records[0].refreshed is True
 
@@ -206,11 +202,7 @@ def test_refresh_skips_current_plan() -> None:
     body = _stripped(RAW)
     report, writer = _sweep(
         {"p.md": RAW},
-        {
-            "p.md": StoredCopy(
-                "p.md", raw_hash=body_hash(body), body_bytes=len(body)
-            )
-        },
+        {"p.md": StoredCopy("p.md", raw_hash=body_hash(body), body_bytes=len(body))},
         refresh=True,
     )
     assert writer.calls == []
@@ -228,9 +220,7 @@ def test_refresh_never_touches_vault_file(tmp_path: Path) -> None:
     sweep_plans(
         list_files=lambda _d: ["p.md"],
         read_vault=lambda _p: f.read_text(encoding="utf-8"),
-        read_stored=lambda _p: StoredCopy(
-            "p.md", raw_hash="stale", body_bytes=1
-        ),
+        read_stored=lambda _p: StoredCopy("p.md", raw_hash="stale", body_bytes=1),
         build_payload=_payload,
         write_stored=_Writer(),
         refresh=True,
@@ -317,9 +307,7 @@ def test_refresh_is_idempotent() -> None:
     def write(payload: dict[str, Any]) -> dict[str, Any]:
         # Model the store: the write lands and becomes the newest copy.
         body = payload["body_text"]
-        stored["p.md"] = StoredCopy(
-            "p.md", raw_hash=body_hash(body), body_bytes=len(body.encode())
-        )
+        stored["p.md"] = StoredCopy("p.md", raw_hash=body_hash(body), body_bytes=len(body.encode()))
         return writer(payload)
 
     def read_stored(p: str) -> StoredCopy | None:
@@ -361,11 +349,7 @@ def test_counts_are_derived_from_records() -> None:
     body = _stripped(RAW)
     report, _ = _sweep(
         {"a.md": RAW, "b.md": RAW},
-        {
-            "a.md": StoredCopy(
-                "a.md", raw_hash=body_hash(body), body_bytes=len(body)
-            )
-        },
+        {"a.md": StoredCopy("a.md", raw_hash=body_hash(body), body_bytes=len(body))},
     )
     assert report.counts["current"] == 1
     assert report.counts["missing"] == 1
@@ -432,9 +416,7 @@ def test_file_mtime_beats_frontmatter_updated() -> None:
     from vault_mcp.translator import DOC_ENDPOINT, note_to_payloads
 
     fm = {"updated": "2026-07-24", "title": "A plan"}
-    pls = note_to_payloads(
-        fm, BODY, "p.md", source_mtime="2026-08-11T21:22:29Z"
-    )
+    pls = note_to_payloads(fm, BODY, "p.md", source_mtime="2026-08-11T21:22:29Z")
     doc = next(p["payload"] for p in pls if p["endpoint"] == DOC_ENDPOINT)
     assert doc["mtime"] == "2026-08-11T21:22:29Z"
 
@@ -463,9 +445,7 @@ def test_omitting_source_mtime_is_backwards_compatible() -> None:
 
     fm = {"updated": "2026-07-24", "created": "2026-07-04"}
     before = next(
-        p["payload"]
-        for p in note_to_payloads(fm, BODY, "p.md")
-        if p["endpoint"] == DOC_ENDPOINT
+        p["payload"] for p in note_to_payloads(fm, BODY, "p.md") if p["endpoint"] == DOC_ENDPOINT
     )
     assert before["mtime"] == "2026-07-24"
     assert before["ctime"] == "2026-07-04"
@@ -474,11 +454,7 @@ def test_omitting_source_mtime_is_backwards_compatible() -> None:
 def test_backfill_reconciles_current_plan_without_new_version() -> None:
     """F2 backfill — a current plan is re-sent for provenance only."""
     body = _stripped(RAW)
-    stored = {
-        "p.md": StoredCopy(
-            "p.md", raw_hash=body_hash(body), body_bytes=len(body)
-        )
-    }
+    stored = {"p.md": StoredCopy("p.md", raw_hash=body_hash(body), body_bytes=len(body))}
     w = _Writer()
 
     def read_stored(p: str) -> StoredCopy | None:
@@ -501,18 +477,12 @@ def test_backfill_reconciles_current_plan_without_new_version() -> None:
     assert report.refreshed == 0
 
 
-def test_refresh_still_never_writes_a_current_plan_when_backfill_is_off() -> (
-    None
-):
+def test_refresh_still_never_writes_a_current_plan_when_backfill_is_off() -> None:
     """G-3 stays literally true — backfill is a separate mode, not a widening."""
     body = _stripped(RAW)
     report, writer = _sweep(
         {"p.md": RAW},
-        {
-            "p.md": StoredCopy(
-                "p.md", raw_hash=body_hash(body), body_bytes=len(body)
-            )
-        },
+        {"p.md": StoredCopy("p.md", raw_hash=body_hash(body), body_bytes=len(body))},
         refresh=True,
     )
     assert writer.calls == []
@@ -525,9 +495,7 @@ def test_backfill_failure_is_reported_per_plan() -> None:
     report = sweep_plans(
         list_files=lambda _d: ["p.md"],
         read_vault=lambda _p: RAW,
-        read_stored=lambda _p: StoredCopy(
-            "p.md", raw_hash=body_hash(body), body_bytes=len(body)
-        ),
+        read_stored=lambda _p: StoredCopy("p.md", raw_hash=body_hash(body), body_bytes=len(body)),
         build_payload=_payload,
         write_stored=lambda _p: {"ok": False, "error": "nope"},
         backfill=True,

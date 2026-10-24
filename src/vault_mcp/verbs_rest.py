@@ -44,9 +44,7 @@ from vault_mcp.rest_client import frontmatter_json
 from vault_mcp.server import mcp
 
 
-def _object_or_error(
-    data: object, *, stamp_as_of: bool = False
-) -> dict[str, Any]:
+def _object_or_error(data: object, *, stamp_as_of: bool = False) -> dict[str, Any]:
     """Narrow a REST payload to a JSON OBJECT, or return an error envelope.
 
     Every caller below reads `result["data"]`, which the client types as `Any`
@@ -63,10 +61,7 @@ def _object_or_error(
     if not isinstance(data, dict):
         return {
             "error": "rest_unexpected_shape",
-            "detail": (
-                f"expected a JSON object from the REST API, got "
-                f"{type(data).__name__}"
-            ),
+            "detail": (f"expected a JSON object from the REST API, got {type(data).__name__}"),
         }
     out: dict[str, Any] = data
     if stamp_as_of:
@@ -112,9 +107,7 @@ if not server.REST_DISABLE:
 
         """
         client = server._get_rest_client()
-        result = client.get(
-            "/active/", accept="application/vnd.olrapi.note+json"
-        )
+        result = client.get("/active/", accept="application/vnd.olrapi.note+json")
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
         return _object_or_error(result["data"], stamp_as_of=True)
@@ -254,9 +247,7 @@ if not server.REST_DISABLE:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "patched": path}
 
-    @mcp.tool(
-        description="[REST-backed] Append markdown to the end of a note's existing body."
-    )
+    @mcp.tool(description="[REST-backed] Append markdown to the end of a note's existing body.")
     def append_note(path: str, content: str) -> dict[str, Any]:
         """[REST-backed] Append content to the end of a note.
 
@@ -352,9 +343,7 @@ if not server.REST_DISABLE:
         if date:
             path = f"/periodic/{level}/{date}"
         client = server._get_rest_client()
-        result = client.post(
-            path, content=content, content_type="text/markdown"
-        )
+        result = client.post(path, content=content, content_type="text/markdown")
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"ok": True, "appended": level, "date": date}

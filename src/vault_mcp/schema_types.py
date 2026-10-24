@@ -33,9 +33,7 @@ PROTECTION_RULES: frozenset[str] = frozenset(
 #   agent            — caller-creatable via the Gate (normal authoring)
 #   materialize-only — Gate rejects agent-create; the materialize verb renders it
 #   pure-DB          — never a vault file; the Gate rejects any vault-write
-WRITE_MODES: frozenset[str] = frozenset(
-    {"agent", "materialize-only", "pure-DB"}
-)
+WRITE_MODES: frozenset[str] = frozenset({"agent", "materialize-only", "pure-DB"})
 
 
 def _is_geo(value: object) -> bool:
@@ -106,11 +104,7 @@ class Route:
 
     def specificity(self) -> int:
         """How many constraints this route pins — higher wins on overlap."""
-        return sum(
-            1
-            for c in (self.note_type, self.pillar, self.discriminator)
-            if c is not None
-        )
+        return sum(1 for c in (self.note_type, self.pillar, self.discriminator) if c is not None)
 
 
 @dataclass(frozen=True)

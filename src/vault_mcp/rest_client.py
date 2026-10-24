@@ -101,9 +101,7 @@ def _encode_target(value: str, target_type: str = "heading") -> str:
     optionally with leading ``#`` markup -- which is split into the JSON path.
     """
     if target_type == "heading":
-        parts = [
-            re.sub(r"^#+\s*", "", part.strip()) for part in value.split("::")
-        ]
+        parts = [re.sub(r"^#+\s*", "", part.strip()) for part in value.split("::")]
         value = json.dumps(parts, ensure_ascii=False, separators=(",", ":"))
     return urllib.parse.quote(value, safe="")
 
@@ -339,9 +337,7 @@ class ObsidianRESTClient:
         extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Issue a GET to `path` and return the response envelope."""
-        return self._request(
-            "GET", path, accept=accept, extra_headers=extra_headers
-        )
+        return self._request("GET", path, accept=accept, extra_headers=extra_headers)
 
     def post(
         self,
@@ -419,9 +415,7 @@ class ObsidianRESTClient:
             extra_headers=extra_headers,
         )
 
-    def delete(
-        self, path: str, *, accept: str = "application/json"
-    ) -> dict[str, Any]:
+    def delete(self, path: str, *, accept: str = "application/json") -> dict[str, Any]:
         """DELETE a note. ``DELETE /vault/{path}`` removes the file."""
         return self._request("DELETE", path, accept=accept)
 
@@ -454,22 +448,16 @@ class RestNoteIO:
         """Read and return the note body at `path` via REST."""
         res = self._client.get(f"/vault/{path}", accept="text/markdown")
         if not res.get("ok"):
-            raise ObsidianIOError(
-                f"REST read {path}: {res.get('error')}: {res.get('detail')}"
-            )
+            raise ObsidianIOError(f"REST read {path}: {res.get('error')}: {res.get('detail')}")
         data = res.get("data")
         if not isinstance(data, str):
-            raise ObsidianIOError(
-                f"REST read {path}: unexpected result {data!r}"
-            )
+            raise ObsidianIOError(f"REST read {path}: unexpected result {data!r}")
         return data
 
     def _put(self, path: str, content: str) -> None:
         res = self._client.put(f"/vault/{path}", content=content)
         if not res.get("ok"):
-            raise ObsidianIOError(
-                f"REST write {path}: {res.get('error')}: {res.get('detail')}"
-            )
+            raise ObsidianIOError(f"REST write {path}: {res.get('error')}: {res.get('detail')}")
 
     def _put_free_trash(self, path: str, content: str) -> None:
         """PUT `content` under ``.trash/`` at the first name Obsidian will accept.
@@ -484,21 +472,17 @@ class RestNoteIO:
         stem, dot, ext = path.rpartition(".")
         if not dot or "/" in ext:
             stem, dot, ext = path, "", ""
-        candidates = [path] + [
-            f"{stem} ({n}){dot}{ext}" for n in range(1, _TRASH_NAME_TRIES)
-        ]
+        candidates = [path] + [f"{stem} ({n}){dot}{ext}" for n in range(1, _TRASH_NAME_TRIES)]
         for name in candidates:
             res = self._client.put(f"/vault/.trash/{name}", content=content)
             if res.get("ok"):
                 return
             if "already exists" not in str(res.get("detail")):
                 raise ObsidianIOError(
-                    f"REST write .trash/{name}: {res.get('error')}: "
-                    f"{res.get('detail')}"
+                    f"REST write .trash/{name}: {res.get('error')}: {res.get('detail')}"
                 )
         raise ObsidianIOError(
-            f"REST write .trash/{path}: no free trash name in "
-            f"{_TRASH_NAME_TRIES} tries"
+            f"REST write .trash/{path}: no free trash name in {_TRASH_NAME_TRIES} tries"
         )
 
     def delete_note(self, path: str) -> None:
@@ -512,13 +496,9 @@ class RestNoteIO:
         self._put_free_trash(path, content)
         res = self._client.delete(f"/vault/{path}")
         if not res.get("ok"):
-            raise ObsidianIOError(
-                f"REST delete {path}: {res.get('error')}: {res.get('detail')}"
-            )
+            raise ObsidianIOError(f"REST delete {path}: {res.get('error')}: {res.get('detail')}")
 
-    def list_notes(
-        self, directory: str = "", *, recursive: bool = True
-    ) -> list[str]:
+    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
         """List ``.md`` note paths under ``directory`` (recursive by default).
 
         Uses the REST directory listing (``GET /vault/{dir}/`` -> ``{files: [...]}``,
@@ -540,9 +520,7 @@ class RestNoteIO:
             full = f"{prefix}/{entry}" if prefix else entry
             if entry.endswith("/"):
                 if recursive:
-                    out.extend(
-                        self.list_notes(full.rstrip("/"), recursive=True)
-                    )
+                    out.extend(self.list_notes(full.rstrip("/"), recursive=True))
             elif entry.endswith(".md"):
                 out.append(full)
         return out

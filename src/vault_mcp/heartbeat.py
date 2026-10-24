@@ -131,9 +131,7 @@ def start_heartbeat(
                 logger.exception("heartbeat: publish failed")
             time.sleep(interval_s)
 
-    thread = threading.Thread(
-        target=_loop, name=f"{_STAR_NAME}-heartbeat", daemon=True
-    )
+    thread = threading.Thread(target=_loop, name=f"{_STAR_NAME}-heartbeat", daemon=True)
     thread.start()
     logger.info(
         "heartbeat: publishing to %s every %.0fs",

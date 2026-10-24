@@ -73,9 +73,7 @@ PROTECTION_RULES: frozenset[str] = frozenset(
 #   agent            — caller-creatable via the Gate (normal authoring)
 #   materialize-only — Gate rejects agent-create; the materialize verb renders it
 #   pure-DB          — never a vault file; the Gate rejects any vault-write
-WRITE_MODES: frozenset[str] = frozenset(
-    {"agent", "materialize-only", "pure-DB"}
-)
+WRITE_MODES: frozenset[str] = frozenset({"agent", "materialize-only", "pure-DB"})
 
 
 def _is_geo(value: object) -> bool:
@@ -214,18 +212,14 @@ class VaultSchema:
         """
         hits = [r for r in self.routes if r.matches(note_type, pillar, attrs)]
         if not hits:
-            raise RouteError(
-                f"no route matches note_type={note_type!r} pillar={pillar!r}"
-            )
+            raise RouteError(f"no route matches note_type={note_type!r} pillar={pillar!r}")
         best = max(r.specificity() for r in hits)
         top = [r for r in hits if r.specificity() == best]
         unique_dirs = {r.directory for r in top}
         if len(unique_dirs) == 1:
             return top[0].directory
         dirs = ", ".join(sorted(unique_dirs))
-        raise RouteError(
-            f"ambiguous routing for note_type={note_type!r} pillar={pillar!r}: {dirs}"
-        )
+        raise RouteError(f"ambiguous routing for note_type={note_type!r} pillar={pillar!r}: {dirs}")
 
     # --- Introspection (Feature: Schema Introspection) ---------------------
     def _managed_fields(self) -> set[str]:
@@ -290,9 +284,7 @@ class VaultSchema:
             return None
         managed = self._managed_fields()
         caller_settable = [
-            f
-            for f in (*tc.required_fields, *tc.freeform_fields)
-            if f not in managed
+            f for f in (*tc.required_fields, *tc.freeform_fields) if f not in managed
         ]
         routing = [
             {
@@ -310,17 +302,14 @@ class VaultSchema:
             for r in self.routes
             # routes key on the raw note_type ('note'); type configs are
             # Title-Cased ('Note') — match case-insensitively across the split.
-            if r.note_type is not None
-            and r.note_type.lower() == note_type.lower()
+            if r.note_type is not None and r.note_type.lower() == note_type.lower()
         ]
         return {
             "note_type": note_type,
             "write_mode": tc.write_mode,
             "required": list(tc.required_fields),
             "caller_settable": caller_settable,
-            "constraints": {
-                field: list(vals) for field, vals in tc.value_constraints
-            },
+            "constraints": {field: list(vals) for field, vals in tc.value_constraints},
             "formats": dict(tc.formats),
             "freeform": list(tc.freeform_fields),
             "status_values": list(self.status_values),
@@ -381,21 +370,15 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
             )
         )
 
-    provenance = tuple(
-        (raw.get("provenance", {}) or {}).get("levels", []) or []
-    )
+    provenance = tuple((raw.get("provenance", {}) or {}).get("levels", []) or [])
 
     types: list[TypeConfig] = []
     for name, raw_cfg in (raw.get("types", {}) or {}).items():
         cfg = raw_cfg or {}
         constraints = tuple(
-            (fname, tuple(vals or []))
-            for fname, vals in (cfg.get("constraints", {}) or {}).items()
+            (fname, tuple(vals or [])) for fname, vals in (cfg.get("constraints", {}) or {}).items()
         )
-        formats = tuple(
-            (fname, fmt)
-            for fname, fmt in (cfg.get("formats", {}) or {}).items()
-        )
+        formats = tuple((fname, fmt) for fname, fmt in (cfg.get("formats", {}) or {}).items())
         types.append(
             TypeConfig(
                 type_name=name,
@@ -423,20 +406,15 @@ def _build(raw: dict[str, Any], source: Path) -> VaultSchema:
     status_cfg = vocab.get("status", {}) or {}
     status_values = tuple(status_cfg.get("values", []) or [])
     status_default = status_cfg.get("default", "Pending")
-    status_repairs = tuple(
-        (frm, to) for frm, to in (status_cfg.get("repairs", {}) or {}).items()
-    )
+    status_repairs = tuple((frm, to) for frm, to in (status_cfg.get("repairs", {}) or {}).items())
     author_type_cfg = vocab.get("author_type", {}) or {}
     author_type_values = tuple(author_type_cfg.get("values", []) or [])
     author_type_repairs = tuple(
-        (frm, to)
-        for frm, to in (author_type_cfg.get("repairs", {}) or {}).items()
+        (frm, to) for frm, to in (author_type_cfg.get("repairs", {}) or {}).items()
     )
 
     dep = raw.get("deprecated_keys", {}) or {}
-    deprecated_renames = tuple(
-        (o, n) for o, n in (dep.get("rename", {}) or {}).items()
-    )
+    deprecated_renames = tuple((o, n) for o, n in (dep.get("rename", {}) or {}).items())
     dead_keys = frozenset(dep.get("dead", []) or [])
     reserved_tags = frozenset(raw.get("reserved_tags", []) or [])
     forbidden_dirs = frozenset(raw.get("forbidden_dirs", []) or [])
@@ -511,21 +489,15 @@ def load_schema(path: str | Path | None = None) -> VaultSchema:
     try:
         text = resolved.read_text(encoding="utf-8")
     except OSError as exc:
-        raise SchemaConfigError(
-            f"cannot read schema config at {resolved}: {exc}"
-        ) from exc
+        raise SchemaConfigError(f"cannot read schema config at {resolved}: {exc}") from exc
 
     try:
         raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        raise SchemaValidationError(
-            f"schema at {resolved} is not valid YAML: {exc}"
-        ) from exc
+        raise SchemaValidationError(f"schema at {resolved} is not valid YAML: {exc}") from exc
 
     if not isinstance(raw, dict):
-        raise SchemaValidationError(
-            f"schema at {resolved} must be a mapping at the top level"
-        )
+        raise SchemaValidationError(f"schema at {resolved} must be a mapping at the top level")
 
     schema = _build(raw, resolved)
     _validate(raw, schema)

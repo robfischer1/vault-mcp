@@ -143,9 +143,7 @@ class NoteIO(Protocol):
     def delete_note(self, path: str) -> None:
         """Delete the note at `path`."""
 
-    def list_notes(
-        self, directory: str = "", *, recursive: bool = True
-    ) -> list[str]:
+    def list_notes(self, directory: str = "", *, recursive: bool = True) -> list[str]:
         """List note paths under `directory`."""
         ...
 
@@ -239,9 +237,7 @@ def _split_note(text: str) -> tuple[dict[str, Any], str]:
 
 def _render_note(frontmatter: dict[str, Any], body: str) -> str:
     """Serialize frontmatter + body into a markdown note."""
-    fm_yaml = yaml.safe_dump(
-        frontmatter, sort_keys=False, allow_unicode=True
-    ).rstrip("\n")
+    fm_yaml = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).rstrip("\n")
     fm_yaml = _AT_KEY_RE.sub(r'\1"\2":', fm_yaml)  # FR-7: '@type' -> "@type"
     return f"---\n{fm_yaml}\n---\n\n{body}\n"
 
@@ -249,9 +245,7 @@ def _render_note(frontmatter: dict[str, Any], body: str) -> str:
 class ConventionGate:
     """Schema- and provenance-aware write API over an injected NoteIO."""
 
-    def __init__(
-        self, schema: VaultSchema, io: NoteIO, diff_sink: DiffSink | None = None
-    ) -> None:
+    def __init__(self, schema: VaultSchema, io: NoteIO, diff_sink: DiffSink | None = None) -> None:
         """Build a Gate over a schema and NoteIO, with an optional diff sink."""
         self._schema = schema
         self._io = io
@@ -260,9 +254,7 @@ class ConventionGate:
         # Materialize/compute writes come from a trusted DB source; lint them
         # anyway by default (the safety net during DB drift), off-able via the
         # env flag once the DB stabilizes — no code change to flip it.
-        self._lint_on_compute = (
-            os.environ.get("VAULT_MCP_MATERIALIZE_LINT", "1") != "0"
-        )
+        self._lint_on_compute = os.environ.get("VAULT_MCP_MATERIALIZE_LINT", "1") != "0"
 
         # DELEGATION (vault-mcp#5294): the write, audit and frontmatter
         # behaviours live in named collaborators rather than as 900 lines of
@@ -288,9 +280,7 @@ class ConventionGate:
     # --- Write-protection (Feature: Write-protection enforcement) ----------
     def _protection_for(self, directory: str) -> WriteProtectionRule | None:
         for rule in self._schema.write_protection:
-            if directory == rule.directory or directory.startswith(
-                rule.directory + "/"
-            ):
+            if directory == rule.directory or directory.startswith(rule.directory + "/"):
                 return rule
         return None
 

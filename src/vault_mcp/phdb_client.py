@@ -67,9 +67,7 @@ _ATOM_ALLOWED: dict[str, frozenset[str]] = {
             "captured_when",
         }
     ),
-    "pushback": frozenset(
-        {"from", "challenge", "response", "position_changed", "captured_when"}
-    ),
+    "pushback": frozenset({"from", "challenge", "response", "position_changed", "captured_when"}),
 }
 
 ATOM_TYPES: frozenset[str] = frozenset(_ATOM_REQUIRED)
@@ -122,9 +120,7 @@ def validate_atom(atom_type: str, payload: object) -> dict[str, Any]:
     required field, or any field outside the type's allowed set.
     """
     if atom_type not in _ATOM_REQUIRED:
-        raise AtomError(
-            f"unknown atom type {atom_type!r}; expected one of {sorted(ATOM_TYPES)}"
-        )
+        raise AtomError(f"unknown atom type {atom_type!r}; expected one of {sorted(ATOM_TYPES)}")
     if not isinstance(payload, dict):
         raise AtomError(f"{atom_type} payload must be a mapping")
 
@@ -138,9 +134,7 @@ def validate_atom(atom_type: str, payload: object) -> dict[str, Any]:
         )
     missing = _ATOM_REQUIRED[atom_type] - keys
     if missing:
-        raise AtomError(
-            f"{atom_type} payload missing required field(s): {sorted(missing)}"
-        )
+        raise AtomError(f"{atom_type} payload missing required field(s): {sorted(missing)}")
     return dict(payload)
 
 
@@ -184,18 +178,14 @@ def emit_atom(
         },
     )
     if not result.get("ok"):
-        raise PhdbUnavailableError(
-            str(result.get("error", "/emit returned no success flag"))
-        )
+        raise PhdbUnavailableError(str(result.get("error", "/emit returned no success flag")))
     event_id = result.get("event_id")
     born_token = result.get("born_token")
     # Either identifier proves the write landed: phdb answered with a row id,
     # or the fleet plane answered with a content-derived token. Neither means the
     # write is unconfirmed, so refuse rather than report a phantom success.
     if not isinstance(event_id, int) and not isinstance(born_token, str):
-        raise PhdbUnavailableError(
-            f"/emit returned neither event_id nor born_token: {result}"
-        )
+        raise PhdbUnavailableError(f"/emit returned neither event_id nor born_token: {result}")
     return AtomResult(
         atom_type=atom_type,
         event_id=event_id if isinstance(event_id, int) else None,
@@ -239,30 +229,22 @@ def _phdb_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     if endpoint == "/write/entity" and server.HADES_URL:
         from vault_mcp.hades_client import write_entity_typed
 
-        return write_entity_typed(
-            payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
-        )
+        return write_entity_typed(payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN)
 
     if endpoint == "/write/document" and server.HADES_URL:
         from vault_mcp.hades_client import write_document
 
-        return write_document(
-            payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
-        )
+        return write_document(payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN)
 
     if endpoint == "/emit" and server.HADES_URL:
         from vault_mcp.hades_client import emit_session_event
 
-        return emit_session_event(
-            payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN
-        )
+        return emit_session_event(payload, url=f"{server.HADES_URL}/", token=server.HADES_TOKEN)
 
     import httpx
 
     try:
-        resp = httpx.post(
-            f"{server.PHDB_HTTP_URL}{endpoint}", json=payload, timeout=30.0
-        )
+        resp = httpx.post(f"{server.PHDB_HTTP_URL}{endpoint}", json=payload, timeout=30.0)
     except httpx.HTTPError as e:
         return {"ok": False, "error": f"phdb unreachable: {e}"}
     if resp.status_code != 200:

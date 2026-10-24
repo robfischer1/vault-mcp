@@ -173,9 +173,7 @@ class FormulaEvaluator:
                 if func_name == "_if_":
                     self._current_depth += 1
                     if self._current_depth > self.max_depth:
-                        raise FormulaDepthError(
-                            f"Max nesting depth of {self.max_depth} exceeded"
-                        )
+                        raise FormulaDepthError(f"Max nesting depth of {self.max_depth} exceeded")
                     try:
                         if len(node.args) != 3:
                             raise FormulaError("if() requires 3 arguments")
@@ -204,13 +202,8 @@ class FormulaEvaluator:
                     if method == "map" and isinstance(target, list):
                         lambda_node = self._visit(node.args[0])
                         if not isinstance(lambda_node, ast.Lambda):
-                            raise FormulaError(
-                                "map() requires an arrow function"
-                            )
-                        return [
-                            self._eval_lambda(lambda_node, item)
-                            for item in target
-                        ]
+                            raise FormulaError("map() requires an arrow function")
+                        return [self._eval_lambda(lambda_node, item) for item in target]
 
                     if method == "join" and isinstance(target, list):
                         sep = args[0] if args else ", "
@@ -224,17 +217,13 @@ class FormulaEvaluator:
                     if method == "toString":
                         return str(target)
 
-                raise FormulaError(
-                    f"Unsupported function or method: {func_name}"
-                )
+                raise FormulaError(f"Unsupported function or method: {func_name}")
 
             if isinstance(node, ast.BinOp):
                 left = self._visit(node.left)
                 right = self._visit(node.right)
                 if isinstance(node.op, ast.Add):
-                    if isinstance(left, (str, list)) or isinstance(
-                        right, (str, list)
-                    ):
+                    if isinstance(left, (str, list)) or isinstance(right, (str, list)):
                         if isinstance(left, list) and isinstance(right, list):
                             return left + right
                         return str(left if left is not None else "") + str(
@@ -255,9 +244,7 @@ class FormulaEvaluator:
                     (op,) = node.ops
                     (comparator,) = node.comparators
                 except ValueError:
-                    raise FormulaError(
-                        "Chained comparisons are not supported"
-                    ) from None
+                    raise FormulaError("Chained comparisons are not supported") from None
                 left = self._visit(node.left)
                 right = self._visit(comparator)
                 if isinstance(op, ast.Eq):
@@ -265,9 +252,7 @@ class FormulaEvaluator:
                 if isinstance(op, ast.NotEq):
                     return left != right
 
-            raise FormulaError(
-                f"Unsupported expression construct: {type(node).__name__}"
-            )
+            raise FormulaError(f"Unsupported expression construct: {type(node).__name__}")
         except FormulaError:
             raise
         except Exception as e:
@@ -280,9 +265,7 @@ class FormulaEvaluator:
             return node.attr
         return None
 
-    def _safe_replace(
-        self, target: object, pattern: object, replacement: object
-    ) -> str:
+    def _safe_replace(self, target: object, pattern: object, replacement: object) -> str:
         target_str = str(target if target is not None else "")
         pattern_str = str(pattern)
         is_regex = pattern_str.startswith("/") and pattern_str.endswith("/")
@@ -319,9 +302,7 @@ class FormulaEvaluator:
         var_name = node.args.args[0].arg
         sub_context = self.context.copy()
         sub_context[var_name] = item
-        evaluator = FormulaEvaluator(
-            sub_context, self.max_depth, self.regex_timeout
-        )
+        evaluator = FormulaEvaluator(sub_context, self.max_depth, self.regex_timeout)
         evaluator._current_depth = self._current_depth
         return evaluator._visit(node.body)
 
@@ -472,9 +453,7 @@ def evaluate_formula(
     m = _LINKS_FILTER_RE.match(expr)
     if m:
         direction = m.group(1)
-        link_set = {"links": outbound_links, "backlinks": inbound_links}[
-            direction
-        ]
+        link_set = {"links": outbound_links, "backlinks": inbound_links}[direction]
         return (len(link_set), None)
 
     if re.match(r"^[a-zA-Z_]\w*$", expr):

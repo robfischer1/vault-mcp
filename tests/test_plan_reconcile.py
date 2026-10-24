@@ -51,9 +51,7 @@ def _report(*records: PlanDriftRecord) -> PlanSweepReport:
 def test_gate_says_stale_when_disk_is_newer(tmp_path: Path) -> None:
     f = tmp_path / "p.md"
     f.write_text("x", encoding="utf-8")
-    assert is_probably_stale(
-        "p.md", vault_root=str(tmp_path), stored_mtime="2000-01-01T00:00:00Z"
-    )
+    assert is_probably_stale("p.md", vault_root=str(tmp_path), stored_mtime="2000-01-01T00:00:00Z")
 
 
 def test_gate_says_fresh_when_stored_clock_is_newer(tmp_path: Path) -> None:
@@ -84,13 +82,9 @@ def test_gate_compares_instants_across_offsets(tmp_path: Path) -> None:
     ):
         assert not is_probably_stale("p.md", vault_root=root, stored_mtime=same)
     # One second behind on disk's clock, in an offset that sorts after it.
-    assert is_probably_stale(
-        "p.md", vault_root=root, stored_mtime="2026-10-17T18:11:44-04:00"
-    )
+    assert is_probably_stale("p.md", vault_root=root, stored_mtime="2026-10-17T18:11:44-04:00")
     # Eastern text that sorts lexically AFTER the Z text but is an hour older.
-    assert is_probably_stale(
-        "p.md", vault_root=root, stored_mtime="2026-10-17T21:11:45.5+00:00"
-    )
+    assert is_probably_stale("p.md", vault_root=root, stored_mtime="2026-10-17T21:11:45.5+00:00")
 
 
 def test_gate_reads_a_naive_stored_clock_as_utc(tmp_path: Path) -> None:
@@ -98,21 +92,15 @@ def test_gate_reads_a_naive_stored_clock_as_utc(tmp_path: Path) -> None:
     f.write_text("x", encoding="utf-8")
     _set_mtime(f, "2026-10-17T22:11:45+00:00")
     root = str(tmp_path)
-    assert not is_probably_stale(
-        "p.md", vault_root=root, stored_mtime="2026-10-17T22:11:45"
-    )
-    assert is_probably_stale(
-        "p.md", vault_root=root, stored_mtime="2026-10-17T22:11:44"
-    )
+    assert not is_probably_stale("p.md", vault_root=root, stored_mtime="2026-10-17T22:11:45")
+    assert is_probably_stale("p.md", vault_root=root, stored_mtime="2026-10-17T22:11:44")
 
 
 def test_gate_is_conservative_when_the_clock_is_unparseable(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "p.md").write_text("x", encoding="utf-8")
-    assert is_probably_stale(
-        "p.md", vault_root=str(tmp_path), stored_mtime="not a time"
-    )
+    assert is_probably_stale("p.md", vault_root=str(tmp_path), stored_mtime="not a time")
 
 
 def test_parse_instant() -> None:
@@ -129,9 +117,7 @@ def test_parse_instant() -> None:
 def test_gate_is_conservative_when_the_clock_is_unknown(tmp_path: Path) -> None:
     """An unknown clock must fall through to the hash, never assume current."""
     (tmp_path / "p.md").write_text("x", encoding="utf-8")
-    assert is_probably_stale(
-        "p.md", vault_root=str(tmp_path), stored_mtime=None
-    )
+    assert is_probably_stale("p.md", vault_root=str(tmp_path), stored_mtime=None)
 
 
 def test_gate_is_conservative_when_the_file_is_unstattable(
@@ -181,9 +167,7 @@ def test_gate_never_suppresses_a_write_on_its_own() -> None:
     sweep_plans(
         list_files=lambda _d: ["p.md"],
         read_vault=lambda _p: body,
-        read_stored=lambda p: StoredCopy(
-            p, raw_hash=body_hash(body), body_bytes=len(body)
-        ),
+        read_stored=lambda p: StoredCopy(p, raw_hash=body_hash(body), body_bytes=len(body)),
         build_payload=lambda p, _r: {"source_path": p},
         write_stored=_write_stored,
         refresh=True,
@@ -217,9 +201,7 @@ def test_pass_that_refreshes_names_each_plan(
     caplog.set_level(logging.INFO)
     out = reconcile_once(
         lambda: _report(
-            PlanDriftRecord(
-                "a.md", PlanDriftState.CURRENT, refreshed=True, delta_bytes=42
-            ),
+            PlanDriftRecord("a.md", PlanDriftState.CURRENT, refreshed=True, delta_bytes=42),
             PlanDriftRecord("b.md", PlanDriftState.CURRENT),
         )
     )
@@ -231,9 +213,7 @@ def test_pass_that_refreshes_names_each_plan(
 def test_pass_reports_per_plan_errors(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.WARNING)
     out = reconcile_once(
-        lambda: _report(
-            PlanDriftRecord("bad.md", PlanDriftState.ERROR, error="boom")
-        )
+        lambda: _report(PlanDriftRecord("bad.md", PlanDriftState.ERROR, error="boom"))
     )
     assert out["errors"] == 1
     assert "boom" in caplog.text
@@ -268,16 +248,11 @@ def test_interval_defaults_and_validates() -> None:
     assert reconcile_interval({"VAULT_MCP_PLAN_RECONCILE_SECONDS": "60"}) == 60
     # garbage and non-positive values fall back rather than busy-loop
     assert (
-        reconcile_interval({"VAULT_MCP_PLAN_RECONCILE_SECONDS": "nope"})
-        == DEFAULT_INTERVAL_SECONDS
+        reconcile_interval({"VAULT_MCP_PLAN_RECONCILE_SECONDS": "nope"}) == DEFAULT_INTERVAL_SECONDS
     )
+    assert reconcile_interval({"VAULT_MCP_PLAN_RECONCILE_SECONDS": "0"}) == DEFAULT_INTERVAL_SECONDS
     assert (
-        reconcile_interval({"VAULT_MCP_PLAN_RECONCILE_SECONDS": "0"})
-        == DEFAULT_INTERVAL_SECONDS
-    )
-    assert (
-        reconcile_interval({"VAULT_MCP_PLAN_RECONCILE_SECONDS": "-5"})
-        == DEFAULT_INTERVAL_SECONDS
+        reconcile_interval({"VAULT_MCP_PLAN_RECONCILE_SECONDS": "-5"}) == DEFAULT_INTERVAL_SECONDS
     )
 
 
@@ -312,9 +287,7 @@ def test_enabled_loop_starts_a_daemon_thread_and_waits_first() -> None:
 _REFUSAL = "calliope_materialize_note: caller not permitted (unmapped subject)"
 
 
-def _sweep_files(
-    n: int, *, read_error: str, reads: list[str]
-) -> PlanSweepReport:
+def _sweep_files(n: int, *, read_error: str, reads: list[str]) -> PlanSweepReport:
     def read_stored(p: str) -> StoredCopy | None:
         reads.append(p)
         raise RuntimeError(read_error)
@@ -387,9 +360,7 @@ def test_reconcile_once_reports_auth_refusal_without_logging(
 ) -> None:
     caplog.set_level(logging.DEBUG)
     reads: list[str] = []
-    out = reconcile_once(
-        lambda: _sweep_files(5, read_error=_REFUSAL, reads=reads)
-    )
+    out = reconcile_once(lambda: _sweep_files(5, read_error=_REFUSAL, reads=reads))
     assert out["ok"] is False
     assert out["auth_refused"] is True
     assert caplog.records == [], "the loop owns the once-only log line"
@@ -450,8 +421,6 @@ def test_loop_backs_off_logs_once_and_recovers(
     assert thread is not None
     thread.join(timeout=5)
     assert waits[:5] == [100, 200, 400, 800, 100]
-    refusal_logs = [
-        r for r in caplog.records if "refused this caller" in r.message
-    ]
+    refusal_logs = [r for r in caplog.records if "refused this caller" in r.message]
     assert len(refusal_logs) == 1, "a standing refusal logs once, not per tick"
     assert "accepted the caller again" in caplog.text

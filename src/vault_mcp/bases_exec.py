@@ -199,9 +199,7 @@ def execute_base(
 
     merged_filter: FilterNode | None = None
     if base.filters and selected_view and selected_view.filters:
-        merged_filter = FilterNode(
-            op="and", children=[base.filters, selected_view.filters]
-        )
+        merged_filter = FilterNode(op="and", children=[base.filters, selected_view.filters])
     elif base.filters:
         merged_filter = base.filters
     elif selected_view and selected_view.filters:
@@ -236,9 +234,7 @@ def execute_base(
         outbound = set(idx._outbound.get(path.stem, []))
         inbound = set(idx._inbound.get(path.stem, []))
 
-        if merged_filter and not evaluate_filter(
-            merged_filter, path, fm, rel, outbound
-        ):
+        if merged_filter and not evaluate_filter(merged_filter, path, fm, rel, outbound):
             continue
 
         formula_values: dict[str, Any] = {}

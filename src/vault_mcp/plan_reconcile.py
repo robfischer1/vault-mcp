@@ -59,9 +59,7 @@ DEFAULT_INTERVAL_SECONDS = 900
 MAX_BACKOFF_SECONDS = 6 * 3600
 
 
-def backoff_delay(
-    every: int, failures: int, cap: int = MAX_BACKOFF_SECONDS
-) -> int:
+def backoff_delay(every: int, failures: int, cap: int = MAX_BACKOFF_SECONDS) -> int:
     """Seconds to wait before the next pass after *failures* auth refusals.
 
     ``every`` doubled per consecutive refusal, capped at *cap*; zero failures
@@ -134,9 +132,7 @@ def reconcile_once(
                 r.delta_bytes,
             )
     else:
-        log.debug(
-            "plan-reconcile: no change (%d plans checked)", report.scanned
-        )
+        log.debug("plan-reconcile: no change (%d plans checked)", report.scanned)
     for r in errored:
         log.warning("plan-reconcile: %s failed: %s", r.source_path, r.error)
 
@@ -189,8 +185,7 @@ def start_plan_reconcile(
                 failures += 1
             elif failures:
                 log.info(
-                    "plan-reconcile: gateway accepted the caller again "
-                    "after %d refused pass(es)",
+                    "plan-reconcile: gateway accepted the caller again after %d refused pass(es)",
                     failures,
                 )
                 failures = 0

@@ -61,9 +61,7 @@ def test_non_plan_note_yields_only_document() -> None:
         "note_type": "Decisions",
         "name": "Foo DECISIONS",
     }
-    payloads = note_to_payloads(
-        fm, "decision prose", "/vault/Plans/Foo DECISIONS.md"
-    )
+    payloads = note_to_payloads(fm, "decision prose", "/vault/Plans/Foo DECISIONS.md")
     assert len(payloads) == 1
     assert payloads[0]["endpoint"] == DOC_ENDPOINT
     assert payloads[0]["payload"]["subject"] == "Foo DECISIONS"
@@ -94,9 +92,7 @@ def test_target_tables_derivation() -> None:
     # RETIRED-superseded (plan structure lives on the graph; prose is the doc).
     payloads = note_to_payloads(PLAN_FM, "b", "/vault/p.md")
     assert target_tables(payloads) == ["documents"]
-    doc_only = note_to_payloads(
-        {"@type": "Article", "name": "A"}, "b", "/vault/a.md"
-    )
+    doc_only = note_to_payloads({"@type": "Article", "name": "A"}, "b", "/vault/a.md")
     assert target_tables(doc_only) == ["documents"]
 
 
@@ -145,9 +141,7 @@ def test_row_to_payload_plan_carries_prose_not_legacy_metadata() -> None:
         "effort": "L",
         "description": "a plan",
     }
-    p = row_to_payload(
-        row, "plans", directory="System/Plans", paired_body="paired prose"
-    )
+    p = row_to_payload(row, "plans", directory="System/Plans", paired_body="paired prose")
     assert p["title"] == "P"
     assert p["note_type"] == "Plan"
     assert p["directory"] == "System/Plans"
@@ -167,9 +161,7 @@ def test_entity_type_routes_to_entity_endpoint() -> None:
         "game_platform": "PC",
         "publisher": "Square Enix",
     }
-    payloads = note_to_payloads(
-        fm, "", "/vault/Entities/Games/FFXIV.md", file_path="FFXIV.md"
-    )
+    payloads = note_to_payloads(fm, "", "/vault/Entities/Games/FFXIV.md", file_path="FFXIV.md")
     assert len(payloads) == 1
     assert payloads[0]["endpoint"] == ENTITY_ENDPOINT
     p = payloads[0]["payload"]

@@ -111,9 +111,7 @@ def idx(tmp_path):
 
 
 def _base(views: list[ViewConfig]) -> Base:
-    return Base(
-        filters=None, formulas={}, views=views, raw_yaml="", line_number=1
-    )
+    return Base(filters=None, formulas={}, views=views, raw_yaml="", line_number=1)
 
 
 def _labels(index, prop: str, direction: str = "ASC") -> list[str]:
@@ -175,9 +173,7 @@ class TestGroupingDispatch:
         assert _labels(idx, "file.aaa") != _labels(idx, "file.ext")
         assert _labels(idx, "file.aaa") != _labels(idx, "file.path")
 
-    def test_an_unknown_file_property_reads_frontmatter_minus_the_prefix(
-        self, idx
-    ):
+    def test_an_unknown_file_property_reads_frontmatter_minus_the_prefix(self, idx):
         """`prop[5:]` — len("file.") is 5. A [4:] slice looks up ".zzz" and a
         [6:] slice looks up "zz"; neither key exists, so both would collapse
         every note into a single "(None)" group."""
@@ -238,9 +234,7 @@ class TestSortingDispatch:
         assert _order(idx, "file.zzz") != unsorted
 
     def test_descending_reverses_ascending(self, idx):
-        assert _order(idx, "file.name", "DESC") == list(
-            reversed(_order(idx, "file.name", "ASC"))
-        )
+        assert _order(idx, "file.name", "DESC") == list(reversed(_order(idx, "file.name", "ASC")))
 
 
 class TestDirectionIsExactlyDesc:
@@ -251,19 +245,13 @@ class TestDirectionIsExactlyDesc:
     """
 
     def test_an_arbitrary_direction_does_not_reverse_the_sort(self, idx):
-        assert _order(idx, "file.name", "ZZZ") == _order(
-            idx, "file.name", "ASC"
-        )
+        assert _order(idx, "file.name", "ZZZ") == _order(idx, "file.name", "ASC")
 
     def test_an_arbitrary_direction_does_not_reverse_the_groups(self, idx):
-        assert _labels(idx, "file.name", "ZZZ") == _labels(
-            idx, "file.name", "ASC"
-        )
+        assert _labels(idx, "file.name", "ZZZ") == _labels(idx, "file.name", "ASC")
 
     def test_desc_still_reverses_the_groups(self, idx):
-        assert _labels(idx, "file.name", "DESC") == list(
-            reversed(_labels(idx, "file.name", "ASC"))
-        )
+        assert _labels(idx, "file.name", "DESC") == list(reversed(_labels(idx, "file.name", "ASC")))
 
 
 class TestSummaryFunctionDispatch:
@@ -280,9 +268,7 @@ class TestSummaryFunctionDispatch:
             type="table",
             summaries=[Summary(name="agg", function=function, property=prop)],
         )
-        return execute_base(_base([view]), index, view_name="V").summaries[
-            "agg"
-        ]
+        return execute_base(_base([view]), index, view_name="V").summaries["agg"]
 
     @pytest.mark.parametrize(
         ("function", "expected"),
@@ -295,16 +281,11 @@ class TestSummaryFunctionDispatch:
             ("range", 8),
         ],
     )
-    def test_each_aggregate_returns_its_own_value(
-        self, idx, function, expected
-    ):
+    def test_each_aggregate_returns_its_own_value(self, idx, function, expected):
         assert self._summary(idx, function) == expected
 
     def test_no_two_aggregates_agree(self, idx):
-        got = {
-            f: self._summary(idx, f)
-            for f in ("count", "sum", "average", "min", "max", "range")
-        }
+        got = {f: self._summary(idx, f) for f in ("count", "sum", "average", "min", "max", "range")}
         assert len(set(got.values())) == len(got)
 
     def test_sum_over_nothing_is_zero_and_the_rest_are_none(self, idx):
@@ -339,13 +320,9 @@ class TestUnsupportedViewTypes:
     def test_every_refusal_reports_a_zero_total(self, idx):
         """All three arms agree, so no single literal can drift unnoticed."""
         for name, vtype in (("M", "map"), ("B", "board")):
-            res = execute_base(
-                _base([ViewConfig(name=name, type=vtype)]), idx, view_name=name
-            )
+            res = execute_base(_base([ViewConfig(name=name, type=vtype)]), idx, view_name=name)
             assert res.total == len(res.notes) == 0
-        miss = execute_base(
-            _base([ViewConfig(name="A", type="table")]), idx, view_name="nope"
-        )
+        miss = execute_base(_base([ViewConfig(name="A", type="table")]), idx, view_name="nope")
         assert miss.total == len(miss.notes) == 0
 
 
@@ -384,9 +361,7 @@ class TestUnrecognisedSummaryFunction:
         """ "aaa" <= "average" and <= "max", covering the `<=` mutants."""
         assert "agg" not in self._summaries(idx, "aaa")
 
-    def test_an_unknown_function_over_an_absent_property_is_none_not_zero(
-        self, idx
-    ):
+    def test_an_unknown_function_over_an_absent_property_is_none_not_zero(self, idx):
         """The empty-accumulator arm reads `0 if s.function == "sum" else None`.
         Mutated to `>= "sum"`, an unknown name above "sum" reports 0 — a real
         number where there was no data at all."""
@@ -408,14 +383,10 @@ class TestViewSelection:
         assert res.view_properties["type"] == "table"
 
     def test_an_unknown_view_returns_zero_total(self, idx):
-        res = execute_base(
-            _base([ViewConfig(name="A", type="table")]), idx, view_name="nope"
-        )
+        res = execute_base(_base([ViewConfig(name="A", type="table")]), idx, view_name="nope")
         assert res.total == 0
         assert res.notes == []
 
     def test_the_zero_total_matches_the_empty_note_list(self, idx):
-        res = execute_base(
-            _base([ViewConfig(name="A", type="table")]), idx, view_name="nope"
-        )
+        res = execute_base(_base([ViewConfig(name="A", type="table")]), idx, view_name="nope")
         assert res.total == len(res.notes)

@@ -62,9 +62,7 @@ class TestViewPropPromotion:
     """Which `extra` keys are promoted to top level, and which stay nested."""
 
     def test_cards_promotes_its_own_props(self):
-        d = _view_dict(
-            ViewConfig(name="V", type="cards", extra={"cardSize": 200})
-        )
+        d = _view_dict(ViewConfig(name="V", type="cards", extra={"cardSize": 200}))
         assert d["cardSize"] == 200
         assert "cardSize" not in d.get("extra", {})
 
@@ -77,21 +75,13 @@ class TestViewPropPromotion:
 
     def test_a_table_view_promotes_nothing(self):
         """Neither allowlist applies, so every key stays nested."""
-        d = _view_dict(
-            ViewConfig(
-                name="V", type="table", extra={"cardSize": 200, "lat": 1.0}
-            )
-        )
+        d = _view_dict(ViewConfig(name="V", type="table", extra={"cardSize": 200, "lat": 1.0}))
         assert "cardSize" not in d
         assert "lat" not in d
         assert d["extra"] == {"cardSize": 200, "lat": 1.0}
 
     def test_an_unknown_key_stays_nested_even_on_cards(self):
-        d = _view_dict(
-            ViewConfig(
-                name="V", type="cards", extra={"cardSize": 200, "mystery": "x"}
-            )
-        )
+        d = _view_dict(ViewConfig(name="V", type="cards", extra={"cardSize": 200, "mystery": "x"}))
         assert d["cardSize"] == 200
         assert d["extra"] == {"mystery": "x"}
 
@@ -116,34 +106,25 @@ class TestOptionalViewKeys:
     """`**({"markers": ...} if v.markers else {})` — present only when set."""
 
     def test_markers_appear_when_set(self):
-        assert (
-            _view_dict(ViewConfig(name="V", type="table", markers="m"))[
-                "markers"
-            ]
-            == "m"
-        )
+        assert _view_dict(ViewConfig(name="V", type="table", markers="m"))["markers"] == "m"
 
     def test_markers_are_omitted_when_unset(self):
         assert "markers" not in _view_dict(ViewConfig(name="V", type="table"))
 
     def test_column_sizes_appear_when_set(self):
-        assert _view_dict(
-            ViewConfig(name="V", type="table", column_sizes={"a": 10})
-        )["column_sizes"] == {"a": 10}
+        assert _view_dict(ViewConfig(name="V", type="table", column_sizes={"a": 10}))[
+            "column_sizes"
+        ] == {"a": 10}
 
     def test_column_sizes_are_omitted_when_empty(self):
-        assert "column_sizes" not in _view_dict(
-            ViewConfig(name="V", type="table", column_sizes={})
-        )
+        assert "column_sizes" not in _view_dict(ViewConfig(name="V", type="table", column_sizes={}))
 
 
 class TestFilterNodeSerialization:
     """`if node.field is not None` / `if node.value is not None` — key presence."""
 
     def test_a_leaf_carries_field_and_value(self):
-        d = _serialize_filter_node(
-            FilterNode(op="eq", field="note.status", value="active")
-        )
+        d = _serialize_filter_node(FilterNode(op="eq", field="note.status", value="active"))
         assert d == {"op": "eq", "field": "note.status", "value": "active"}
 
     def test_a_branch_omits_field_and_value(self):
@@ -199,9 +180,7 @@ class TestWriterActions:
         assert body.startswith("# Heading")
         assert "```base" in body
 
-    def test_appending_leaves_a_blank_line_between_prose_and_block(
-        self, tmp_path
-    ):
+    def test_appending_leaves_a_blank_line_between_prose_and_block(self, tmp_path):
         """The separator logic: prose not ending in a blank line gets one, so
         the fence is not glued to the previous paragraph."""
         target = tmp_path / "prose.md"
@@ -220,9 +199,7 @@ class TestWriterActions:
     def test_two_blocks_without_an_index_are_refused(self, tmp_path):
         """`if len(blocks) == 1` — ambiguity must REFUSE, not guess."""
         target = tmp_path / "two.md"
-        target.write_text(
-            "```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8"
-        )
+        target.write_text("```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8")
         result = write_base_to_file(target, {"filters": None})
         assert result["written"] is False
         assert result["error"] == "ambiguous_target"
@@ -230,9 +207,7 @@ class TestWriterActions:
 
     def test_an_explicit_index_disambiguates(self, tmp_path):
         target = tmp_path / "two.md"
-        target.write_text(
-            "```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8"
-        )
+        target.write_text("```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8")
         result = write_base_to_file(target, {"filters": None}, base_index=1)
         assert result["action"] == "updated"
         assert result["base_index"] == 1
@@ -243,9 +218,7 @@ class TestWriterActions:
     def test_an_out_of_range_index_is_refused(self, tmp_path, bad):
         """`base_index < 0 or base_index >= len(blocks)` — both bounds."""
         target = tmp_path / "two.md"
-        target.write_text(
-            "```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8"
-        )
+        target.write_text("```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8")
         result = write_base_to_file(target, {"filters": None}, base_index=bad)
         assert result["written"] is False
         assert result["error"] == "invalid_base_index"
@@ -255,15 +228,8 @@ class TestWriterActions:
         """The boundary itself: index 1 of 2 must WORK. A `>` mutated to `>=`
         on the upper bound would refuse it."""
         target = tmp_path / "two.md"
-        target.write_text(
-            "```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8"
-        )
-        assert (
-            write_base_to_file(target, {"filters": None}, base_index=1)[
-                "written"
-            ]
-            is True
-        )
+        target.write_text("```base\na: 1\n```\n\n```base\nb: 2\n```\n", encoding="utf-8")
+        assert write_base_to_file(target, {"filters": None}, base_index=1)["written"] is True
 
     def test_a_refused_write_does_not_touch_the_file(self, tmp_path):
         target = tmp_path / "two.md"

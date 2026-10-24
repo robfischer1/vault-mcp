@@ -280,9 +280,7 @@ class TestPillarAutoStamp:
             created="2026-05-30",
         )
         assert result.frontmatter["nn_color"] == "#000000"
-        assert (
-            result.frontmatter["nn_icon"] == "book"
-        )  # untouched default still stamped
+        assert result.frontmatter["nn_icon"] == "book"  # untouched default still stamped
 
 
 class TestFrontmatterStamping:
@@ -475,9 +473,7 @@ class TestProvenanceBodyProtection:
         gate, vault = _gate()
         self._seed(vault, "Knowledge/Notes/h.md", "human")
         with pytest.raises(ProtectionError) as exc:
-            gate.update_note(
-                "Knowledge/Notes/h.md", body="rewritten", actor=Actor.AGENT
-            )
+            gate.update_note("Knowledge/Notes/h.md", body="rewritten", actor=Actor.AGENT)
         assert "metadata" in str(exc.value)
 
     def test_agent_metadata_edit_human_note_allowed(self):
@@ -494,25 +490,19 @@ class TestProvenanceBodyProtection:
         gate, vault = _gate()
         self._seed(vault, "Knowledge/Notes/e.md", "external")
         with pytest.raises(ProtectionError):
-            gate.update_note(
-                "Knowledge/Notes/e.md", body="rewritten", actor=Actor.AGENT
-            )
+            gate.update_note("Knowledge/Notes/e.md", body="rewritten", actor=Actor.AGENT)
 
     def test_outputs_article_exception_allows_ai_body(self):
         gate, vault = _gate()
         self._seed(vault, "Outputs/Articles/a.md", "human", note_type="Article")
-        result = gate.update_note(
-            "Outputs/Articles/a.md", body="new draft", actor=Actor.AGENT
-        )
+        result = gate.update_note("Outputs/Articles/a.md", body="new draft", actor=Actor.AGENT)
         assert "new draft" in vault.store["Outputs/Articles/a.md"]
         assert result is not None
 
     def test_human_body_edit_human_note_allowed(self):
         gate, vault = _gate()
         self._seed(vault, "Knowledge/Notes/h.md", "human")
-        gate.update_note(
-            "Knowledge/Notes/h.md", body="rewritten", actor=Actor.HUMAN
-        )
+        gate.update_note("Knowledge/Notes/h.md", body="rewritten", actor=Actor.HUMAN)
         assert "rewritten" in vault.store["Knowledge/Notes/h.md"]
 
 
@@ -579,9 +569,7 @@ class TestLinkValidation:
 
     def test_resolvable_next_passes(self):
         gate, vault = _gate()
-        vault.store["Knowledge/Notes/Target.md"] = (
-            "---\ntitle: t\n---\n\nbody\n"
-        )
+        vault.store["Knowledge/Notes/Target.md"] = "---\ntitle: t\n---\n\nbody\n"
         result = gate.create_note(
             title="X",
             note_type="note",
@@ -760,9 +748,7 @@ class TestDeprecatedKeyMigration:
             created="2026-05-30",
         )
         fm = result.frontmatter
-        assert (
-            fm["identifier"] == "abc-123"
-        )  # id -> identifier (before autogen)
+        assert fm["identifier"] == "abc-123"  # id -> identifier (before autogen)
         assert fm["datePublished"] == "2020-01-01"  # published -> datePublished
         assert "id" not in fm
         assert "published" not in fm
@@ -790,9 +776,7 @@ class TestDeprecatedKeyMigration:
         vault.store["Knowledge/Notes/n.md"] = (
             "---\ntitle: n\nauthor_type: human\nauthor_level: human\nid: old-id\nsub_type: x\n---\n\nbody\n"
         )
-        result = gate.update_note(
-            "Knowledge/Notes/n.md", fields={"status": "Active"}
-        )
+        result = gate.update_note("Knowledge/Notes/n.md", fields={"status": "Active"})
         fm = result.frontmatter
         assert fm["identifier"] == "old-id"
         assert "id" not in fm
@@ -853,18 +837,14 @@ class TestProvenanceThreeProperty:
     def test_legacy_provenance_note_migrated_on_update(self):
         gate, vault = _gate()
         # a note that predates the 3-property model carries only `provenance:`
-        vault.store["Knowledge/Notes/old.md"] = (
-            "---\ntitle: old\nprovenance: human\n---\n\nbody\n"
-        )
+        vault.store["Knowledge/Notes/old.md"] = "---\ntitle: old\nprovenance: human\n---\n\nbody\n"
         result = gate.update_note(
             "Knowledge/Notes/old.md",
             fields={"status": "Active"},
             actor=Actor.AGENT,
         )
         assert "provenance" not in result.frontmatter  # legacy key retired
-        assert (
-            result.frontmatter["author_level"] == "ai-assisted"
-        )  # human + agent edit
+        assert result.frontmatter["author_level"] == "ai-assisted"  # human + agent edit
         assert result.frontmatter["author_type"] == "ai"  # no-downgrade
 
 
@@ -896,9 +876,7 @@ class TestStaleAuthorTypeSelfHeal:
             fields={"status": "Active"},
             actor=Actor.AGENT,
         )
-        assert any(
-            "author_type" in w and "ai-generated" in w for w in result.warnings
-        )
+        assert any("author_type" in w and "ai-generated" in w for w in result.warnings)
 
     def test_valid_value_produces_no_repair_warning(self):
         gate, vault = _gate()
@@ -975,9 +953,7 @@ class TestProtection:
         with pytest.raises(ProtectionError):
             gate.check_protection("Atlas", Actor.AGENT, WriteMode.CREATE)
         with pytest.raises(ProtectionError):
-            gate.check_protection(
-                "Atlas/Periodic", Actor.AGENT, WriteMode.CREATE
-            )
+            gate.check_protection("Atlas/Periodic", Actor.AGENT, WriteMode.CREATE)
 
 
 class TestUpdateNote:
@@ -997,34 +973,26 @@ class TestUpdateNote:
         path = self._seed(gate, vault)
         result = gate.update_note(path, fields={"status": "Completed"})
         assert result.frontmatter["status"] == "Completed"
-        assert (
-            result.frontmatter["title"] == "Idea"
-        )  # untouched field preserved
+        assert result.frontmatter["title"] == "Idea"  # untouched field preserved
         assert "Original body." in vault.store[path]  # body preserved
 
     def test_metadata_update_on_records_allowed(self):
         gate, vault = _gate()
-        vault.store["Records/r.md"] = (
-            "---\ntitle: r\nprovenance: human\n---\n\nbody\n"
-        )
+        vault.store["Records/r.md"] = "---\ntitle: r\nprovenance: human\n---\n\nbody\n"
         # metadata-only (no body) update is permitted on a body-immutable dir
         gate.update_note("Records/r.md", fields={"status": "Active"})
         assert "status: Active" in vault.store["Records/r.md"]
 
     def test_body_update_on_records_rejected(self):
         gate, vault = _gate()
-        vault.store["Records/r.md"] = (
-            "---\ntitle: r\nprovenance: human\n---\n\nbody\n"
-        )
+        vault.store["Records/r.md"] = "---\ntitle: r\nprovenance: human\n---\n\nbody\n"
         with pytest.raises(ProtectionError):
             gate.update_note("Records/r.md", body="rewritten")
 
     def test_human_edit_transitions_ai_assisted_to_human_edited(self):
         gate, vault = _gate()
         path = self._seed(gate, vault)  # created by agent -> ai-assisted
-        result = gate.update_note(
-            path, fields={"status": "Completed"}, actor=Actor.HUMAN
-        )
+        result = gate.update_note(path, fields={"status": "Completed"}, actor=Actor.HUMAN)
         assert result.provenance is Provenance.HUMAN_EDITED
 
 
@@ -1055,9 +1023,7 @@ class TestSchemaDrivenFrontmatter:
             pillar="Knowledge",
             created="2026-05-30",
         ).path
-        result = gate.update_note(
-            path, fields={"status": "Active"}, actor=Actor.HUMAN
-        )
+        result = gate.update_note(path, fields={"status": "Active"}, actor=Actor.HUMAN)
         assert result.frontmatter["name"] == "My Note"
         assert result.frontmatter["status"] == "Active"
         assert "updated" in result.frontmatter  # re-stamped
@@ -1134,9 +1100,7 @@ class TestWriteNote:
             created="2026-05-30",
         )
         with pytest.raises(FieldError):
-            gate.write_note(
-                title="W", note_type="note", pillar="Knowledge", mode="create"
-            )
+            gate.write_note(title="W", note_type="note", pillar="Knowledge", mode="create")
 
     def test_mode_update_refuses_missing(self):
         gate, _ = _gate()
@@ -1205,9 +1169,7 @@ class TestDelete:
 
 
 class TestMoveNote:
-    def _seed(
-        self, gate, vault, title="Movable", path="Knowledge/Notes/Movable.md"
-    ):
+    def _seed(self, gate, vault, title="Movable", path="Knowledge/Notes/Movable.md"):
         gate.create_note(
             title=title,
             note_type="note",

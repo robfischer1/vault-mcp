@@ -146,9 +146,7 @@ class TestViewSkipContinues:
     """
 
     def test_a_valid_view_after_an_invalid_one_still_parses(self):
-        base = parse_base_yaml(
-            {"views": ["not-a-dict", {"name": "V", "type": "table"}]}, "", 1
-        )
+        base = parse_base_yaml({"views": ["not-a-dict", {"name": "V", "type": "table"}]}, "", 1)
         assert [v.name for v in base.views] == ["V"]
 
     def test_several_invalid_views_do_not_stop_the_scan(self):
@@ -176,22 +174,16 @@ class TestColumnSizesGuard:
     """
 
     def test_a_dict_of_column_sizes_survives(self):
-        base = parse_base_yaml(
-            {"views": [{"name": "V", "columnSizes": {"a": 10}}]}, "", 1
-        )
+        base = parse_base_yaml({"views": [{"name": "V", "columnSizes": {"a": 10}}]}, "", 1)
         assert base.views[0].column_sizes == {"a": 10}
 
     @pytest.mark.parametrize("bad", ["nope", 42, ["a", "b"], None])
     def test_a_non_dict_becomes_an_empty_dict(self, bad):
-        base = parse_base_yaml(
-            {"views": [{"name": "V", "columnSizes": bad}]}, "", 1
-        )
+        base = parse_base_yaml({"views": [{"name": "V", "columnSizes": bad}]}, "", 1)
         assert base.views[0].column_sizes == {}
 
     def test_the_snake_case_spelling_is_accepted_too(self):
-        base = parse_base_yaml(
-            {"views": [{"name": "V", "column_sizes": {"b": 5}}]}, "", 1
-        )
+        base = parse_base_yaml({"views": [{"name": "V", "column_sizes": {"b": 5}}]}, "", 1)
         assert base.views[0].column_sizes == {"b": 5}
 
 
@@ -285,9 +277,7 @@ class TestFencedBlockArmContinues:
         assert len(result.bases) == 1
         assert len(result.errors) == 1
 
-    def test_a_good_block_after_a_non_mapping_block_still_parses(
-        self, tmp_path
-    ):
+    def test_a_good_block_after_a_non_mapping_block_still_parses(self, tmp_path):
         target = tmp_path / "notes.md"
         target.write_text(
             "```base\n- a\n- b\n```\n\n```base\nfilters: null\n```\n",

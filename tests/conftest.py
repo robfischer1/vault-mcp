@@ -42,9 +42,7 @@ from forge_testkit.config import no_network
 # the module is unimportable without this — which is the structural reason the
 # repo had no tests/test_server.py at all and why that 3,074-line module sat at
 # 32% coverage. conftest is imported before any test module, so this lands first.
-os.environ.setdefault(
-    "VAULT_MCP_PATH", str(Path(__file__).parent / "fixtures" / "mini-vault")
-)
+os.environ.setdefault("VAULT_MCP_PATH", str(Path(__file__).parent / "fixtures" / "mini-vault"))
 
 from tests.substrate import FakeVault
 from vault_mcp.gate import ConventionGate
