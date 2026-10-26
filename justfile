@@ -28,6 +28,10 @@ star := file_name(justfile_directory())
 # check` a cycle just refused the whole file over.
 import 'stages.just'
 
+# The private `_dev` recipe (foundry-stocks speckit/dev.just): one dev verb on
+# the cluster through the door's lane dev. `test` calls it.
+import? 'dev.just'
+
 # List available recipes
 default:
     @just --list
@@ -55,9 +59,10 @@ types:
     uv run mypy src tests
     uv run pyright
 
-[doc('Run the test suite')]
+[doc('Run the test suite, on the cluster')]
+[positional-arguments]
 test *ARGS:
-    uv run pytest -q {{ARGS}}
+    @{{just_executable()}} --justfile {{justfile()}} --set ca_module {{quote(ca_module)}} _dev test "$@"
 
 # Known-vulnerability scan. pip-audit is pulled ephemerally, not a project dep.
 vuln:
