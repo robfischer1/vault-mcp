@@ -416,47 +416,62 @@ class TestFormulaEvaluation:
             f"regex ran {elapsed:.2f}s against a 0.05s timeout — the timeout bounded nothing"
         )
 
-    def test_the_timeout_fires_on_a_pattern_the_engine_cannot_optimize(self):
-        """The MECHANISM, not just the outcome: the clock actually stops it.
+    @staticmethod
+    def _spy_regex_sub(monkeypatch: pytest.MonkeyPatch) -> list[float | None]:
+        """Replace the evaluator's `regex.sub` with a spy that times out at once.
 
-        `(a|a)*$` is the case `regex` cannot rewrite away, so the only thing
-        that ends it is the timeout. Under the old ThreadPoolExecutor this could
-        not work at all — `re.sub` holds the GIL for its whole run, so the
-        waiting thread never woke to honour its own deadline and wall time was
-        ~2.2s whatever the setting said.
+        Records the `timeout=` it was handed and raises the TimeoutError the real
+        engine raises on a missed deadline. No clock, no real regex: the result is
+        independent of machine load.
         """
+        import regex
+
+        seen: list[float | None] = []
+
+        def fake_sub(*_args: object, timeout: float | None = None, **_kw: object) -> str:
+            seen.append(timeout)
+            raise TimeoutError
+
+        monkeypatch.setattr(regex, "sub", fake_sub)
+        return seen
+
+    def test_the_timeout_fires_on_a_pattern_the_engine_cannot_optimize(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The MECHANISM, not just the outcome: the deadline reaches the engine.
+
+        `regex` signals a missed deadline with TimeoutError; the evaluator must
+        hand it the configured timeout and surface FormulaTimeoutError. Asserted
+        by spy rather than wall-clock, so CI load cannot flake it. (The real-engine
+        bound is `test_regex_timeout_bounds_the_work`; the old stdlib `re` ignored
+        its deadline entirely because `re.sub` holds the GIL.)
+        """
+        seen = self._spy_regex_sub(monkeypatch)
         evaluator = FormulaEvaluator({}, 5, 0.05)
-        expr = '"' + "a" * 30 + 'b".replace(/(a|a)*$/, "c")'
 
-        start = time.monotonic()
-        with pytest.raises(FormulaTimeoutError):
-            evaluator.evaluate(expr)
-        elapsed = time.monotonic() - start
+        with pytest.raises(FormulaTimeoutError, match=r"0\.05"):
+            evaluator.evaluate('"aaab".replace(/(a|a)*$/, "c")')
 
-        # Bounded BELOW too: a fix that simply refused the pattern outright
-        # would raise instantly and pass an upper-bound-only assertion, without
-        # the timeout ever being consulted.
-        assert 0.04 < elapsed < 0.20, f"expected the 0.05s timeout to end it; took {elapsed:.3f}s"
+        assert seen == [0.05]
 
-    def test_the_configured_timeout_is_the_ceiling(self):
-        """A LONGER timeout must cost proportionally more.
+    @pytest.mark.parametrize("timeout", [0.05, 0.2, 1.5])
+    def test_the_configured_timeout_is_the_ceiling(
+        self, monkeypatch: pytest.MonkeyPatch, timeout: float
+    ):
+        """The configured value is the one handed to the regex engine.
 
         The sharpest thing the old code got wrong: the configured value changed
-        nothing, because wall time was always the regex's own duration. Pinning
-        two settings against each other is what makes that unmistakable — a
-        constant-time refusal fails this, and so does any fix that ignores the
-        argument.
+        nothing. Each setting must arrive at `regex.sub` verbatim, so a constant,
+        a hard-coded default, or an ignored argument fails. Asserted by spy, not
+        by timing two real runs against each other.
         """
+        seen = self._spy_regex_sub(monkeypatch)
+        evaluator = FormulaEvaluator({}, 5, timeout)
 
-        def cost(timeout: float) -> float:
-            evaluator = FormulaEvaluator({}, 5, timeout)
-            expr = '"' + "a" * 30 + 'b".replace(/(a|a)*$/, "c")'
-            start = time.monotonic()
-            with contextlib.suppress(FormulaTimeoutError):
-                evaluator.evaluate(expr)
-            return time.monotonic() - start
+        with pytest.raises(FormulaTimeoutError):
+            evaluator.evaluate('"aaab".replace(/(a|a)*$/, "c")')
 
-        assert cost(0.20) > cost(0.05) * 2
+        assert seen == [timeout]
 
 
 class TestLinkCountFormula:
