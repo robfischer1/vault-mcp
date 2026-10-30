@@ -28,10 +28,12 @@ from vault_mcp.gate import (
     FieldError,
     FilenameError,
     LinkError,
+    MoveVerifyError,
     ProtectionError,
     TagError,
     WriteModeError,
 )
+from vault_mcp.parsers import parse_frontmatter
 from vault_mcp.provenance import Actor, Provenance, WriteMode
 from vault_mcp.schema import load_schema
 
@@ -1222,3 +1224,111 @@ class TestMoveNote:
         src = self._seed(gate, vault)
         with pytest.raises(ProtectionError):
             gate.move_note(src, "Artifacts/Movable.md")
+
+
+# ---------------------------------------------------------------------------
+# move_note truth (styx absent-truth-scene / absent-wire-crater)
+# ---------------------------------------------------------------------------
+
+
+class _LossyVault(FakeVault):
+    """create on a chosen path acks ok but lands nowhere (or lands mangled)."""
+
+    def __init__(self, *, drop: str = "", mangle: str = "") -> None:
+        super().__init__()
+        self.drop = drop
+        self.mangle = mangle
+
+    def create_note(self, path: str, content: str) -> None:
+        if path == self.drop:
+            return
+        if path == self.mangle:
+            content = content[: len(content) // 2]
+        super().create_note(path, content)
+
+
+class TestMoveVerify:
+    SRC = "Knowledge/Notes/Network Device Inventory — pre-cutover baseline.md"
+    DST = "Projects/2026-09-08 Network Device Inventory — pre-cutover baseline.md"
+
+    def _gate_with(self, vault):
+        gate = ConventionGate(load_schema(VALID), vault)
+        vault.store[self.SRC] = "---\ntitle: x\n---\n\nbody\n"
+        return gate
+
+    def test_silent_noop_create_refused_source_kept(self):
+        vault = _LossyVault(drop=self.DST)
+        gate = self._gate_with(vault)
+        with pytest.raises(MoveVerifyError):
+            gate.move_note(self.SRC, self.DST)
+        assert self.SRC in vault.store
+
+    def test_mangled_create_refused_source_kept_partial_removed(self):
+        vault = _LossyVault(mangle=self.DST)
+        gate = self._gate_with(vault)
+        with pytest.raises(MoveVerifyError):
+            gate.move_note(self.SRC, self.DST)
+        assert vault.store[self.SRC] == "---\ntitle: x\n---\n\nbody\n"
+        assert self.DST not in vault.store
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "a — b.md",
+            "ünï cødé 日本.md",
+            "hash # tag.md",
+            "what? now.md",
+            "100% done.md",
+            "a&b=c+d.md",
+        ],
+    )
+    def test_special_character_paths_round_trip(self, name):
+        vault = FakeVault()
+        gate = ConventionGate(load_schema(VALID), vault)
+        src, dst = f"Knowledge/Notes/{name}", f"Projects/{name}"
+        vault.store[src] = "---\ntitle: x\n---\n\nbody\n"
+        assert gate.move_note(src, dst)["moved"] is True
+        assert src not in vault.store
+        assert vault.store[dst] == "---\ntitle: x\n---\n\nbody\n"
+
+
+class TestMoveFrontmatterPreserved:
+    DESC = (
+        "A long description that runs well past eighty columns so the YAML emitter folds it "
+        "across several lines for rebuilding the whole thing from scratch when needed."
+    )
+
+    def _written(self):
+        gate, vault = _gate()
+        res = gate.write_note(
+            title="APA Guide",
+            note_type="note",
+            pillar="Knowledge",
+            body="body text",
+            fields={"description": self.DESC, "modifications": ["first change", "second change"]},
+            created="2026-10-08",
+        )
+        return gate, vault, res.path
+
+    def test_stored_note_is_valid_yaml_and_survives_move_byte_for_byte(self):
+        gate, vault, path = self._written()
+        before = vault.store[path]
+        gate.move_note(path, "Projects/APA Guide.md")
+        assert vault.store["Projects/APA Guide.md"] == before
+
+    def test_reader_sees_full_description_and_list_before_and_after_move(self):
+        gate, vault, path = self._written()
+        for p in (path, "Projects/APA Guide.md"):
+            if p != path:
+                gate.move_note(path, p)
+            fm = parse_frontmatter(vault.store[p])
+            assert fm["description"] == self.DESC
+            assert fm["modifications"] == ["first change", "second change"]
+
+    def test_pillar_left_alone_on_move(self):
+        # The schema routes (note_type, pillar) -> directory only; a destination
+        # directory is not a pillar signal (arbitrary project folders exist), so
+        # move does not restamp pillar.
+        gate, vault, path = self._written()
+        gate.move_note(path, "Projects/APA Guide.md")
+        assert parse_frontmatter(vault.store["Projects/APA Guide.md"])["pillar"] == "Knowledge"

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from vault_mcp.gate import (
     FieldError,
+    MoveVerifyError,
     ObsidianIOError,
     ProtectionError,
     WriteResult,
@@ -493,6 +494,27 @@ class GateWriter:
 
         content = self._gate._io.read_note(src)
         self._write(dst, content, created=True)
+        # Never trust the write's own "ok": read dst back and compare before the
+        # source is trashed. A PUT can be acknowledged yet land nowhere (or land
+        # as something else) -- see styx absent-truth-scene, 2026-09-08.
+        try:
+            landed = self._gate._io.read_note(dst)
+        except _NOTE_READ_ERRORS as exc:
+            raise MoveVerifyError(
+                f"move {src!r} -> {dst!r} refused: destination not readable after write "
+                f"({exc}); source left in place"
+            ) from exc
+        if landed != content:
+            # dst was absent before our write (checked above), so what is there
+            # is ours: a partial/mangled copy. Remove it; src is still intact.
+            try:
+                self._gate._io.delete_note(dst)
+            except _NOTE_READ_ERRORS:
+                log.warning("move cleanup of partial %s failed", dst)
+            raise MoveVerifyError(
+                f"move {src!r} -> {dst!r} refused: destination content differs from "
+                f"source after write; source left in place"
+            )
         self._gate._io.delete_note(src)
         self._gate._frontmatter._emit_diff(src, "delete", [], stamp(actor, WriteMode.METADATA))
         self._gate._frontmatter._emit_diff(dst, "create", [], stamp(actor, WriteMode.METADATA))
