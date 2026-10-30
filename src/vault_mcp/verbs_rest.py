@@ -33,6 +33,7 @@ from typing import Any
 # Qualifying every server-owned name keeps the indirection the tests rely on and
 # makes the coupling visible at each use site.
 from vault_mcp import server
+from vault_mcp.patch_confirm import bad_scope, patch_answer, patch_headers
 
 # `mcp` IS imported directly, unlike everything else above. It is a singleton
 # built once at server import and never rebound, so there is nothing for a test
@@ -201,7 +202,7 @@ if not server.REST_DISABLE:
         return _object_or_error(result["data"], stamp_as_of=True)
 
     @mcp.tool(
-        description="[REST-backed] Modify one heading, block or frontmatter field of a note in place, without rewriting the file. Call document_map first to find valid targets."
+        description="[REST-backed] Edit one heading, block or frontmatter field in place; ok only after a REST read-back. Appends start new blocks (table: within=-1); '#' levels are relative to the target."
     )
     def patch_note(
         path: str,
@@ -211,12 +212,28 @@ if not server.REST_DISABLE:
         operation: str = "replace",
         create_if_missing: bool = False,
         within: int | None = None,
+        scope: str | None = None,
+        reject_if_content_preexists: bool = False,
     ) -> dict[str, Any]:
-        """[REST-backed] Patch a section of a note without rewriting the whole file.
+        r"""[REST-backed] Patch a section of a note without rewriting the whole file.
 
-        Uses Obsidian's PATCH /vault/{path} with targeting headers to modify
-        a specific heading, block, or frontmatter field. Use document_map()
-        first to discover valid targets.
+        Uses Obsidian's PATCH /vault/{path} (markdown-patch 2) with targeting
+        headers to modify a specific heading, block, or frontmatter field. Use
+        document_map() first to discover valid targets. Semantics are the
+        engine's, not string splicing:
+
+        * Blank lines are engine-owned: ``append``/``prepend`` always begin a
+          NEW block, so a table row appended that way detaches from its table.
+          To extend the section's last block pass ``within=-1`` and start
+          ``content`` with a newline: ``content="\n| c | d |"``.
+        * Heading levels are relative: a ``#`` run in ``content`` counts from
+          the target's level (``#`` under an H2 becomes H3, ``##`` H4). For a
+          SIBLING at the target's own level use ``scope="markerAndContent"``
+          with ``append`` (after the subtree) or ``prepend`` (before it) and
+          write ``# Title``; deeper headings keep their relative depth.
+        * Writes are confirmed: the note is read back over REST and compared
+          with the patched document. read_note (disk) may still trail by the
+          Windows/WSL sync.
 
         Args:
             path: Vault-relative file path.
@@ -234,27 +251,37 @@ if not server.REST_DISABLE:
             within: Heading targets only. Index of one of the section's body
                 blocks (0-based, -1 = last). The edit then splices literally
                 into that block, so ``append`` of a newline plus a bullet and
-                ``within=-1`` continues the section's last list instead of
-                starting a new block below it.
+                ``within=-1`` continues the section's last list (or table)
+                instead of starting a new block below it.
+            scope: "content" (default: the body below the heading),
+                "marker" (the label only; ``replace`` renames, no ``#``),
+                "markerAndContent" (heading line plus body; ``append`` /
+                ``prepend`` insert a sibling) or "parent" (moves).
+            reject_if_content_preexists: Refuse (409) when the content is
+                already present, so a retry of a write that landed cannot
+                duplicate it. Pass it whenever a retry is possible.
 
         Returns:
-            {"ok": True, "patched": path} on success.
+            {"ok": True, "patched": path, "confirmed": True} once the write is
+            visible over REST; {"ok": False, "status": "unconfirmed", ...}
+            when accepted but never read back (it may still land: check
+            unsaved_buffer, retry with ``reject_if_content_preexists``).
 
         """
+        if bad := bad_scope(scope):
+            return bad
         client = server._get_rest_client()
-        headers: dict[str, str] = {
-            "Target-Type": target_type,
-            "Operation": operation,
-        }
-        if target:
-            headers["Target"] = target
-        if create_if_missing:
-            headers["Create-Target-If-Missing"] = "true"
-        if within is not None:
-            headers["Within"] = str(within)
+        headers = patch_headers(
+            target_type,
+            operation,
+            target,
+            create_if_missing=create_if_missing,
+            within=within,
+            scope=scope,
+            reject_if_content_preexists=reject_if_content_preexists,
+        )
         if target_type == "frontmatter":
-            # Frontmatter rides in the API's `value` field, picked by an
-            # application/json body; text/markdown would fill `content` (40081).
+            # Frontmatter rides in `value` (application/json); markdown fills `content` (40081).
             result = client.patch(
                 vault_url(path),
                 content=frontmatter_json(content),
@@ -262,14 +289,10 @@ if not server.REST_DISABLE:
                 extra_headers=headers,
             )
         else:
-            result = client.patch(
-                vault_url(path),
-                content=content,
-                extra_headers=headers,
-            )
+            result = client.patch(vault_url(path), content=content, extra_headers=headers)
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
-        return {"ok": True, "patched": path}
+        return patch_answer(client, path, result.get("data"))
 
     @mcp.tool(description="[REST-backed] Append markdown to the end of a note's existing body.")
     def append_note(path: str, content: str) -> dict[str, Any]:
