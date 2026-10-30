@@ -466,7 +466,8 @@ class TestPatchNoteWithin:
         from vault_mcp import server
 
         client = MagicMock()
-        client.patch.return_value = {"ok": True, "data": None}
+        client.patch.return_value = {"ok": True, "data": "doc"}
+        client.get.return_value = {"ok": True, "data": "doc"}
         monkeypatch.setattr(server, "_get_rest_client", lambda: client)
         asyncio.run(
             server.mcp.call_tool(
@@ -495,7 +496,8 @@ class TestFrontmatterJsonBody:
         from vault_mcp import server
 
         client = MagicMock()
-        client.patch.return_value = {"ok": True, "data": None}
+        client.patch.return_value = {"ok": True, "data": "doc"}
+        client.get.return_value = {"ok": True, "data": "doc"}
         monkeypatch.setattr(server, "_get_rest_client", lambda: client)
         asyncio.run(server.mcp.call_tool(verb, args))
         kw = client.patch.call_args.kwargs
@@ -628,3 +630,107 @@ class TestDocumentMapTarget:
             monkeypatch, tmp_path, {"stem_or_path": "Alpha", "path": "Notes/Alpha.md"}
         )
         assert self._endpoints(client) == ["/vault/Notes/Alpha.md"]
+
+
+class TestPatchNoteScopeAndGuards:
+    """scope -> Target-Scope, reject_if_content_preexists -> Reject-If-Content-Preexists."""
+
+    def _headers(self, monkeypatch, **extra):
+        return TestPatchNoteWithin()._call(monkeypatch, **extra)
+
+    def test_scope_is_sent(self, monkeypatch):
+        got = self._headers(monkeypatch, scope="markerAndContent")
+        assert got["Target-Scope"] == "markerAndContent"
+
+    def test_defaults_send_neither(self, monkeypatch):
+        got = self._headers(monkeypatch)
+        assert "Target-Scope" not in got
+        assert "Reject-If-Content-Preexists" not in got
+
+    def test_reject_if_content_preexists_is_sent(self, monkeypatch):
+        got = self._headers(monkeypatch, reject_if_content_preexists=True)
+        assert got["Reject-If-Content-Preexists"] == "true"
+
+    def test_unknown_scope_refused_before_any_request(self, monkeypatch):
+        import asyncio
+
+        from vault_mcp import server
+
+        client = MagicMock()
+        monkeypatch.setattr(server, "_get_rest_client", lambda: client)
+        out = asyncio.run(
+            server.mcp.call_tool("patch_note", {"path": "a.md", "content": "x", "scope": "bogus"})
+        )
+        assert "invalid_scope" in str(out)
+        client.patch.assert_not_called()
+
+
+class TestPatchNoteConfirm:
+    """patch_note answers ok only once the write reads back over REST."""
+
+    def _run(self, monkeypatch, patch_data, gets):
+        import asyncio
+
+        from vault_mcp import server
+
+        sleeps: list[float] = []
+        monkeypatch.setattr(time, "sleep", sleeps.append)
+        client = MagicMock()
+        client.patch.return_value = {"ok": True, "data": patch_data}
+        client.get.side_effect = gets
+        monkeypatch.setattr(server, "_get_rest_client", lambda: client)
+        out = asyncio.run(
+            server.mcp.call_tool("patch_note", {"path": "a.md", "content": "x", "target": "T"})
+        )
+        return client, sleeps, cast("Any", out).structured_content
+
+    def test_ok_when_readback_matches(self, monkeypatch):
+        client, sleeps, out = self._run(monkeypatch, "NEW", [{"ok": True, "data": "NEW"}])
+        assert out == {"ok": True, "patched": "a.md", "confirmed": True}
+        assert client.get.call_args.args == ("/vault/a.md",)
+        assert client.get.call_args.kwargs == {"accept": "text/markdown"}
+        assert sleeps == []
+
+    def test_waits_through_lag_then_ok(self, monkeypatch):
+        gets = [{"ok": True, "data": "OLD"}] * 3 + [{"ok": True, "data": "NEW"}]
+        client, sleeps, out = self._run(monkeypatch, "NEW", gets)
+        assert out["ok"] is True
+        assert client.get.call_count == 4
+        assert len(sleeps) == 3
+
+    def test_never_matching_is_unconfirmed_not_ok(self, monkeypatch):
+        from vault_mcp import patch_confirm
+
+        client, sleeps, out = self._run(
+            monkeypatch, "NEW", [{"ok": True, "data": "OLD"}] * patch_confirm.CONFIRM_ATTEMPTS
+        )
+        assert out["ok"] is False
+        assert out["status"] == "unconfirmed"
+        assert out["patched"] == "a.md"
+        assert "reject_if_content_preexists" in out["detail"]
+        assert client.get.call_count == patch_confirm.CONFIRM_ATTEMPTS
+        assert len(sleeps) == patch_confirm.CONFIRM_ATTEMPTS - 1
+
+    def test_patch_without_document_is_unconfirmed(self, monkeypatch):
+        client, _, out = self._run(monkeypatch, None, [])
+        assert out["status"] == "unconfirmed"
+        client.get.assert_not_called()
+
+    def test_readback_error_is_unconfirmed(self, monkeypatch):
+        from vault_mcp import patch_confirm
+
+        err = {"ok": False, "error": "rest_unreachable", "detail": "down"}
+        _, _, out = self._run(monkeypatch, "NEW", [err] * patch_confirm.CONFIRM_ATTEMPTS)
+        assert out["status"] == "unconfirmed"
+        assert "rest_unreachable" in out["detail"]
+
+    def test_rejected_patch_is_not_read_back(self, monkeypatch):
+        import asyncio
+
+        from vault_mcp import server
+
+        client = MagicMock()
+        client.patch.return_value = {"ok": False, "error": "rest_invalid_request", "detail": "409"}
+        monkeypatch.setattr(server, "_get_rest_client", lambda: client)
+        asyncio.run(server.mcp.call_tool("patch_note", {"path": "a.md", "content": "x"}))
+        client.get.assert_not_called()
