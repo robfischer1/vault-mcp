@@ -56,6 +56,8 @@ vault-mcp = "vault_mcp.server:main"
 vault-mcp-cli = "vault_mcp.cli:main"
 
 [project.optional-dependencies]
+# Heartbeat publisher (heartbeat.py lazy-imports confluent_kafka).
+kafka = ["confluent-kafka>=2.16.1"]
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.23",
