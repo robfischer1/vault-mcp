@@ -44,6 +44,30 @@ from vault_mcp.rest_client import frontmatter_json, vault_url
 from vault_mcp.server import mcp
 
 
+def _resolve_stem_or_path(stem_or_path: str) -> dict[str, Any]:
+    """Resolve a stem or vault path to {"path": rel} using read_note's rules.
+
+    Errors use read_note's envelopes: ``ambiguous`` (with candidates) and
+    ``not_found``.
+    """
+    index = server._get_index()
+    if "/" in stem_or_path or stem_or_path.endswith(".md"):
+        candidate = index.vault / stem_or_path
+        if candidate.exists():
+            return {"path": str(candidate.relative_to(index.vault)).replace("\\", "/")}
+    stem = stem_or_path.removesuffix(".md")
+    matches = index.by_name.get(stem, [])
+    if len(matches) == 1:
+        return {"path": str(matches[0].relative_to(index.vault)).replace("\\", "/")}
+    if len(matches) > 1:
+        return {
+            "error": "ambiguous",
+            "stem": stem,
+            "candidates": [str(p.relative_to(index.vault)).replace("\\", "/") for p in matches],
+        }
+    return {"error": "not_found", "query": stem_or_path}
+
+
 def _object_or_error(data: object, *, stamp_as_of: bool = False) -> dict[str, Any]:
     """Narrow a REST payload to a JSON OBJECT, or return an error envelope.
 
@@ -541,24 +565,61 @@ if not server.REST_DISABLE:
         return {"opened": path}
 
     @mcp.tool(
-        description="[REST-backed] Get a note's PATCH-targetable structure - heading paths, block IDs, frontmatter field names. The lookup before patch_note."
+        description="[REST-backed] Get a note's PATCH-targetable structure (headings, block IDs, frontmatter fields): the lookup before patch_note. Name the note; active=True for the open one."
     )
-    def document_map(path: str | None = None) -> dict[str, Any]:
+    def document_map(
+        path: str | None = None,
+        stem_or_path: str | None = None,
+        active: bool = False,
+    ) -> dict[str, Any]:
         """[REST-backed] Get the structural map of a note (headings, blocks, frontmatter fields).
 
         Returns PATCH-targetable sections: heading paths, block reference IDs,
         and frontmatter field names. Useful for understanding document shape.
 
+        Exactly one note must be named. A call with no target is an error: it
+        never falls back to the active note unless ``active=True``.
+
         Args:
-            path: Vault-relative file path. If None, returns the map for the
-                  currently active note. Example: "System/Governance/AGENTS.md"
+            path: Vault-relative file path. Example: "System/Governance/AGENTS.md"
+            stem_or_path: Wikilink stem or vault-relative path, resolved the way
+                  read_note resolves it (ambiguous stems and misses return the
+                  same error envelopes). Either this or ``path`` names the note;
+                  both given and different is refused.
+            active: If True and no path is given, map the note currently open
+                  in Obsidian's editor.
 
         Returns:
-            {"headings": [str], "blocks": [str], "frontmatterFields": [str]}
+            {"headings": [str], "blocks": [str], "frontmatterFields": [str]},
+            or {"error": ...}.
 
         """
+        target = path
+        if stem_or_path:
+            resolved = _resolve_stem_or_path(stem_or_path)
+            if "error" in resolved:
+                return resolved
+            if path and path != resolved["path"] and path != stem_or_path:
+                return {
+                    "error": "conflicting_targets",
+                    "path": path,
+                    "stem_or_path": stem_or_path,
+                    "resolved": resolved["path"],
+                }
+            target = resolved["path"]
+        if target and active:
+            return {
+                "error": "conflicting_targets",
+                "detail": "active=True cannot be combined with path or stem_or_path",
+            }
+        if not target and not active:
+            return {
+                "error": "no_target",
+                "detail": "name the note with stem_or_path (or path), or pass active=True "
+                "to map the note open in Obsidian",
+            }
         client = server._get_rest_client()
-        endpoint = vault_url(path) if path else "/active/"
+        endpoint = vault_url(target) if target else "/active/"
         result = client.get(
             endpoint,
             accept="application/vnd.olrapi.document-map+json",
