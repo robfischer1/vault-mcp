@@ -11,7 +11,7 @@ import sys
 import time
 import urllib.parse
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -551,3 +551,80 @@ def test_vault_url_percent_encodes_segments_keeps_slashes():
 
     assert vault_url("A/b # c?d%e — f.md") == "/vault/A/b%20%23%20c%3Fd%25e%20%E2%80%94%20f.md"
     assert vault_url("x y.md", "/vault/.trash/") == "/vault/.trash/x%20y.md"
+
+
+class TestDocumentMapTarget:
+    """document_map must name its note; only active=True may read /active/."""
+
+    def _call(self, monkeypatch, tmp_path, args, files=("Notes/Alpha.md", "A/Dup.md", "B/Dup.md")):
+        import asyncio
+        from types import SimpleNamespace
+
+        from vault_mcp import server
+
+        by_name: dict[str, list[Any]] = {}
+        for f in files:
+            p = tmp_path / f
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("# x\n")
+            by_name.setdefault(p.stem, []).append(p)
+        index = SimpleNamespace(vault=tmp_path, by_name=by_name)
+        client = MagicMock()
+        client.get.return_value = {"ok": True, "data": {"headings": ["H"]}}
+        monkeypatch.setattr(server, "_get_rest_client", lambda: client)
+        monkeypatch.setattr(server, "_get_index", lambda: index)
+        out = asyncio.run(server.mcp.call_tool("document_map", args))
+        return client, out
+
+    @staticmethod
+    def _endpoints(client):
+        return [c.args[0] for c in client.get.call_args_list]
+
+    def test_no_target_never_hits_active(self, monkeypatch, tmp_path):
+        client, out = self._call(monkeypatch, tmp_path, {})
+        assert client.get.call_count == 0
+        assert "no_target" in str(out)
+
+    def test_unknown_arg_style_call_does_not_fall_back(self, monkeypatch, tmp_path):
+        client, _ = self._call(monkeypatch, tmp_path, {"stem_or_path": "Alpha"})
+        assert self._endpoints(client) == ["/vault/Notes/Alpha.md"]
+
+    def test_stem_or_path_with_path(self, monkeypatch, tmp_path):
+        client, _ = self._call(monkeypatch, tmp_path, {"stem_or_path": "Notes/Alpha.md"})
+        assert self._endpoints(client) == ["/vault/Notes/Alpha.md"]
+
+    def test_path_still_works(self, monkeypatch, tmp_path):
+        client, _ = self._call(monkeypatch, tmp_path, {"path": "Notes/Alpha.md"})
+        assert self._endpoints(client) == ["/vault/Notes/Alpha.md"]
+
+    def test_active_true_reads_active(self, monkeypatch, tmp_path):
+        client, _ = self._call(monkeypatch, tmp_path, {"active": True})
+        assert self._endpoints(client) == ["/active/"]
+
+    def test_active_with_target_refused(self, monkeypatch, tmp_path):
+        client, out = self._call(monkeypatch, tmp_path, {"path": "a.md", "active": True})
+        assert client.get.call_count == 0
+        assert "conflicting_targets" in str(out)
+
+    def test_ambiguous_stem(self, monkeypatch, tmp_path):
+        client, out = self._call(monkeypatch, tmp_path, {"stem_or_path": "Dup"})
+        assert client.get.call_count == 0
+        assert "ambiguous" in str(out)
+
+    def test_not_found(self, monkeypatch, tmp_path):
+        client, out = self._call(monkeypatch, tmp_path, {"stem_or_path": "Nope"})
+        assert client.get.call_count == 0
+        assert "not_found" in str(out)
+
+    def test_both_different_refused(self, monkeypatch, tmp_path):
+        client, out = self._call(
+            monkeypatch, tmp_path, {"stem_or_path": "Alpha", "path": "Other/Z.md"}
+        )
+        assert client.get.call_count == 0
+        assert "conflicting_targets" in str(out)
+
+    def test_both_same_ok(self, monkeypatch, tmp_path):
+        client, _ = self._call(
+            monkeypatch, tmp_path, {"stem_or_path": "Alpha", "path": "Notes/Alpha.md"}
+        )
+        assert self._endpoints(client) == ["/vault/Notes/Alpha.md"]
