@@ -16,6 +16,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 log = logging.getLogger(__name__)
 
 SKIP_DIRS: set[str] = {
@@ -45,6 +47,60 @@ def parse_frontmatter(text: str) -> dict[str, Any]:
     if end == -1:
         return {}
     yaml_text = text[3:end].strip("\n")
+    loaded = _load_yaml_flat(yaml_text)
+    if loaded is not None:
+        return loaded
+    return _parse_frontmatter_lines(yaml_text)
+
+
+class _StrTimestampLoader(yaml.SafeLoader):
+    """SafeLoader that leaves dates/timestamps as the strings they were written as."""
+
+
+_StrTimestampLoader.yaml_implicit_resolvers = {
+    ch: [(tag, rx) for tag, rx in resolvers if tag != "tag:yaml.org,2002:timestamp"]
+    for ch, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+
+
+def _flat_scalar(value: object) -> str:
+    """Render a scalar the way this module always has: as its string form."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _load_yaml_flat(yaml_text: str) -> dict[str, Any] | None:
+    """Parse frontmatter with a real YAML parser, flattened to str / list[str].
+
+    The line parser below skips indented lines and only accepts indented list
+    items, so it truncated any folded multi-line scalar (``yaml.safe_dump`` folds
+    at 80 columns) and read a column-0 ``- item`` list as ``""``. Returns None
+    when the YAML is not valid, so hand-written Obsidian frontmatter that is not
+    strict YAML still goes through the tolerant line parser.
+    """
+    loader = _StrTimestampLoader(yaml_text)
+    try:
+        loaded = loader.get_single_data()
+    except yaml.YAMLError:
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    fm: dict[str, Any] = {}
+    for key, value in loaded.items():
+        if isinstance(value, list):
+            fm[_flat_scalar(key)] = [_flat_scalar(x) for x in value]
+        elif isinstance(value, dict):
+            fm[_flat_scalar(key)] = ""
+        else:
+            fm[_flat_scalar(key)] = _flat_scalar(value)
+    return fm
+
+
+def _parse_frontmatter_lines(yaml_text: str) -> dict[str, Any]:
+    """Tolerant line-based fallback for frontmatter that is not strict YAML."""
     fm: dict[str, Any] = {}
     lines = yaml_text.split("\n")
     i = 0
@@ -72,7 +128,7 @@ def parse_frontmatter(text: str) -> dict[str, Any]:
                     j += 1
                     continue
                 ns = nxt.lstrip()
-                if (nxt.startswith((" ", "\t"))) and ns.startswith("- "):
+                if ns.startswith("- "):
                     item = ns[2:].strip()
                     if (item.startswith('"') and item.endswith('"')) or (
                         item.startswith("'") and item.endswith("'")

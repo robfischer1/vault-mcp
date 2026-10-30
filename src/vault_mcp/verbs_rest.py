@@ -40,7 +40,7 @@ from vault_mcp import server
 # cannot resolve an attribute on a module that is still mid-import, so every
 # decorated verb became "Cannot determine type of mcp" plus "Untyped decorator
 # makes function untyped". 99 errors, entirely from that one indirection.
-from vault_mcp.rest_client import frontmatter_json
+from vault_mcp.rest_client import frontmatter_json, vault_url
 from vault_mcp.server import mcp
 
 
@@ -169,7 +169,7 @@ if not server.REST_DISABLE:
         """
         client = server._get_rest_client()
         result = client.get(
-            f"/vault/{path}",
+            vault_url(path),
             accept="application/vnd.olrapi.note+json",
         )
         if not result["ok"]:
@@ -232,14 +232,14 @@ if not server.REST_DISABLE:
             # Frontmatter rides in the API's `value` field, picked by an
             # application/json body; text/markdown would fill `content` (40081).
             result = client.patch(
-                f"/vault/{path}",
+                vault_url(path),
                 content=frontmatter_json(content),
                 content_type="application/json",
                 extra_headers=headers,
             )
         else:
             result = client.patch(
-                f"/vault/{path}",
+                vault_url(path),
                 content=content,
                 extra_headers=headers,
             )
@@ -264,7 +264,7 @@ if not server.REST_DISABLE:
         """
         client = server._get_rest_client()
         result = client.post(
-            f"/vault/{path}",
+            vault_url(path),
             content=content,
             content_type="text/markdown",
         )
@@ -302,7 +302,7 @@ if not server.REST_DISABLE:
             "Create-Target-If-Missing": "true",
         }
         result = client.patch(
-            f"/vault/{path}",
+            vault_url(path),
             content=frontmatter_json(value),
             content_type="application/json",
             extra_headers=headers,
@@ -504,7 +504,7 @@ if not server.REST_DISABLE:
 
         """
         client = server._get_rest_client()
-        endpoint = f"/vault/{path}" if path else "/vault/"
+        endpoint = vault_url(path) if path else "/vault/"
         if not endpoint.endswith("/"):
             endpoint += "/"
         result = client.get(endpoint)
@@ -535,7 +535,7 @@ if not server.REST_DISABLE:
         """
         client = server._get_rest_client()
         params = {"newLeaf": "true"} if new_leaf else None
-        result = client.post(f"/open/{path}", params=params)
+        result = client.post(vault_url(path, "/open/"), params=params)
         if not result["ok"]:
             return {"error": result["error"], "detail": result.get("detail")}
         return {"opened": path}
@@ -558,7 +558,7 @@ if not server.REST_DISABLE:
 
         """
         client = server._get_rest_client()
-        endpoint = f"/vault/{path}" if path else "/active/"
+        endpoint = vault_url(path) if path else "/active/"
         result = client.get(
             endpoint,
             accept="application/vnd.olrapi.document-map+json",

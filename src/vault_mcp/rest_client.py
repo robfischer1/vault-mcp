@@ -87,6 +87,16 @@ def frontmatter_json(raw: str) -> str:
 _TRASH_NAME_TRIES = 100
 
 
+def vault_url(path: str, prefix: str = "/vault/") -> str:
+    """Build a request path for a vault-relative note path, percent-encoded.
+
+    Each segment is quoted (``/`` separators kept), so a ``#``, ``?`` or ``%`` in
+    a filename stays part of the path instead of becoming a fragment, a query
+    string or a mis-decoded escape. Non-ASCII (em-dashes) is UTF-8 encoded.
+    """
+    return prefix + urllib.parse.quote(path, safe="/")
+
+
 def _encode_target(value: str, target_type: str = "heading") -> str:
     """Encode a PATCH ``Target`` header value for ``Markdown-Patch-Version: 2``.
 
@@ -446,7 +456,7 @@ class RestNoteIO:
 
     def read_note(self, path: str) -> str:
         """Read and return the note body at `path` via REST."""
-        res = self._client.get(f"/vault/{path}", accept="text/markdown")
+        res = self._client.get(vault_url(path), accept="text/markdown")
         if not res.get("ok"):
             raise ObsidianIOError(f"REST read {path}: {res.get('error')}: {res.get('detail')}")
         data = res.get("data")
@@ -455,7 +465,7 @@ class RestNoteIO:
         return data
 
     def _put(self, path: str, content: str) -> None:
-        res = self._client.put(f"/vault/{path}", content=content)
+        res = self._client.put(vault_url(path), content=content)
         if not res.get("ok"):
             raise ObsidianIOError(f"REST write {path}: {res.get('error')}: {res.get('detail')}")
 
@@ -474,7 +484,7 @@ class RestNoteIO:
             stem, dot, ext = path, "", ""
         candidates = [path] + [f"{stem} ({n}){dot}{ext}" for n in range(1, _TRASH_NAME_TRIES)]
         for name in candidates:
-            res = self._client.put(f"/vault/.trash/{name}", content=content)
+            res = self._client.put(vault_url(name, "/vault/.trash/"), content=content)
             if res.get("ok"):
                 return
             if "already exists" not in str(res.get("detail")):
@@ -494,7 +504,7 @@ class RestNoteIO:
         """
         content = self.read_note(path)  # raises ObsidianIOError if absent
         self._put_free_trash(path, content)
-        res = self._client.delete(f"/vault/{path}")
+        res = self._client.delete(vault_url(path))
         if not res.get("ok"):
             raise ObsidianIOError(f"REST delete {path}: {res.get('error')}: {res.get('detail')}")
 
@@ -507,7 +517,7 @@ class RestNoteIO:
         scan over a missing subtree is empty, not an error.
         """
         prefix = directory.strip("/")
-        listing = f"/vault/{prefix}/" if prefix else "/vault/"
+        listing = vault_url(prefix) + "/" if prefix else "/vault/"
         res = self._client.get(listing, accept="application/json")
         if not res.get("ok"):
             return []

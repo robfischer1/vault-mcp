@@ -94,6 +94,10 @@ class FieldError(GateError):
     """A required frontmatter field is missing or invalid."""
 
 
+class MoveVerifyError(GateError):
+    """A move's destination could not be verified after the write; source kept."""
+
+
 class ProtectionError(GateError):
     """The target directory is write-protected for this write."""
 

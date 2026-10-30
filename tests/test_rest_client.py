@@ -381,29 +381,29 @@ class TestTrashNameCollision:
     def test_free_name_used_as_is(self):
         io, client, puts = self._io(set())
         io.delete_note("Brain Soup/n.md")
-        assert puts == ["/vault/.trash/Brain Soup/n.md"]
-        client.delete.assert_called_once_with("/vault/Brain Soup/n.md")
+        assert puts == ["/vault/.trash/Brain%20Soup/n.md"]
+        client.delete.assert_called_once_with("/vault/Brain%20Soup/n.md")
 
     def test_occupied_trash_name_falls_through_to_suffix(self):
         io, client, puts = self._io(
             {
-                "/vault/.trash/Brain Soup/n.md",
-                "/vault/.trash/Brain Soup/n (1).md",
+                "/vault/.trash/Brain%20Soup/n.md",
+                "/vault/.trash/Brain%20Soup/n%20%281%29.md",
             }
         )
         io.delete_note("Brain Soup/n.md")
-        assert puts == ["/vault/.trash/Brain Soup/n (2).md"]
-        client.delete.assert_called_once_with("/vault/Brain Soup/n.md")
+        assert puts == ["/vault/.trash/Brain%20Soup/n%20%282%29.md"]
+        client.delete.assert_called_once_with("/vault/Brain%20Soup/n.md")
 
     def test_name_without_extension(self):
         io, _, puts = self._io({"/vault/.trash/x"})
         io.delete_note("x")
-        assert puts == ["/vault/.trash/x (1)"]
+        assert puts == ["/vault/.trash/x%20%281%29"]
 
     def test_dot_only_in_a_directory_is_not_an_extension(self):
         io, _, puts = self._io({"/vault/.trash/dir.d/x"})
         io.delete_note("dir.d/x")
-        assert puts == ["/vault/.trash/dir.d/x (1)"]
+        assert puts == ["/vault/.trash/dir.d/x%20%281%29"]
 
     def test_gives_up_after_exactly_one_hundred_names(self):
         client = MagicMock()
@@ -418,7 +418,7 @@ class TestTrashNameCollision:
         assert client.put.call_count == 100
         names = [c.args[0] for c in client.put.call_args_list]
         assert names[0] == "/vault/.trash/a.md"
-        assert names[99] == "/vault/.trash/a (99).md"
+        assert names[99] == "/vault/.trash/a%20%2899%29.md"
         client.delete.assert_not_called()
 
     def test_other_put_errors_still_raise_and_keep_the_original(self):
@@ -544,3 +544,10 @@ class TestFrontmatterJsonBody:
             {"path": "a.md", "content": "true", "target": "T"},
         )
         assert got == ("text/markdown", "true")
+
+
+def test_vault_url_percent_encodes_segments_keeps_slashes():
+    from vault_mcp.rest_client import vault_url
+
+    assert vault_url("A/b # c?d%e — f.md") == "/vault/A/b%20%23%20c%3Fd%25e%20%E2%80%94%20f.md"
+    assert vault_url("x y.md", "/vault/.trash/") == "/vault/.trash/x%20y.md"
