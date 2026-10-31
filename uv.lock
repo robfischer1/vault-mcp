@@ -361,6 +361,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/45/5c62eeb71c6005fa4f1b5101def14271eb1063720fefcde17bcc95c0fb42/dulwich-1.2.14-py3-none-any.whl", hash = "sha256:3e1b6e13e23f9bc633fd249563e4d7a946d7d470f210967853ae0991589edd11", size = 730142, upload-time = "2026-08-29T00:23:49.691Z" },
 ]
 
+[package.optional-dependencies]
+merge = [
+    { name = "merge3" },
+]
+
 [[package]]
 name = "filelock"
 version = "4.2.4"
@@ -670,6 +675,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "merge3"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/f7/5c8c25a763bf630cc26a466c86bb336ee2ed607e459c6d12dac20a6d3aad/merge3-1.0.0.tar.gz", hash = "sha256:4a8251068cdb2c1aba76d31ae6aff5e6a47c79a1ee1071d5a58f37bf09f2a790", size = 15921, upload-time = "2026-10-25T14:54:25.707Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/8b/ab9ef4b4bc3dfd8a8840c92bf7d33cd27438eae15b7cd57c596166df45a0/merge3-1.0.0-py3-none-any.whl", hash = "sha256:d7bf07e4193f02540656958227dd015f0df5fd4b91819c7d3ef2334dbe7c4b33", size = 16438, upload-time = "2026-10-25T14:54:24.268Z" },
 ]
 
 [[package]]
@@ -1270,7 +1284,7 @@ name = "vault-mcp"
 version = "0.4.1"
 source = { editable = "." }
 dependencies = [
-    { name = "dulwich" },
+    { name = "dulwich", extra = ["merge"] },
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
     { name = "pyyaml" },
@@ -1298,7 +1312,7 @@ kafka = [
 [package.metadata]
 requires-dist = [
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.16.1" },
-    { name = "dulwich", specifier = ">=1.2.14" },
+    { name = "dulwich", extras = ["merge"], specifier = ">=1.2.14" },
     { name = "forge-testkit", marker = "extra == 'dev'", specifier = ">=1.3.0", index = "https://packages.notusmi.com/pypi/fleet/prod/+simple/" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.2,<3" },

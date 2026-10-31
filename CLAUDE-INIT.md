@@ -41,7 +41,7 @@ never calls a model.
 | `lifecycle_verbs.py` | `dissolve`/`materialize` orchestration; sequences `translator.py` + phdb's typed-write HTTP routes |
 | `translator.py` | Pure note <-> typed-payload mapping, no I/O, no phdb calls |
 | `compute.py` | Compute Receiver — phdb's periodic compute payloads rendered through a named template, written via the Gate stamped `ai-computed` |
-| `gitops.py` | Git committer; vault-mcp is the sole AI writer to vault git — every Gate write commits + returns a sha, a scheduled sweep commits/pushes the whole tree for out-of-band human edits |
+| `gitops.py` | Git committer; vault-mcp is the sole AI writer to vault git — every Gate write commits + returns a sha, a scheduled sweep commits the whole tree for out-of-band human edits, then fetches + merges origin's branch (bot-identity merge commit; origin's deletion of a file still on local disk is never taken; a conflict withholds the push and leaves the tree untouched) before pushing |
 | `hades_client.py` | Minimal MCP-over-streamable-HTTP client (one `initialize` + one `tools/call` per write, stateless) for constellation services reached through the Hades gateway |
 | `phdb_client.py` | HTTP client that POSTs to phdb's `/emit` route for atom writes (decisions/reversals/tensions/pushback observed during a session) — vault-mcp never opens phdb's DB directly |
 | `cli.py` | `vault-mcp-cli` — argparse smoke-test runner that dispatches a single tool call from the shell |
