@@ -369,21 +369,35 @@ def _commit_write(
     A caller-supplied ``commit_message`` is used verbatim; otherwise a
     ``vault: {op} {path}`` fallback is generated. The in-flight markers let the
     scheduled sweep defer rather than race this per-transaction commit.
+
+    The paths committed are the result's ``path``, or for a move both ``src``
+    (the deletion) and ``dst`` (the creation).
     """
     if not result.get("ok"):
         return result
     path = result.get("path")
-    if not isinstance(path, str) or not path:
+    src, dst = result.get("src"), result.get("dst")
+    paths: list[str]
+    if isinstance(path, str) and path:
+        paths = [path]
+        label = path
+    elif isinstance(src, str) and isinstance(dst, str) and src and dst:
+        paths = [src, dst]
+        label = f"{src} -> {dst}"
+    else:
         return result
     committer = _get_committer()
-    message = commit_message or f"vault: {op} {path}"
+    message = commit_message or f"vault: {op} {label}"
     committer.begin_write()
     try:
-        result["commit_sha"] = committer.commit_paths(
-            [path], message, wait_for_create=not is_delete
+        # A move's source is gone by design and its destination was read back
+        # before the source was trashed, so there is nothing to poll for.
+        sha = committer.commit_paths(
+            paths, message, wait_for_create=not is_delete and len(paths) == 1
         )
     finally:
         committer.end_write()
+    result["commit_sha"] = sha
     return result
 
 
