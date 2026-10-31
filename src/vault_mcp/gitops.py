@@ -54,6 +54,7 @@ from dulwich.errors import (
     RefFormatError,
     SendPackError,
 )
+from dulwich.objects import Commit, ObjectID
 from dulwich.repo import Repo
 
 log = logging.getLogger(__name__)
@@ -183,6 +184,17 @@ class GitCommitter:
         except _GIT_FAILURES as exc:
             log.warning("git head_sha failed: %s", exc)
             return None
+
+    def commit_exists(self, sha: str) -> bool:
+        """Whether ``sha`` names a commit object in the repo (never trust a bare sha)."""
+        try:
+            with self._open() as repo:
+                return isinstance(repo.get_object(ObjectID(sha.encode("ascii"))), Commit)
+        except KeyError:
+            return False
+        except (*_GIT_FAILURES, UnicodeEncodeError) as exc:
+            log.warning("commit_exists(%s) failed: %s", sha, exc)
+            return False
 
     def _wait_for_path(self, abs_path: Path, timeout: float = 2.0) -> bool:
         """Poll briefly for a just-written file to land (REST write → disk)."""

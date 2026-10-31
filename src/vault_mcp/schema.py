@@ -215,6 +215,17 @@ class VaultSchema:
             raise RouteError(f"no route matches note_type={note_type!r} pillar={pillar!r}")
         best = max(r.specificity() for r in hits)
         top = [r for r in hits if r.specificity() == best]
+        # A pillar the caller names must take part in routing. When only a
+        # pillar-less (type-only) route matched and no route anywhere names this
+        # pillar, the write would be filed by type alone while the note is
+        # stamped with a pillar the schema cannot route: a silent misfile
+        # (capture #7412: pillar=Inbox filed under Outputs/Self).
+        if pillar is not None and not any(r.pillar == pillar for r in self.routes):
+            where = ", ".join(sorted({r.directory for r in top}))
+            raise RouteError(
+                f"no route for pillar={pillar!r}: note_type={note_type!r} would be filed "
+                f"in {where} by type alone; omit the pillar or use a routed pillar"
+            )
         unique_dirs = {r.directory for r in top}
         if len(unique_dirs) == 1:
             return top[0].directory
