@@ -41,8 +41,10 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from dulwich import porcelain
+from dulwich.diff_tree import CHANGE_DELETE, tree_changes
 from dulwich.errors import (
     CommitError,
     GitProtocolError,
@@ -54,8 +56,16 @@ from dulwich.errors import (
     RefFormatError,
     SendPackError,
 )
-from dulwich.objects import Commit, ObjectID
+from dulwich.graph import find_merge_base
+from dulwich.index import update_working_tree
+from dulwich.merge import recursive_merge
+from dulwich.object_store import tree_lookup_path
+from dulwich.objects import Commit, ObjectID, Tree
+from dulwich.refs import Ref
 from dulwich.repo import Repo
+
+if TYPE_CHECKING:
+    from dulwich.object_store import BaseObjectStore
 
 log = logging.getLogger(__name__)
 
@@ -291,30 +301,172 @@ class GitCommitter:
                     author=identity,
                     committer=identity,
                 ).decode("ascii")
-                pushed = self.push() if self.push_enabled else False
-                return {"committed": True, "sha": sha, "pushed": pushed}
+                result: dict[str, object] = {"committed": True, "sha": sha, "pushed": False}
+                if self.push_enabled:
+                    pushed, reason = self._push_outcome()
+                    result["pushed"] = pushed
+                    if reason:
+                        result["push_reason"] = reason
+                return result
         except _GIT_FAILURES as exc:
             log.warning("sweep_commit failed: %s", exc)
             return {"committed": False, "reason": f"error: {exc}"}
 
     def push(self) -> bool:
-        """Push the current branch; fail-safe (logs + returns False on error).
+        """Integrate origin, then push the current branch; fail-safe (False on error).
+
+        See `_push_outcome` for the reason a push was withheld.
+        """
+        return self._push_outcome()[0]
+
+    def _push_outcome(self) -> tuple[bool, str | None]:
+        """Fetch + merge origin, then push; return ``(pushed, reason_if_not)``.
+
+        A push is only ever attempted on top of a clean integration: origin's
+        branch is fetched and merged first (see `_integrate_origin`), and any
+        refusal there withholds the push instead of forcing it.
 
         THE STREAMS ARE CAPTURED, and that is not tidiness. dulwich's push
         writes its progress to real stdout by default, and vault-mcp's default
         transport is MCP over stdio — anything this leg printed would land in
         the middle of a JSON-RPC frame and corrupt the session. The subprocess
         form got this for free from `capture_output=True`; here it has to be
-        asked for.
+        asked for. The fetch and merge legs are held to the same rule.
         """
         try:
             with self._git_lock, self._open() as repo:
+                reason = self._integrate_origin(repo)
+                if reason:
+                    log.warning("push withheld: %s", reason)
+                    return False, reason
                 porcelain.push(
                     repo,
                     outstream=io.BytesIO(),
                     errstream=io.BytesIO(),
                 )
-                return True
+                return True, None
         except _GIT_FAILURES as exc:
             log.warning("push failed: %s", exc)
-            return False
+            return False, f"error: {exc}"
+
+    def _integrate_origin(self, repo: Repo) -> str | None:
+        """Fetch origin and merge its branch into the checked-out one.
+
+        Returns None when integrated (or there is nothing to integrate: origin
+        lacks the branch, or is already contained), else a reason the push must
+        be withheld. Nothing is half-applied on a refusal: the merge is computed
+        on objects first and the working tree is touched only once it is clean.
+
+        Two safety rules, both about never losing what is on local disk:
+
+        * **Deletions are not taken.** A path origin deleted that HEAD still
+          has is put back into the merged tree, so the result (and the next
+          push) keeps it. A note present here is Rob's until he deletes it here.
+        * **Conflicts abort.** Any conflict leaves HEAD, the index and the
+          working tree exactly as they were.
+
+        The merge commit is the bot's, like every other commit this class makes.
+        Requires a clean tree (the sweep commits everything before it pushes);
+        a dirty one is refused rather than overwritten.
+        """
+        ref = repo.refs.read_ref(Ref(b"HEAD"))
+        if ref is None or not ref.startswith(b"ref: refs/heads/"):
+            return "detached_head"
+        branch = ref[len(b"ref: refs/heads/") :]
+        porcelain.fetch(
+            repo,
+            "origin",
+            outstream=io.StringIO(),
+            errstream=io.BytesIO(),
+        )
+        theirs_id = repo.refs.as_dict(Ref(b"refs/remotes/origin")).get(Ref(branch))
+        if theirs_id is None:
+            return None  # origin has no such branch yet: the push creates it
+        head_id = repo.head()
+        merge_bases = find_merge_base(repo, [head_id, theirs_id])
+        if not merge_bases:
+            return "unrelated_histories"
+        if theirs_id in merge_bases:
+            return None  # origin is already contained in local
+        status = porcelain.status(repo, untracked_files="all")
+        if any(status.staged.values()) or status.unstaged or status.untracked:
+            return "dirty_worktree"
+        head_commit = repo[head_id]
+        theirs_commit = repo[theirs_id]
+        if not isinstance(head_commit, Commit) or not isinstance(theirs_commit, Commit):
+            return "not_a_commit"
+        try:
+            merged, conflicts = recursive_merge(
+                repo.object_store,
+                merge_bases,
+                head_commit,
+                theirs_commit,
+                repo.get_gitattributes(),
+                repo.get_config(),
+            )
+        except ImportError:
+            # dulwich's three-way TEXT merge needs `merge3` (the `dulwich[merge]` extra).
+            return "merge3_missing"
+        store = repo.object_store
+        # A modify/delete conflict (origin deleted a file local still has) is
+        # the deletion rule again, not a real conflict: local wins. Anything
+        # else aborts with nothing touched.
+        keep_local: list[bytes] = []
+        real: list[bytes] = []
+        for path in conflicts:
+            try:
+                tree_lookup_path(store.__getitem__, theirs_commit.tree, path)
+            except KeyError:
+                keep_local.append(path)
+            else:
+                real.append(path)
+        if real:
+            names = ", ".join(c.decode("utf-8", "replace") for c in real[:5])
+            return f"merge_conflict: {names}"
+        store.add_object(merged)
+        for path in keep_local:
+            mode, sha = tree_lookup_path(store.__getitem__, head_commit.tree, path)
+            merged = _tree_with(store, merged, path.split(b"/"), mode, sha)
+        for change in tree_changes(store, head_commit.tree, merged.id):
+            old = change.old
+            if change.type == CHANGE_DELETE and old is not None and old.path is not None:
+                merged = _tree_with(store, merged, old.path.split(b"/"), old.mode or 0, old.sha)
+        store.add_object(merged)
+        identity = self._identity()
+        merge = Commit()
+        merge.tree = merged.id
+        merge.parents = [head_id, theirs_id]
+        merge.author = merge.committer = identity
+        merge.author_time = merge.commit_time = int(time.time())
+        merge.author_timezone = merge.commit_timezone = 0
+        merge.message = self._message(f"vault: merge origin/{branch.decode()}")
+        store.add_object(merge)
+        update_working_tree(
+            repo,
+            head_commit.tree,
+            merged.id,
+            change_iterator=tree_changes(store, head_commit.tree, merged.id),
+            config=repo.get_config_stack(),
+        )
+        repo.refs[Ref(b"HEAD")] = merge.id
+        return None
+
+
+def _tree_with(
+    store: BaseObjectStore, tree: Tree, parts: list[bytes], mode: int, sha: ObjectID
+) -> Tree:
+    """Return ``tree`` with the entry at nested path ``parts`` set (new Tree objects are stored)."""
+    out = Tree()
+    for name, m, s in tree.iteritems():
+        out.add(name, m, s)
+    if len(parts) == 1:
+        out.add(parts[0], mode, sha)
+    else:
+        try:
+            child = store[out[parts[0]][1]]
+        except KeyError:
+            child = Tree()
+        sub = child if isinstance(child, Tree) else Tree()
+        out.add(parts[0], 0o040000, _tree_with(store, sub, parts[1:], mode, sha).id)
+    store.add_object(out)
+    return out

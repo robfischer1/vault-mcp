@@ -16,6 +16,7 @@ cannot share one, because they share no code.
 
 from __future__ import annotations
 
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -345,3 +346,184 @@ class TestSweep:
         gc = _committer(repo, enabled=False)
         (repo / "a.md").write_text("a\n", encoding="utf-8")
         assert gc.sweep_commit("sweep")["reason"] == "disabled"
+
+
+# -- origin integration (fetch + merge before push) ---------------------------
+# A bare origin and a second clone ("other", standing in for the Windows host or
+# a human) are driven with dulwich porcelain; every ASSERTION reads back through
+# real `git`, so the oracle stays a different implementation from the subject.
+# Local paths only, no network.
+def _head_tree(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "ls-tree", "-r", "--name-only", "HEAD"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    )
+
+
+def _merge_count(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "rev-list", "--count", "--merges", "HEAD"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    )
+
+
+def _parent_count(repo: Path) -> int:
+    return len(
+        subprocess.run(
+            ["/usr/bin/git", "rev-list", "--parents", "-n", "1", "HEAD"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split()[1:]
+    )
+
+
+def _dirty(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "status", "--porcelain"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    )
+
+
+def _head_sha(repo: Path) -> str:
+    return _out(
+        subprocess.run(
+            ["/usr/bin/git", "rev-parse", "HEAD"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    )
+
+
+_OTHER = b"Other <other@example.com>"
+
+
+def _other_commit(other: Path, message: str, *, add: list[str], remove: list[str]) -> None:
+    """Commit as the other clone and push to origin."""
+    from dulwich import porcelain
+
+    if add:
+        porcelain.add(other, paths=[str(other / name) for name in add])
+    if remove:
+        porcelain.remove(other, paths=[str(other / name) for name in remove])
+    porcelain.commit(other, message=message.encode(), author=_OTHER, committer=_OTHER)
+    porcelain.push(other, outstream=io.BytesIO(), errstream=io.BytesIO())
+
+
+@pytest.fixture
+def wired(repo: Path, tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path, Path]:
+    """(local, bare origin, other clone), base commit pushed, local tracking origin."""
+    from dulwich import porcelain
+    from dulwich.repo import Repo
+
+    origin = tmp_path_factory.mktemp("origin")
+    porcelain.init(origin, bare=True)
+    (repo / "keep.md").write_text("keep\n", encoding="utf-8")
+    (repo / "shared.md").write_text("one\ntwo\nthree\n", encoding="utf-8")
+    gc = _committer(repo)
+    assert gc.commit_paths(["keep.md", "shared.md"], "base")
+    with Repo(str(repo)) as r:
+        cfg = r.get_config()
+        cfg.set((b"remote", b"origin"), b"url", str(origin).encode())
+        cfg.set((b"remote", b"origin"), b"fetch", b"+refs/heads/*:refs/remotes/origin/*")
+        cfg.write_to_path()
+        branch = porcelain.active_branch(r)
+    porcelain.push(repo, "origin", branch.decode(), outstream=io.BytesIO(), errstream=io.BytesIO())
+    other = tmp_path_factory.mktemp("other")
+    porcelain.clone(str(origin), str(other), errstream=io.BytesIO()).close()
+    return repo, origin, other
+
+
+class TestOriginIntegration:
+    def test_origin_ahead_new_file_lands_and_push_succeeds(
+        self, wired: tuple[Path, Path, Path], capfd: pytest.CaptureFixture[str]
+    ) -> None:
+        local, origin, other = wired
+        (other / "remote.md").write_text("from origin\n", encoding="utf-8")
+        _other_commit(other, "remote note", add=["remote.md"], remove=[])
+        (local / "local.md").write_text("mine\n", encoding="utf-8")
+        result = _committer(local, push_enabled=True).sweep_commit("vault: sweep")
+        assert result["committed"] is True
+        assert result["pushed"] is True
+        captured = capfd.readouterr()  # fetch/merge/push must not write to MCP's stdio
+        assert captured.out == ""
+        assert (local / "remote.md").read_text(encoding="utf-8") == "from origin\n"
+        assert "remote.md" in _tracked(local)
+        tree = _head_tree(origin)
+        assert "remote.md" in tree
+        assert "local.md" in tree
+        # the merge commit is the bot's, like every other commit here
+        assert _head_identity(local).split("|")[0] == DEFAULT_BOT_NAME
+        assert _parent_count(local) == 2
+
+    def test_origin_deletion_never_removes_a_file_on_local_disk(
+        self, wired: tuple[Path, Path, Path]
+    ) -> None:
+        local, origin, other = wired
+        _other_commit(other, "origin deletes keep.md", add=[], remove=["keep.md"])
+        (local / "local.md").write_text("mine\n", encoding="utf-8")
+        result = _committer(local, push_enabled=True).sweep_commit("vault: sweep")
+        assert result["pushed"] is True
+        assert (local / "keep.md").read_text(encoding="utf-8") == "keep\n"
+        assert "keep.md" in _head_tree(local)
+        # and the kept file went back out to origin
+        assert "keep.md" in _head_tree(origin)
+
+    def test_origin_deletion_of_nested_and_locally_edited_files_is_not_taken(
+        self, wired: tuple[Path, Path, Path]
+    ) -> None:
+        from dulwich import porcelain
+
+        local, _origin, other = wired
+        gc = _committer(local, push_enabled=True)
+        (local / "dir").mkdir()
+        (local / "dir" / "deep.md").write_text("deep\n", encoding="utf-8")
+        assert gc.commit_paths(["dir/deep.md"], "deep")
+        assert gc.push() is True
+        porcelain.pull(other, outstream=io.BytesIO(), errstream=io.BytesIO())
+        _other_commit(
+            other, "origin deletes dir and keep.md", add=[], remove=["dir/deep.md", "keep.md"]
+        )
+        (local / "keep.md").write_text("keep, edited here\n", encoding="utf-8")
+        result = gc.sweep_commit("vault: sweep")
+        assert result["pushed"] is True, result
+        assert (local / "dir" / "deep.md").read_text(encoding="utf-8") == "deep\n"
+        assert (local / "keep.md").read_text(encoding="utf-8") == "keep, edited here\n"
+        head_tree = _head_tree(local)
+        assert "dir/deep.md" in head_tree
+        assert "keep.md" in head_tree
+
+    def test_conflict_aborts_without_push_or_half_merge(
+        self, wired: tuple[Path, Path, Path]
+    ) -> None:
+        local, origin, other = wired
+        (other / "shared.md").write_text("one\nTHEIRS\nthree\n", encoding="utf-8")
+        _other_commit(other, "theirs", add=["shared.md"], remove=[])
+        origin_before = _head_sha(origin)
+        (local / "shared.md").write_text("one\nMINE\nthree\n", encoding="utf-8")
+        result = _committer(local, push_enabled=True).sweep_commit("vault: sweep")
+        assert result["committed"] is True
+        assert result["pushed"] is False
+        assert "conflict" in str(result["push_reason"])
+        assert (local / "shared.md").read_text(encoding="utf-8") == "one\nMINE\nthree\n"
+        assert _dirty(local) == ""
+        assert _merge_count(local) == "0"
+        assert _head_sha(origin) == origin_before
