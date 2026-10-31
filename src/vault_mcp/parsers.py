@@ -110,7 +110,8 @@ def _parse_frontmatter_lines(yaml_text: str) -> dict[str, Any]:
         if not stripped or stripped.startswith("#"):
             i += 1
             continue
-        if line.startswith((" ", "\t")):
+        if line.startswith((" ", "\t")) or stripped == "-" or stripped.startswith("- "):
+            # Indented lines and stray block-sequence items are never top-level keys.
             i += 1
             continue
         m = re.match(r'^("[^"]+"|[^:]+):\s*(.*)$', line)
@@ -124,7 +125,7 @@ def _parse_frontmatter_lines(yaml_text: str) -> dict[str, Any]:
             j = i + 1
             while j < len(lines):
                 nxt = lines[j]
-                if not nxt.strip():
+                if not nxt.strip() or nxt.lstrip().startswith("#"):
                     j += 1
                     continue
                 ns = nxt.lstrip()
