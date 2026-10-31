@@ -1,0 +1,30 @@
+# Routing probe for node absorb-amount-lion: a type-only route (no pillar) and
+# a pillar+type route, with no route naming the pillar "Inbox".
+pillars:
+  - Journal
+  - Self
+
+tags:
+  - topic/ai
+
+forbidden_dirs:
+  - .obsidian
+
+routes:
+  - note_type: idea
+    pillar: Journal
+    directory: Journal
+  - note_type: ItemList
+    directory: Outputs/Self
+
+required_frontmatter:
+  - title
+
+write_protection: []
+
+provenance:
+  levels:
+    - human
+    - human-edited
+    - human-revised
+    - ai-assisted

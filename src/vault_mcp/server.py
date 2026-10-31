@@ -372,6 +372,11 @@ def _commit_write(
 
     The paths committed are the result's ``path``, or for a move both ``src``
     (the deletion) and ``dst`` (the creation).
+
+    ``commit_sha`` is only ever a sha read back from the repo as a commit. When
+    none is returned, ``commit_skipped`` says why: ``disabled``,
+    ``nothing_committed`` (no staged change, or a git failure -- see the log) or
+    ``unverified_sha`` (the committer named a commit the repo does not hold).
     """
     if not result.get("ok"):
         return result
@@ -397,6 +402,12 @@ def _commit_write(
         )
     finally:
         committer.end_write()
+    if sha is not None and not committer.commit_exists(sha):
+        log.warning("commit_paths returned %s but no such commit exists; dropping it", sha)
+        sha = None
+        result["commit_skipped"] = "unverified_sha"
+    elif sha is None:
+        result["commit_skipped"] = "disabled" if not committer.enabled else "nothing_committed"
     result["commit_sha"] = sha
     return result
 
