@@ -1,7 +1,11 @@
-# THE TWO STAGES (CA master-plan F15). hooks/pre-commit runs `just check`, the
-# commit stage: ONE LINE, `foundry-toolbox ask check`, which pushes the staged
-# tree to the door's refs/checks/<c> and asks lane check on the cluster
-# (SYS-008; the build, the push and the long-poll live in foundry-toolbox).
+# THE TWO STAGES (CA master-plan F15), BOTH RETIRED. THE COMMIT STAGE RUNS
+# NOTHING, since 2026-11-11 (Rob: "Check was the equivalent of the pre-commit
+# stage, which we retired. Sessions should just push"): hooks/pre-commit only
+# runs fixers and always exits 0, and the `check` recipe is gone with `foundry-toolbox ask check` (2026-11-17:
+# "It's one workflow, not two": commit, push, and the door's lanes run in the
+# branch refPod, fail-fast and light steps first; a session's ci_park hook parks
+# on the verdict).
+#
 # THE PUSH STAGE RUNS NOTHING, since 2026-10-02
 # (Rob, "Option 1": the lanes are the gate). A push of a branch makes the door
 # ask that head's lanes on the cluster — the gate, and mutation and the build
@@ -15,30 +19,11 @@
 # change to what a commit must pass is one template landing. The star's own
 # justfile takes it with `import 'stages.just'` and defines no `check` or `gate`
 # of its own. Edit it in foundry-stocks, never here.
-#
-# THE DOOR IS A DEPENDENCY, AND A SILENT ONE NEVER BLOCKS. The check runs on the
-# cluster, where the git origin already lives (Rob, 2026-09-17: "Shit, our git
-# origin is already in the cluster"). A push that fails or a door that does not
-# answer prints `state=none` and the commit proceeds; only findings refuse it
-# (Rob, 2026-10-02). NO SKIP LIST AND NO --no-verify: this is the check the door
-# runs, so a commit that findings refuse here cannot pass there either.
-#
-# THE COMMIT STAGE is the basic checks every tree gets, beside the language
-# checks for what this tree contains — format, lint, unit tests — planned before
-# anything runs and settled on the worst of them. The slow checks and mutation
-# that the push stage used to run here are the branch's lanes now, run by the
-# door against the merge base with the default branch.
 
 # The module that carries the stages. CA_MODULE overrides it for a session
 # gating a foundry-tools change against itself (`CA_MODULE=/path/to/checkout`).
-# Neither `check` nor `_dev` reads it any more (SYS-008: both ask the door). It
-# stays declared because a star's non-dev recipes (govulncheck, opengrep) read it
-# and every star's dev recipe still passes `--set ca_module`.
+# It stays declared because a star's non-dev recipes (govulncheck, opengrep) read it.
 ca_module := env("CA_MODULE", "git.notusmi.com/rob/foundry-tools@main")
-
-# The commit stage — what hooks/pre-commit runs.
-check:
-    foundry-toolbox ask check
 
 # THE PUSH STAGE IS THE BRANCH'S LANES, AND THE LOCK IS GONE (2026-10-02).
 #
