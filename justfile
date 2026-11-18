@@ -28,10 +28,6 @@ star := file_name(justfile_directory())
 # check` a cycle just refused the whole file over.
 import 'stages.just'
 
-# The private `_dev` recipe (foundry-stocks speckit/dev.just): one dev verb on
-# the cluster through the door's lane dev. `test` calls it.
-import? 'dev.just'
-
 # List available recipes
 default:
     @just --list
@@ -45,24 +41,10 @@ default:
 sync:
     uv sync --all-extras --locked
 
-# Format + lint — the commit stage, on the engine: the same call the commit hook
-# makes (`just check`, stages.just). NOTHING LINTS LOCALLY ANY MORE (CA F18;
-# Rob, 2026-09-19: "I don't want any of this running locally anymore"): no
-# pre-commit, no ruff or mypy on the laptop — the fleet's ruleset is
-# foundry-tools', the engine caches every toolchain, and a red here is the
-# same red the door would give. It sees every file in the tree, staged or not,
-# because the engine is handed the tree and not git's index.
-lint: check
-
 # BOTH type checkers, matching CI — they disagree, and CI runs both
 types:
     uv run mypy src tests
     uv run pyright
-
-[doc('Run the test suite, on the cluster')]
-[positional-arguments]
-test *ARGS:
-    @{{just_executable()}} --justfile {{justfile()}} --set ca_module {{quote(ca_module)}} _dev test "$@"
 
 # Known-vulnerability scan. pip-audit is pulled ephemerally, not a project dep.
 vuln:

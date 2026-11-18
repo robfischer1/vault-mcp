@@ -1,7 +1,94 @@
 #!/bin/sh
-# THE COMMIT STAGE, AS THE COMMIT HOOK (CA master-plan F15): `just check`.
+# THE COMMIT HOOK WRITES BACK AND NEVER GATES, SINCE 2026-11-17. The commit stage
+# was retired on 2026-11-11 (Rob: "Check was the equivalent of the pre-commit
+# stage, which we retired. Sessions should just push, and let daedalus handle the
+# fail-fast, quickest-first ordering"), and `foundry-toolbox ask` with it
+# (2026-11-17: "It's one workflow, not two"). The gate is the push: the door asks
+# the pushed head's lanes and a session's ci_park hook parks on the verdict.
 #
-# The hook is one line and never changes. What a commit must pass is the `check`
-# recipe in stages.just beside the justfile — the same recipe a session runs by
-# hand — so a change to the gate arrives as a diff to a recipe, not to a hook.
-exec just check
+# What stays here is the cheap half: FIXERS ONLY. Each staged file is run through
+# its language's formatter and re-staged only when the formatter changed it, so
+# the commit carries formatted code and the CI atoms (go:gofmt, dev:go-tidy and
+# the other format checks) stay the only verdict.
+#
+# IT ALWAYS EXITS 0. A missing tool, a failed run or a network miss skips that
+# fixer with one stderr line and CI catches it. A staged file that also has
+# unstaged hunks is skipped, so partial staging never sweeps work into a commit.
+#
+# THE FILE STAYS. The spec-kit recopy overwrites the files this template lays but
+# never deletes one, so removing it would leave every repo's old `exec just check`
+# in place; the recopy also reads a missing hooks/pre-commit as a wiped surface
+# (speckit_recopy HOOK_FILES).
+
+skip() { echo "pre-commit: $1 skipped ($2)" >&2; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+main() {
+    tmp=$(mktemp -d 2>/dev/null) || return 0
+    trap 'rm -rf "$tmp"' EXIT
+    git diff --cached --name-only --diff-filter=ACM >"$tmp/staged" 2>/dev/null || return 0
+    [ -s "$tmp/staged" ] || return 0
+    git diff --name-only >"$tmp/dirty" 2>/dev/null || return 0
+    grep -vxFf "$tmp/dirty" "$tmp/staged" >"$tmp/ok" 2>/dev/null || true
+    T=""
+    have timeout && T="timeout 60"
+
+    grep -E '\.go$' "$tmp/ok" >"$tmp/go"
+    grep -E '\.rs$' "$tmp/ok" >"$tmp/rs"
+    grep -E '\.pyi?$' "$tmp/ok" >"$tmp/py"
+    grep -E '\.(ts|tsx|js|jsx|mjs|cjs|json|css)$' "$tmp/ok" >"$tmp/ts"
+
+    # Go: gofmt -w on the staged files.
+    fix_files gofmt "$tmp/go" gofmt -w
+    # go mod tidy, only when a staged .go file or go.mod changed, and never over a
+    # go.mod or go.sum that carries unstaged work.
+    if [ -f go.mod ] && { [ -s "$tmp/go" ] || grep -qx 'go.mod' "$tmp/staged"; }; then
+        if grep -qxE 'go\.(mod|sum)' "$tmp/dirty"; then
+            skip "go mod tidy" "go.mod or go.sum has unstaged changes"
+        elif have go; then
+            if $T go mod tidy >/dev/null 2>&1; then
+                git diff --name-only -- go.mod go.sum | xargs -r git add -- 2>/dev/null
+            else
+                skip "go mod tidy" "failed or needs the network"
+            fi
+        else
+            skip "go mod tidy" "go not found"
+        fi
+    fi
+    # Rust: cargo fmt over the workspace; only staged, clean files are re-added.
+    if [ -s "$tmp/rs" ] && [ -f Cargo.toml ]; then
+        if have cargo && $T cargo fmt --all >/dev/null 2>&1; then
+            readd "$tmp/rs"
+        else
+            skip "cargo fmt" "cargo missing or failed"
+        fi
+    fi
+    # Python: ruff format, then fixable ruff check rules (--exit-zero: what ruff
+    # cannot fix is CI's to report).
+    fix_files "ruff format" "$tmp/py" ruff format
+    fix_files "ruff check --fix" "$tmp/py" ruff check --fix --exit-zero --quiet
+    # TS/JS: prettier through bun, the toolchain atom's own (dev:ts-fmt).
+    if [ -s "$tmp/ts" ] && [ -f package.json ]; then
+        fix_files prettier "$tmp/ts" bun x prettier --write
+    fi
+}
+
+# readd <listfile>: stage the files in the list that a fixer changed.
+readd() {
+    tr '\n' '\0' <"$1" | xargs -0 git diff --name-only -z -- 2>/dev/null | xargs -0 -r git add -- 2>/dev/null
+}
+
+# fix_files <name> <listfile> <cmd...>: run the fixer on the files, re-stage the changed ones.
+fix_files() {
+    name=$1; list=$2; shift 2
+    [ -s "$list" ] || return 0
+    have "$1" || { skip "$name" "$1 not found"; return 0; }
+    if tr '\n' '\0' <"$list" | xargs -0 $T "$@" >/dev/null 2>&1; then
+        readd "$list"
+    else
+        skip "$name" "failed"
+    fi
+}
+
+main
+exit 0
